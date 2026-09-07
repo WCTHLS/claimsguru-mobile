@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Claims Guru",
+    "slug": "claimsguru-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.claimsguru.ios"
+    },
+    "android": {
+      "package": "com.claimsguru.app"
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
