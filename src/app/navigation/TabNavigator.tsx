@@ -29,6 +29,10 @@ export const TabNavigator = () => {
         },
         tabBarActiveTintColor: colors.brand,
         tabBarInactiveTintColor: colors.muted,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+        },
       }}
     >
       <Tab.Screen
@@ -36,7 +40,9 @@ export const TabNavigator = () => {
         component={ChatHomeScreen}
         options={{
           tabBarLabel: 'Chat',
-          tabBarIcon: ({ color, size }) => <MessageSquare color={color} size={20} />,
+          tabBarIcon: ({ color, size }) => (
+            <MessageSquare size={size || 20} color={color} strokeWidth={2} />
+          ),
         }}
       />
       <Tab.Screen
@@ -44,7 +50,9 @@ export const TabNavigator = () => {
         component={ClaimsListScreen}
         options={{
           tabBarLabel: 'Claims',
-          tabBarIcon: ({ color }) => <FileText color={color} size={20} />,
+          tabBarIcon: ({ color, size }) => (
+            <FileText size={size || 20} color={color} strokeWidth={2} />
+          ),
         }}
       />
       <Tab.Screen
@@ -52,7 +60,9 @@ export const TabNavigator = () => {
         component={SearchScreen}
         options={{
           tabBarLabel: 'Search',
-          tabBarIcon: ({ color }) => <Search color={color} size={20} />,
+          tabBarIcon: ({ color, size }) => (
+            <Search size={size || 20} color={color} strokeWidth={2} />
+          ),
         }}
       />
       <Tab.Screen
@@ -60,7 +70,9 @@ export const TabNavigator = () => {
         component={SessionHistoryScreen}
         options={{
           tabBarLabel: 'History',
-          tabBarIcon: ({ color }) => <Clock color={color} size={20} />,
+          tabBarIcon: ({ color, size }) => (
+            <Clock size={size || 20} color={color} strokeWidth={2} />
+          ),
         }}
       />
     </Tab.Navigator>

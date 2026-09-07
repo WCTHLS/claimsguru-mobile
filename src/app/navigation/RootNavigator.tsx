@@ -10,6 +10,8 @@ import { TabNavigator } from './TabNavigator';
 import { BrainPreviewScreen } from '../../features/brain/screens/BrainPreviewScreen';
 import { WorkflowPipelineScreen } from '../../features/workflow/screens/WorkflowPipelineScreen';
 import { ProfileSettingsScreen } from '../../features/profile/screens/ProfileSettingsScreen';
+import { UploadPanelScreen } from '../../features/claims/screens/UploadPanelScreen';
+import { ClaimDetailScreen } from '../../features/claims/screens/ClaimDetailScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -20,21 +22,33 @@ export const RootNavigator = () => {
     <NavigationContainer>
       <Stack.Navigator
         screenOptions={{
-          headerStyle: { backgroundColor: colors.surface },
-          headerTintColor: colors.ink,
-          headerShadowVisible: false,
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.bg },
         }}
       >
-        <Stack.Screen name="MainTabs" component={TabNavigator} options={{ headerShown: false }} />
+        <Stack.Screen name="MainTabs" component={TabNavigator} />
         <Stack.Screen
-          name={Routes.BrainPreview}
-          component={BrainPreviewScreen}
-          options={{ title: 'AI Brain Preview' }}
+          name={Routes.UploadPanel}
+          component={UploadPanelScreen}
         />
         <Stack.Screen
           name={Routes.WorkflowPipeline}
           component={WorkflowPipelineScreen}
-          options={{ title: 'Workflow Runner' }}
+        />
+        <Stack.Screen
+          name={Routes.ClaimDetail}
+          component={ClaimDetailScreen}
+        />
+        <Stack.Screen
+          name={Routes.BrainPreview}
+          component={BrainPreviewScreen}
+          options={{
+            headerShown: true,
+            title: 'AI Brain Preview',
+            headerStyle: { backgroundColor: colors.surface },
+            headerTintColor: colors.ink,
+            headerShadowVisible: false,
+          }}
         />
         <Stack.Screen
           name={Routes.ProfileSettings}
