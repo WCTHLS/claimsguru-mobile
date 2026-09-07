@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { VALIDATION_RULES } from '../../../mocks/rules.mock';
@@ -65,7 +65,7 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
       {/* Validation Rules Checklist */}
       <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
         <Text style={[styles.sectionTitle, { color: colors.ink }]}>Deterministic Validation (R001–R011)</Text>
-        {VALIDATION_RULES.slice(0, 5).map(rule => (
+        {VALIDATION_RULES.map(rule => (
           <View key={rule.code} style={styles.ruleItem}>
             <Text style={[styles.ruleCode, { backgroundColor: colors.surface2, color: colors.muted }]}>
               {rule.code}
@@ -74,8 +74,8 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
               <Text style={[styles.ruleTitle, { color: colors.ink }]}>{rule.title}</Text>
               <Text style={[styles.ruleCategory, { color: colors.muted }]}>{rule.category}</Text>
             </View>
-            <Text style={{ color: rule.status === 'ok' ? colors.green : colors.red, fontWeight: '700' }}>
-              {rule.status === 'ok' ? '✓' : '✗'}
+            <Text style={{ color: rule.status === 'ok' ? colors.green : rule.status === 'warn' ? colors.amber : colors.red, fontWeight: '700' }}>
+              {rule.status === 'ok' ? '✓' : rule.status === 'warn' ? '⚠' : '✗'}
             </Text>
           </View>
         ))}
@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
   dot: { fontSize: 14 },
   factorText: { flex: 1, fontSize: 12 },
   impactText: { fontSize: 12, fontWeight: '700' },
-  ruleItem: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  ruleItem: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: 0.5, borderBottomColor: '#e3e8ee' },
   ruleCode: { fontSize: 10, fontWeight: '700', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   ruleTitle: { fontSize: 12, fontWeight: '600' },
   ruleCategory: { fontSize: 10.5 },

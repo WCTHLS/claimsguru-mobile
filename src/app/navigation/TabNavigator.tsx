@@ -1,6 +1,6 @@
-import React from 'react';
+﻿import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 import { useTheme } from '../../core/theme/ThemeContext';
 import { Routes } from './routes';
 import { BottomTabParamList } from './types';
@@ -23,12 +23,16 @@ export const TabNavigator = () => {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.line,
-          height: 60,
+          height: 62,
           paddingBottom: 8,
           paddingTop: 6,
         },
         tabBarActiveTintColor: colors.brandDark,
         tabBarInactiveTintColor: colors.muted,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+        },
       }}
     >
       <Tab.Screen
@@ -36,7 +40,9 @@ export const TabNavigator = () => {
         component={ChatHomeScreen}
         options={{
           tabBarLabel: 'Chat',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>💬</Text>,
+          tabBarIcon: ({ color }) => (
+            <Text style={{ color, fontSize: 18, marginBottom: -2 }}>💬</Text>
+          ),
         }}
       />
       <Tab.Screen
@@ -44,7 +50,9 @@ export const TabNavigator = () => {
         component={ClaimsListScreen}
         options={{
           tabBarLabel: 'Claims',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>📋</Text>,
+          tabBarIcon: ({ color }) => (
+            <Text style={{ color, fontSize: 18, marginBottom: -2 }}>📋</Text>
+          ),
         }}
       />
       <Tab.Screen
@@ -52,7 +60,9 @@ export const TabNavigator = () => {
         component={SearchScreen}
         options={{
           tabBarLabel: 'Search',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>🔍</Text>,
+          tabBarIcon: ({ color }) => (
+            <Text style={{ color, fontSize: 18, marginBottom: -2 }}>🔍</Text>
+          ),
         }}
       />
       <Tab.Screen
@@ -60,7 +70,9 @@ export const TabNavigator = () => {
         component={SessionHistoryScreen}
         options={{
           tabBarLabel: 'History',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>🕒</Text>,
+          tabBarIcon: ({ color }) => (
+            <Text style={{ color, fontSize: 18, marginBottom: -2 }}>🕒</Text>
+          ),
         }}
       />
     </Tab.Navigator>
