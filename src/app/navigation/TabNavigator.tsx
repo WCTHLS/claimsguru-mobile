@@ -1,9 +1,9 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text } from 'react-native';
 import { useTheme } from '../../core/theme/ThemeContext';
 import { Routes } from './routes';
 import { BottomTabParamList } from './types';
+import { MessageSquare, FileText, Search, Clock } from 'lucide-react-native';
 
 // Screens
 import { ChatHomeScreen } from '../../features/chat/screens/ChatHomeScreen';
@@ -29,6 +29,10 @@ export const TabNavigator = () => {
         },
         tabBarActiveTintColor: colors.brandDark,
         tabBarInactiveTintColor: colors.muted,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+        },
       }}
     >
       <Tab.Screen
@@ -36,7 +40,9 @@ export const TabNavigator = () => {
         component={ChatHomeScreen}
         options={{
           tabBarLabel: 'Chat',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>💬</Text>,
+          tabBarIcon: ({ color, size }) => (
+            <MessageSquare size={size || 20} color={color} strokeWidth={2} />
+          ),
         }}
       />
       <Tab.Screen
@@ -44,7 +50,9 @@ export const TabNavigator = () => {
         component={ClaimsListScreen}
         options={{
           tabBarLabel: 'Claims',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>📋</Text>,
+          tabBarIcon: ({ color, size }) => (
+            <FileText size={size || 20} color={color} strokeWidth={2} />
+          ),
         }}
       />
       <Tab.Screen
@@ -52,7 +60,9 @@ export const TabNavigator = () => {
         component={SearchScreen}
         options={{
           tabBarLabel: 'Search',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>🔍</Text>,
+          tabBarIcon: ({ color, size }) => (
+            <Search size={size || 20} color={color} strokeWidth={2} />
+          ),
         }}
       />
       <Tab.Screen
@@ -60,7 +70,9 @@ export const TabNavigator = () => {
         component={SessionHistoryScreen}
         options={{
           tabBarLabel: 'History',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>🕒</Text>,
+          tabBarIcon: ({ color, size }) => (
+            <Clock size={size || 20} color={color} strokeWidth={2} />
+          ),
         }}
       />
     </Tab.Navigator>

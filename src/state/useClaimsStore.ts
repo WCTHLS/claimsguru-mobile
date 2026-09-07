@@ -10,6 +10,7 @@ interface ClaimsState {
   indexClaim: (id: string) => void;
   deleteClaim: (id: string) => void;
   addOrUpdateClaim: (claim: Partial<ClaimItem> & { id: string }) => void;
+  getClaim: (id: string) => ClaimItem | undefined;
 }
 
 export const useClaimsStore = create<ClaimsState>((set, get) => ({
@@ -43,4 +44,5 @@ export const useClaimsStore = create<ClaimsState>((set, get) => ({
         selectedClaimId: updated.id,
       };
     }),
+  getClaim: id => get().claims.find(c => c.id === id) || get().claims[0],
 }));
