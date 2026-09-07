@@ -39,7 +39,7 @@ export const RootNavigator = () => {
         <Stack.Screen
           name={Routes.ProfileSettings}
           component={ProfileSettingsScreen}
-          options={{ title: 'Profile & Settings' }}
+          options={{ headerShown: false }}
         />
       </Stack.Navigator>
     </NavigationContainer>

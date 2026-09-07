@@ -13,7 +13,7 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>(set => ({
-  role: 'reviewer',
+  role: 'submitter',
   userName: 'Shaikh Azhar',
   userEmail: 'ops@sample-tpa.in',
   organization: 'Sunrise Multispecialty',

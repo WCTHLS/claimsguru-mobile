@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
   stepRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   bullet: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   bulletText: { fontSize: 11, fontWeight: '700' },
-  stepName: { fontSize: 13, fontWeight: '650' },
+  stepName: { fontSize: 13, fontWeight: '600' },
   stepStatus: { fontSize: 11, marginTop: 1 },
   primaryBtn: { paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   primaryBtnText: { color: '#fff', fontSize: 13.5, fontWeight: '700' },

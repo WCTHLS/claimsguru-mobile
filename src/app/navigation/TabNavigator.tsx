@@ -1,6 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text } from 'react-native';
+import { MessageSquare, FileText, Search, Clock } from 'lucide-react-native';
 import { useTheme } from '../../core/theme/ThemeContext';
 import { Routes } from './routes';
 import { BottomTabParamList } from './types';
@@ -23,11 +23,11 @@ export const TabNavigator = () => {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.line,
-          height: 60,
+          height: 62,
           paddingBottom: 8,
           paddingTop: 6,
         },
-        tabBarActiveTintColor: colors.brandDark,
+        tabBarActiveTintColor: colors.brand,
         tabBarInactiveTintColor: colors.muted,
       }}
     >
@@ -36,7 +36,7 @@ export const TabNavigator = () => {
         component={ChatHomeScreen}
         options={{
           tabBarLabel: 'Chat',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>💬</Text>,
+          tabBarIcon: ({ color, size }) => <MessageSquare color={color} size={20} />,
         }}
       />
       <Tab.Screen
@@ -44,7 +44,7 @@ export const TabNavigator = () => {
         component={ClaimsListScreen}
         options={{
           tabBarLabel: 'Claims',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>📋</Text>,
+          tabBarIcon: ({ color }) => <FileText color={color} size={20} />,
         }}
       />
       <Tab.Screen
@@ -52,7 +52,7 @@ export const TabNavigator = () => {
         component={SearchScreen}
         options={{
           tabBarLabel: 'Search',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>🔍</Text>,
+          tabBarIcon: ({ color }) => <Search color={color} size={20} />,
         }}
       />
       <Tab.Screen
@@ -60,9 +60,10 @@ export const TabNavigator = () => {
         component={SessionHistoryScreen}
         options={{
           tabBarLabel: 'History',
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>🕒</Text>,
+          tabBarIcon: ({ color }) => <Clock color={color} size={20} />,
         }}
       />
     </Tab.Navigator>
   );
 };
+
