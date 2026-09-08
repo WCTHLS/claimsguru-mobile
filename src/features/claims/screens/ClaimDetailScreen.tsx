@@ -36,12 +36,12 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
   };
 
   const handleDownload = () => {
-    showToast(`GET /ingress/claims/${claim.id.slice(0, 8)}/file → Discharge_Summary.pdf (1.4 MB)`);
+    showToast('Downloading claim documents (Discharge_Summary.pdf)...');
   };
 
   const handleIndex = () => {
     indexClaim(claim.id);
-    showToast(`POST /search/index/${claim.id.slice(0, 8)}… → indexed for full-text + vector search`);
+    showToast('Claim indexed for full-text and vector search');
   };
 
   const handleDelete = () => {
@@ -153,16 +153,20 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
             </View>
 
             {/* Patient Header */}
-            <View style={styles.patientRow}>
-              <Text style={[styles.patientName, { color: colors.ink }]}>
-                {claim.who} · {claim.age || 54} · {claim.gender || 'Male'}
-              </Text>
-              <View style={[styles.patientBadge, { backgroundColor: colors.brandSoft }]}>
-                <Text style={[styles.patientBadgeText, { color: colors.brandDark }]}>
-                  Patient ›
+              <TouchableOpacity
+                style={styles.patientRow}
+                onPress={() => navigation.navigate(Routes.PatientProfile, { claimId: claim.id })}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.patientName, { color: colors.ink }]}>
+                  {claim.who} · {claim.age || 54} · {claim.gender || 'Male'}
                 </Text>
-              </View>
-            </View>
+                <View style={[styles.patientBadge, { backgroundColor: colors.brandSoft }]}>
+                  <Text style={[styles.patientBadgeText, { color: colors.brandDark }]}>
+                    Patient ›
+                  </Text>
+                </View>
+              </TouchableOpacity>
 
             <Text style={[styles.subMeta, { color: colors.muted }]}>
               {claim.hospital || 'Sunrise Multispecialty'} · admitted {claim.admissionDate || '12 Aug 2026'} · {claim.days || 4} days
@@ -340,32 +344,32 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
                 {
                   title: 'AI Brain Preview',
                   route: Routes.BrainPreview,
-                  ep: `/submission/claims/${claim.id.slice(0, 8)}/preview`,
+                  ep: 'Risk, fraud & readiness breakdown',
                 },
                 {
                   title: 'Documents',
                   route: Routes.DocumentGrid,
-                  ep: `/ingress/claims/${claim.id.slice(0, 8)}/documents`,
+                  ep: 'Attached claim documents and reports',
                 },
                 {
                   title: 'OCR & parsed fields',
                   route: Routes.OcrParsedFields,
-                  ep: '/ocr · /parser',
+                  ep: 'Visual document reader & field editor',
                 },
                 {
                   title: 'Scan analysis',
                   route: Routes.ScanAnalyzer,
-                  ep: 'scan_analyses',
+                  ep: 'Radiology, CT & ultrasound findings',
                 },
                 {
                   title: 'Medical coding',
                   route: Routes.MedicalCoding,
-                  ep: `/coding/code-suggest/${claim.id.slice(0, 8)}`,
+                  ep: 'ICD-10 diagnostic & CPT codes',
                 },
                 {
                   title: 'Audit trail',
                   route: Routes.AuditTrail,
-                  ep: `/ingress/claims/${claim.id.slice(0, 8)}/audit`,
+                  ep: 'Activity log & state history',
                 },
               ].map((svc, idx, arr) => (
                 <TouchableOpacity
@@ -375,19 +379,13 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
                     idx < arr.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.line2 },
                   ]}
                   onPress={() => {
-                    if (svc.route === Routes.BrainPreview) {
-                      navigation.navigate(Routes.BrainPreview, { claimId: claim.id });
-                    } else if (svc.route === Routes.MedicalCoding) {
-                      navigation.navigate(Routes.MedicalCoding, { claimId: claim.id });
-                    } else {
-                      showToast(`Navigating to ${svc.title}…`);
-                    }
+                    navigation.navigate(svc.route as any, { claimId: claim.id });
                   }}
                   activeOpacity={0.7}
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.serviceTitle, { color: colors.ink }]}>{svc.title}</Text>
-                    <Text style={[styles.serviceEp, styles.mono, { color: colors.muted }]}>
+                    <Text style={[styles.serviceEp, { color: colors.muted }]}>
                       {svc.ep}
                     </Text>
                   </View>

@@ -363,14 +363,14 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
               {complete && (
                 <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
                   <View style={styles.kvRow}>
-                    <Text style={[styles.kvKey, { color: colors.muted }]}>total_processing_seconds</Text>
+                    <Text style={[styles.kvKey, { color: colors.muted }]}>Processing time</Text>
                     <Text style={[styles.kvVal, styles.mono, { color: colors.ink }]}>
                       {totalSeconds || '4.2'}s
                     </Text>
                   </View>
                   <View style={styles.kvRow}>
-                    <Text style={[styles.kvKey, { color: colors.muted }]}>Queues</Text>
-                    <Text style={[styles.kvVal, { color: colors.ink }]}>gpu_queue → default</Text>
+                    <Text style={[styles.kvKey, { color: colors.muted }]}>Engine</Text>
+                    <Text style={[styles.kvVal, { color: colors.ink }]}>GPU accelerated OCR & AI</Text>
                   </View>
                   <View style={[styles.kvRow, { borderBottomWidth: 0 }]}>
                     <Text style={[styles.kvKey, { color: colors.muted }]}>Search index</Text>

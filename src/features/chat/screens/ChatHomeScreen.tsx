@@ -30,17 +30,72 @@ import {
   LogOut,
   Paperclip,
   Send,
+  LayoutGrid,
+  Lock,
+  UserPlus,
+  MessageSquare,
+  Layers,
+  Cpu,
+  Activity,
+  ShieldAlert,
+  CheckSquare,
+  Code,
+  Folder,
+  Scan,
+  FileSearch,
+  Search,
+  ListFilter,
+  Settings,
+  Terminal,
+  Check,
 } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useChatStore } from '../../../state/useChatStore';
 import { useUploadStore, UploadFileItem } from '../../../state/useUploadStore';
 import { usePipelineStore } from '../../../state/usePipelineStore';
 import { useAuthStore } from '../../../state/useAuthStore';
-import { UserRole } from '../../../core/rbac/permissions';
+import { Routes } from '../../../app/navigation/routes';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+
+export interface FeatureDef {
+  id: string;
+  g: string; // group
+  nav: string; // route name in Routes
+  n: string; // display name
+  d: string; // description
+  iconName: string;
+  perm?: 'ops' | 'upload' | 'submit' | 'review' | 'delete' | 'settings' | 'index';
+  params?: Record<string, any>;
+}
+
+export const ALL_FEATURES: FeatureDef[] = [
+  { id: 'signin', g: 'Access', nav: Routes.SignIn, n: 'Sign in', d: 'Keycloak SSO · PKCE · JWT fallback', iconName: 'lock' },
+  { id: 'signup', g: 'Access', nav: Routes.SignUp, n: 'Request access', d: 'TPA onboarding · role request', iconName: 'user-plus' },
+  { id: 'chat', g: 'Chat', nav: Routes.ChatTab, n: 'Chat', d: 'AI claims assistant & document Q&A', iconName: 'message-square' },
+  { id: 'sessions', g: 'Chat', nav: Routes.SessionsTab, n: 'History', d: 'Conversation history & saved sessions', iconName: 'clock' },
+  { id: 'claims', g: 'Claims', nav: Routes.ClaimsTab, n: 'Claims', d: 'Active & processed claims list', iconName: 'file-text' },
+  { id: 'upload', g: 'Claims', nav: Routes.UploadPanel, n: 'Upload', d: 'Camera · gallery · files · screenshot', iconName: 'upload' },
+  { id: 'processing', g: 'Claims', nav: Routes.WorkflowPipeline, n: 'Workflow', d: 'OCR → Parse → Code → Predict → Validate', iconName: 'layers' },
+  { id: 'detail', g: 'Claims', nav: Routes.ClaimDetail, n: 'Claim detail', d: 'Summary, expense breakdown & actions', iconName: 'file-text', params: { claimId: 'a4f1c9e2' } },
+  { id: 'brainpreview', g: 'AI Brain', nav: Routes.BrainPreview, n: 'AI Brain', d: 'KPI strip, risk verdict & readiness', iconName: 'cpu', params: { claimId: 'a4f1c9e2' } },
+  { id: 'risk', g: 'AI Brain', nav: Routes.RiskDetail, n: 'Risk', d: 'Rejection probability & top risk drivers', iconName: 'activity', params: { claimId: 'a4f1c9e2' } },
+  { id: 'fraud', g: 'AI Brain', nav: Routes.FraudDetail, n: 'Fraud', d: '6 signal families · hybrid risk score', iconName: 'shield-alert', params: { claimId: 'a4f1c9e2' } },
+  { id: 'validation', g: 'AI Brain', nav: Routes.ValidationRules, n: 'Validation', d: 'R001–R011 deterministic rules checklist', iconName: 'check-square', params: { claimId: 'a4f1c9e2' } },
+  { id: 'coding', g: 'AI Brain', nav: Routes.MedicalCoding, n: 'Coding', d: 'ICD-10 & CPT procedure code review', iconName: 'code', params: { claimId: 'a4f1c9e2' } },
+  { id: 'docs', g: 'Documents', nav: Routes.DocumentGrid, n: 'Documents', d: 'Manage & inspect attached files', iconName: 'folder', params: { claimId: 'a4f1c9e2' } },
+  { id: 'ocr', g: 'Documents', nav: Routes.OcrParsedFields, n: 'OCR & fields', d: 'Visual document reader & field editor', iconName: 'scan', params: { claimId: 'a4f1c9e2' } },
+  { id: 'scan', g: 'Documents', nav: Routes.ScanAnalyzer, n: 'Scan analyzer', d: 'MRI, CT, X-Ray radiology analyzer', iconName: 'file-search', params: { claimId: 'a4f1c9e2' } },
+  { id: 'patient', g: 'Patient', nav: Routes.PatientProfile, n: 'Patient', d: 'Demographics, policy & KYC details', iconName: 'user' },
+  { id: 'activity', g: 'Patient', nav: Routes.PatientActivity, n: 'Activity', d: 'Audit history & state change diffs', iconName: 'clock' },
+  { id: 'search', g: 'Other', nav: Routes.SearchTab, n: 'Search', d: 'Full-text & semantic vector search', iconName: 'search' },
+  { id: 'submit', g: 'Other', nav: Routes.Submission, n: 'Submission', d: 'Payer submission & IRDAI claim forms', iconName: 'send', params: { claimId: 'a4f1c9e2' } },
+  { id: 'audit', g: 'Other', nav: Routes.AuditTrail, n: 'Audit trail', d: 'User action logs & state snapshots', iconName: 'list-filter', params: { claimId: 'a4f1c9e2' } },
+  { id: 'profile', g: 'Other', nav: Routes.ProfileSettings, n: 'Profile', d: 'User roles, preferences & settings', iconName: 'settings' },
+  { id: 'ops', g: 'Other', nav: Routes.OpsConsole, n: 'Ops console', d: 'Service health & queue performance', iconName: 'terminal', perm: 'ops' },
+];
 
 export const ChatHomeScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
@@ -48,16 +103,31 @@ export const ChatHomeScreen = ({ navigation }: any) => {
   const { messages, sendMessage } = useChatStore();
   const { files, addFile } = useUploadStore();
   const { active, startPipeline } = usePipelineStore();
-  const { role, userName, userEmail, setRole, signOut } = useAuthStore();
+  const { role, userName, userEmail, signOut } = useAuthStore();
   const firstName = userName ? userName.split(' ')[0] : 'Shaikh';
 
   const [input, setInput] = useState('');
   const [isCardExpanded, setIsCardExpanded] = useState(true);
+  const [isFeaturesExpanded, setIsFeaturesExpanded] = useState(true);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showFeaturesModal, setShowFeaturesModal] = useState(false);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => {
+      setToastMsg(null);
+    }, 2800);
+  };
 
   const toggleCard = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setIsCardExpanded(!isCardExpanded);
+  };
+
+  const toggleFeaturesCard = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsFeaturesExpanded(!isFeaturesExpanded);
   };
 
   const handleSend = () => {
@@ -72,6 +142,81 @@ export const ChatHomeScreen = ({ navigation }: any) => {
     sendMessage('Uploaded 1 document — start the pipeline');
   };
 
+  const handleNavigateFeature = (feat: FeatureDef) => {
+    if (feat.perm === 'ops' && role !== 'admin') {
+      showToast(`Requires the admin role — you are signed in as ${role}`);
+      return;
+    }
+    if (feat.nav === Routes.ChatTab) {
+      showToast('Already on Chat Home');
+      return;
+    }
+    if (showFeaturesModal) {
+      setShowFeaturesModal(false);
+    }
+    navigation.navigate(feat.nav, feat.params);
+  };
+
+  const renderFeatureIcon = (name: string, color: string, size = 16) => {
+    switch (name) {
+      case 'lock':
+        return <Lock size={size} color={color} />;
+      case 'user-plus':
+        return <UserPlus size={size} color={color} />;
+      case 'message-square':
+        return <MessageSquare size={size} color={color} />;
+      case 'clock':
+        return <Clock size={size} color={color} />;
+      case 'file-text':
+        return <FileText size={size} color={color} />;
+      case 'upload':
+        return <Upload size={size} color={color} />;
+      case 'layers':
+        return <Layers size={size} color={color} />;
+      case 'cpu':
+        return <Cpu size={size} color={color} />;
+      case 'activity':
+        return <Activity size={size} color={color} />;
+      case 'shield-alert':
+        return <ShieldAlert size={size} color={color} />;
+      case 'check-square':
+        return <CheckSquare size={size} color={color} />;
+      case 'code':
+        return <Code size={size} color={color} />;
+      case 'folder':
+        return <Folder size={size} color={color} />;
+      case 'scan':
+        return <Scan size={size} color={color} />;
+      case 'file-search':
+        return <FileSearch size={size} color={color} />;
+      case 'user':
+        return <User size={size} color={color} />;
+      case 'search':
+        return <Search size={size} color={color} />;
+      case 'send':
+        return <Send size={size} color={color} />;
+      case 'list-filter':
+        return <ListFilter size={size} color={color} />;
+      case 'settings':
+        return <Settings size={size} color={color} />;
+      case 'terminal':
+        return <Terminal size={size} color={color} />;
+      default:
+        return <LayoutGrid size={size} color={color} />;
+    }
+  };
+
+  // Group features for the All Features Menu modal
+  const featureGroups: { title: string; items: FeatureDef[] }[] = [];
+  ALL_FEATURES.forEach(f => {
+    let grp = featureGroups.find(g => g.title === f.g);
+    if (!grp) {
+      grp = { title: f.g, items: [] };
+      featureGroups.push(grp);
+    }
+    grp.items.push(f);
+  });
+
   return (
     <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
       {/* Header Bar */}
@@ -84,12 +229,16 @@ export const ChatHomeScreen = ({ navigation }: any) => {
               </Text>
             </View>
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.ink }]}>ClaimGuru</Text>
+          <Text style={[styles.headerTitle, { color: colors.ink }]}>ClaimsGuru</Text>
         </View>
 
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.iconBtn}>
-            <Pencil size={18} color={colors.ink} />
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => setShowFeaturesModal(true)}
+            accessibilityLabel="All features"
+          >
+            <LayoutGrid size={19} color={colors.ink} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconBtn} onPress={toggleTheme}>
             <Sun size={19} color={colors.ink} />
@@ -104,7 +253,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
             <>
               <View style={[styles.contextBadge, { backgroundColor: '#e6f4f1' }]}>
                 <Text style={[styles.contextBadgeText, { color: '#0d9488' }]}>
-                  Context · claim 3f8a1d6c · {files.length} docs
+                  Context · claim a4f1c9e2 · {files.length} docs
                 </Text>
               </View>
               <View style={[styles.contextBadgePlain]}>
@@ -208,7 +357,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
               <View style={styles.cardActions}>
                 <TouchableOpacity
                   style={[styles.outlineBtn, { borderColor: colors.line }]}
-                  onPress={() => navigation.navigate('WorkflowPipeline')}
+                  onPress={() => navigation.navigate(Routes.WorkflowPipeline)}
                 >
                   <Text style={[styles.outlineBtnText, { color: '#0d9488' }]}>Expand panel</Text>
                 </TouchableOpacity>
@@ -227,7 +376,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
           )}
         </View>
 
-        {/* Pipeline Run Output Card (Immediately below upload card) */}
+        {/* Pipeline Run Output Card */}
         {(active || messages.some(m => m.text.includes('pipeline'))) && (
           <View style={[styles.pipelineCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
             <View style={styles.pipelineHeader}>
@@ -251,6 +400,70 @@ export const ChatHomeScreen = ({ navigation }: any) => {
             </Text>
           </View>
         )}
+
+        {/* ALL FEATURES CARD - COLLAPSIBLE 3-COLUMN GRID */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+          <TouchableOpacity style={styles.cardHeader} onPress={toggleFeaturesCard} activeOpacity={0.7}>
+            <View style={styles.cardHeaderLeft}>
+              <LayoutGrid size={18} color={colors.brand} style={{ marginRight: 8 }} />
+              <Text style={[styles.cardTitle, { color: colors.ink }]}>All features</Text>
+              <View style={[styles.fileBadge, { backgroundColor: colors.surface2 }]}>
+                <Text style={[styles.fileBadgeText, { color: colors.muted }]}>23 screens</Text>
+              </View>
+            </View>
+            {isFeaturesExpanded ? <ChevronUp size={18} color={colors.muted} /> : <ChevronDown size={18} color={colors.muted} />}
+          </TouchableOpacity>
+
+          {isFeaturesExpanded && (
+            <View style={styles.featuresGridContainer}>
+              <View style={styles.featuresGrid}>
+                {ALL_FEATURES.map(feat => {
+                  const isLocked = feat.perm === 'ops' && role !== 'admin';
+                  return (
+                    <TouchableOpacity
+                      key={feat.id}
+                      style={[
+                        styles.featureTile,
+                        { backgroundColor: colors.surface, borderColor: colors.line },
+                        isLocked && { opacity: 0.65 },
+                      ]}
+                      onPress={() => handleNavigateFeature(feat)}
+                      activeOpacity={0.7}
+                    >
+                      <View
+                        style={[
+                          styles.featureIconWrap,
+                          { backgroundColor: isLocked ? colors.surface2 : colors.brandSoft },
+                        ]}
+                      >
+                        {renderFeatureIcon(feat.iconName, isLocked ? colors.muted : colors.brandDark, 16)}
+                      </View>
+                      <Text style={[styles.featureTileName, { color: colors.ink }]} numberOfLines={1}>
+                        {feat.n}
+                      </Text>
+                      {feat.perm && (
+                        <View style={[styles.tileLockBadge, { backgroundColor: colors.surface2 }]}>
+                          <Text style={[styles.tileLockText, { color: isLocked ? colors.red : colors.muted }]}>
+                            {feat.perm}
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.exploreBtn, { borderColor: colors.line }]}
+                onPress={() => setShowFeaturesModal(true)}
+              >
+                <Text style={[styles.exploreBtnText, { color: colors.brandDark }]}>
+                  View categorized directory ({ALL_FEATURES.length} features) →
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
 
         {/* Welcome Starter Card */}
         <View style={[styles.welcomeCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
@@ -309,9 +522,8 @@ export const ChatHomeScreen = ({ navigation }: any) => {
         ))}
       </ScrollView>
 
-      {/* Composer Input Area with Quick Action Pill Options directly above the input box */}
+      {/* Composer Input Area */}
       <View style={[styles.composerContainer, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
-        {/* Horizontal Quick Action Pills inside composer */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -340,7 +552,13 @@ export const ChatHomeScreen = ({ navigation }: any) => {
         </ScrollView>
 
         <View style={styles.inputRow}>
-          <TouchableOpacity style={styles.attachBtn}>
+          <TouchableOpacity
+            style={styles.attachBtn}
+            onPress={() => {
+              setIsCardExpanded(true);
+              showToast('Upload panel opened');
+            }}
+          >
             <Paperclip size={20} color={colors.muted} />
           </TouchableOpacity>
 
@@ -361,13 +579,87 @@ export const ChatHomeScreen = ({ navigation }: any) => {
           </TouchableOpacity>
         </View>
 
-        {/* PHI Disclaimer */}
         <Text style={[styles.phiNoticeText, { color: colors.muted }]}>
-          PHI (SSN · phone · email · MRN · DOB · policy) is scrubbed before anything reaches an LLM — try typing an email address.
+          PHI (SSN · phone · email · MRN · DOB · policy) is scrubbed before anything reaches an LLM.
         </Text>
       </View>
 
-      {/* Profile & Active Role Bottom Sheet Modal */}
+      {/* ALL FEATURES MODAL SHEET */}
+      <Modal
+        transparent
+        visible={showFeaturesModal}
+        animationType="slide"
+        onRequestClose={() => setShowFeaturesModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowFeaturesModal(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[
+              styles.sheetContainer,
+              { backgroundColor: colors.surface, maxHeight: '82%', paddingBottom: Math.max(insets.bottom + 16, 24) },
+            ]}
+          >
+            <View style={styles.sheetHandle} />
+            <Text style={[styles.sheetModalTitle, { color: colors.ink }]}>All Features (23 screens)</Text>
+            <Text style={[styles.sheetModalSub, { color: colors.muted }]}>
+              Tap any feature to navigate directly. Active role: <Text style={{ fontWeight: '700', color: colors.brandDark }}>{role}</Text>
+            </Text>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 8 }}>
+              {featureGroups.map(grp => (
+                <View key={grp.title} style={styles.modalGroup}>
+                  <Text style={[styles.modalGroupTitle, { color: colors.muted }]}>{grp.title}</Text>
+                  <View style={[styles.modalGroupCard, { borderColor: colors.line, backgroundColor: colors.surface }]}>
+                    {grp.items.map((feat, fIdx) => {
+                      const isLocked = feat.perm === 'ops' && role !== 'admin';
+                      return (
+                        <TouchableOpacity
+                          key={feat.id}
+                          style={[
+                            styles.modalFeatItem,
+                            fIdx < grp.items.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.line2 },
+                          ]}
+                          onPress={() => handleNavigateFeature(feat)}
+                        >
+                          <View
+                            style={[
+                              styles.modalFeatIconBox,
+                              { backgroundColor: isLocked ? colors.surface2 : colors.brandSoft },
+                            ]}
+                          >
+                            {renderFeatureIcon(feat.iconName, isLocked ? colors.muted : colors.brandDark, 16)}
+                          </View>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <Text style={[styles.modalFeatName, { color: colors.ink }]}>{feat.n}</Text>
+                            </View>
+                            <Text style={[styles.modalFeatDesc, { color: colors.muted }]} numberOfLines={1}>
+                              {feat.d}
+                            </Text>
+                          </View>
+                          {isLocked ? (
+                            <View style={[styles.pillBad, { backgroundColor: colors.redSoft }]}>
+                              <Text style={[styles.pillBadText, { color: colors.red }]}>admin</Text>
+                            </View>
+                          ) : (
+                            <ChevronRight size={16} color={colors.muted} />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Profile Modal */}
       <Modal
         transparent={true}
         visible={showProfileModal}
@@ -386,10 +678,8 @@ export const ChatHomeScreen = ({ navigation }: any) => {
               { backgroundColor: colors.surface, paddingBottom: Math.max(insets.bottom + 16, 24) },
             ]}
           >
-            {/* Top Handle Indicator */}
             <View style={styles.sheetHandle} />
 
-            {/* Profile Info Header */}
             <View style={styles.sheetProfileHeader}>
               <View style={[styles.sheetAvatar, { backgroundColor: '#e6f4f1' }]}>
                 <Text style={[styles.sheetAvatarText, { color: '#0d9488' }]}>
@@ -404,21 +694,16 @@ export const ChatHomeScreen = ({ navigation }: any) => {
               </View>
             </View>
 
-            {/* Active Role - Only 1 role shown, default submitter */}
             <View style={styles.sheetRoleRow}>
-              <Text style={[styles.sheetRoleLabel, { color: colors.muted }]}>
-                Role
-              </Text>
+              <Text style={[styles.sheetRoleLabel, { color: colors.muted }]}>Active Role</Text>
               <View style={[styles.singleRoleBadge, { backgroundColor: isDark ? '#123028' : '#e6f7f0' }]}>
                 <Text style={[styles.singleRoleText, { color: isDark ? '#34d399' : '#047857' }]}>
-                  {role || 'submitter'}
+                  {role || 'reviewer'}
                 </Text>
               </View>
             </View>
 
-            {/* Menu Navigation Card */}
             <View style={[styles.sheetMenuCard, { borderColor: colors.line, backgroundColor: colors.surface }]}>
-              {/* Dark Mode Toggle */}
               <View style={[styles.sheetMenuItem, { borderBottomWidth: 1, borderBottomColor: colors.line }]}>
                 <View style={styles.sheetMenuLeft}>
                   <Moon size={18} color={colors.ink} style={{ marginRight: 10 }} />
@@ -436,7 +721,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
                 style={[styles.sheetMenuItem, { borderBottomWidth: 1, borderBottomColor: colors.line }]}
                 onPress={() => {
                   setShowProfileModal(false);
-                  navigation.navigate('ProfileSettings');
+                  navigation.navigate(Routes.ProfileSettings);
                 }}
               >
                 <View style={styles.sheetMenuLeft}>
@@ -450,7 +735,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
                 style={[styles.sheetMenuItem, { borderBottomWidth: 1, borderBottomColor: colors.line }]}
                 onPress={() => {
                   setShowProfileModal(false);
-                  navigation.navigate('SessionsTab');
+                  navigation.navigate(Routes.SessionsTab);
                 }}
               >
                 <View style={styles.sheetMenuLeft}>
@@ -476,14 +761,22 @@ export const ChatHomeScreen = ({ navigation }: any) => {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Floating Toast Notification */}
+      {toastMsg && (
+        <View style={[styles.toast, { backgroundColor: colors.navy }]}>
+          <Check size={16} color="#ffffff" strokeWidth={2.5} />
+          <Text style={styles.toastText} numberOfLines={2}>
+            {toastMsg}
+          </Text>
+        </View>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     height: 52,
     flexDirection: 'row',
@@ -492,13 +785,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: 1,
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatarBtn: {
-    marginRight: 10,
-  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  avatarBtn: { marginRight: 10 },
   avatar: {
     width: 32,
     height: 32,
@@ -506,102 +794,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  iconBtn: {
-    padding: 6,
-  },
-  contextBar: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
-  },
-  contextScroll: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  contextBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  contextBadgeText: {
-    fontSize: 11.5,
-    fontWeight: '600',
-  },
-  contextBadgePlain: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-  },
-  contextBadgePlainText: {
-    fontSize: 11.5,
-    fontWeight: '500',
-  },
-  contextBadgeGreen: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  contextBadgeGreenText: {
-    fontSize: 11.5,
-    fontWeight: '700',
-  },
-  scrollContent: {
-    flex: 1,
-  },
-  scrollInner: {
-    padding: 14,
-    gap: 12,
-  },
-  card: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-  },
+  avatarText: { fontSize: 13, fontWeight: '700' },
+  headerTitle: { fontSize: 18, fontWeight: '700', letterSpacing: -0.3 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  iconBtn: { padding: 6 },
+  contextBar: { paddingVertical: 8, paddingHorizontal: 14, borderBottomWidth: 1 },
+  contextScroll: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  contextBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  contextBadgeText: { fontSize: 11.5, fontWeight: '600' },
+  contextBadgePlain: { paddingHorizontal: 6, paddingVertical: 4 },
+  contextBadgePlainText: { fontSize: 11.5, fontWeight: '500' },
+  contextBadgeGreen: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  contextBadgeGreenText: { fontSize: 11.5, fontWeight: '700' },
+  scrollContent: { flex: 1 },
+  scrollInner: { padding: 14, gap: 12 },
+  card: { borderRadius: 14, borderWidth: 1, padding: 14 },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  cardHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    marginRight: 8,
-  },
-  fileBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  fileBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  cardContent: {
-    marginTop: 14,
-  },
-  actionGrid: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-  },
+  cardHeaderLeft: { flexDirection: 'row', alignItems: 'center' },
+  cardTitle: { fontSize: 15, fontWeight: '700', marginRight: 8 },
+  fileBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  fileBadgeText: { fontSize: 11, fontWeight: '600' },
+  cardContent: { marginTop: 14 },
+  actionGrid: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   srcBtn: {
     flex: 1,
     paddingVertical: 10,
@@ -610,10 +828,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  srcBtnText: {
-    fontSize: 11.5,
-    fontWeight: '500',
-  },
+  srcBtnText: { fontSize: 11.5, fontWeight: '500' },
   uploadHelperText: {
     fontSize: 12,
     textAlign: 'center',
@@ -629,44 +844,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 12,
   },
-  fileRowLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  docIconBox: {
-    marginRight: 8,
-  },
-  fileNameText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  fileRowRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  purpleTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  purpleTagText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  readyTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  readyTagText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  cardActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
+  fileRowLeft: { flexDirection: 'row', alignItems: 'center' },
+  docIconBox: { marginRight: 8 },
+  fileNameText: { fontSize: 13, fontWeight: '600' },
+  fileRowRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  purpleTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+  purpleTagText: { fontSize: 11, fontWeight: '600' },
+  readyTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+  readyTagText: { fontSize: 11, fontWeight: '600' },
+  cardActions: { flexDirection: 'row', gap: 10 },
   outlineBtn: {
     flex: 1,
     paddingVertical: 10,
@@ -674,37 +860,74 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
   },
-  outlineBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  outlineBtnText: { fontSize: 13, fontWeight: '600' },
   solidTealBtn: {
     flex: 1,
     paddingVertical: 10,
     borderRadius: 10,
     alignItems: 'center',
   },
-  solidTealBtnText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  welcomeCard: {
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginVertical: 4,
-  },
-  welcomeText: {
-    fontSize: 13.5,
-    lineHeight: 19,
-    marginBottom: 14,
-  },
-  promptGrid: {
+  solidTealBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
+  pipelineCard: { padding: 14, borderRadius: 14, borderWidth: 1, marginVertical: 4 },
+  pipelineHeader: { marginBottom: 10 },
+  pipelineTitle: { fontSize: 14.5, fontWeight: '500' },
+  pipelineSub: { fontSize: 11.5, marginTop: 2 },
+  progressSegments: { flexDirection: 'row', gap: 6, marginVertical: 10 },
+  segment: { flex: 1, height: 4, borderRadius: 2 },
+  pipelineDoneText: { fontSize: 12.5 },
+
+  // Features Grid Styles
+  featuresGridContainer: { marginTop: 12 },
+  featuresGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
   },
+  featureTile: {
+    width: '31.3%',
+    borderRadius: 11,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    position: 'relative',
+    minHeight: 76,
+    justifyContent: 'center',
+  },
+  featureIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 5,
+  },
+  featureTileName: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  tileLockBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
+  tileLockText: { fontSize: 7.5, fontWeight: '800' },
+  exploreBtn: {
+    marginTop: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  exploreBtnText: { fontSize: 11.5, fontWeight: '700' },
+
+  welcomeCard: { padding: 14, borderRadius: 14, borderWidth: 1, marginVertical: 4 },
+  welcomeText: { fontSize: 13.5, lineHeight: 19, marginBottom: 14 },
+  promptGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   promptGridBox: {
     width: '48%',
     paddingVertical: 14,
@@ -713,15 +936,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: 'center',
   },
-  promptGridText: {
-    fontSize: 12.5,
-    fontWeight: '500',
-    lineHeight: 16,
-  },
-  userBubbleWrapper: {
-    alignItems: 'flex-end',
-    marginVertical: 4,
-  },
+  promptGridText: { fontSize: 12.5, fontWeight: '500', lineHeight: 16 },
+  userBubbleWrapper: { alignItems: 'flex-end', marginVertical: 4 },
   userBubble: {
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -729,85 +945,21 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
     maxWidth: '85%',
   },
-  userBubbleText: {
-    color: '#ffffff',
-    fontSize: 13.5,
-    fontWeight: '500',
-  },
-  assistantCard: {
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginVertical: 4,
-  },
-  assistantTitle: {
-    fontSize: 13.5,
-    lineHeight: 19,
-  },
-  sourceText: {
-    fontSize: 11,
-    marginTop: 6,
-  },
-  pipelineCard: {
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginVertical: 4,
-  },
-  pipelineHeader: {
-    marginBottom: 10,
-  },
-  pipelineTitle: {
-    fontSize: 14.5,
-    fontWeight: '500',
-  },
-  pipelineSub: {
-    fontSize: 11.5,
-    marginTop: 2,
-  },
-  progressSegments: {
-    flexDirection: 'row',
-    gap: 6,
-    marginVertical: 10,
-  },
-  segment: {
-    flex: 1,
-    height: 4,
-    borderRadius: 2,
-  },
-  pipelineDoneText: {
-    fontSize: 12.5,
-  },
+  userBubbleText: { color: '#ffffff', fontSize: 13.5, fontWeight: '500' },
+  assistantCard: { padding: 14, borderRadius: 14, borderWidth: 1, marginVertical: 4 },
+  assistantTitle: { fontSize: 13.5, lineHeight: 19 },
+  sourceText: { fontSize: 11, marginTop: 6 },
   composerContainer: {
     paddingHorizontal: 14,
     paddingTop: 8,
     paddingBottom: 10,
     borderTopWidth: 1,
   },
-  composerPillRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingBottom: 8,
-  },
-  suggestionChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  suggestionChipText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  attachBtn: {
-    padding: 6,
-  },
+  composerPillRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 8 },
+  suggestionChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
+  suggestionChipText: { fontSize: 12, fontWeight: '500' },
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  attachBtn: { padding: 6 },
   composerInput: {
     flex: 1,
     height: 42,
@@ -831,7 +983,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
 
-  // Profile Modal Bottom Sheet Styles
+  // Modal Sheets
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
@@ -851,11 +1003,38 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 16,
   },
-  sheetProfileHeader: {
+  sheetModalTitle: { fontSize: 17, fontWeight: '700', marginBottom: 2 },
+  sheetModalSub: { fontSize: 12, marginBottom: 10 },
+  modalGroup: { marginBottom: 12 },
+  modalGroupTitle: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    marginBottom: 6,
+    marginLeft: 4,
+  },
+  modalGroupCard: { borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
+  modalFeatItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 10,
   },
+  modalFeatIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalFeatName: { fontSize: 13, fontWeight: '600' },
+  modalFeatDesc: { fontSize: 11, marginTop: 1 },
+  pillBad: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  pillBadText: { fontSize: 9.5, fontWeight: '700' },
+
+  sheetProfileHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   sheetAvatar: {
     width: 46,
     height: 46,
@@ -864,21 +1043,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 14,
   },
-  sheetAvatarText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  sheetProfileInfo: {
-    flex: 1,
-  },
-  sheetUserName: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  sheetUserEmail: {
-    fontSize: 12,
-  },
+  sheetAvatarText: { fontSize: 16, fontWeight: '700' },
+  sheetProfileInfo: { flex: 1 },
+  sheetUserName: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
+  sheetUserEmail: { fontSize: 12 },
   sheetRoleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -886,29 +1054,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 4,
   },
-  sheetRoleLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  singleRoleBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 14,
-  },
-  singleRoleText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  sheetMenuLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  sheetMenuCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: 'hidden',
-    marginTop: 4,
-  },
+  sheetRoleLabel: { fontSize: 13, fontWeight: '600' },
+  singleRoleBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14 },
+  singleRoleText: { fontSize: 12, fontWeight: '700' },
+  sheetMenuLeft: { flexDirection: 'row', alignItems: 'center' },
+  sheetMenuCard: { borderRadius: 12, borderWidth: 1, overflow: 'hidden', marginTop: 4 },
   sheetMenuItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -916,7 +1066,23 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
   },
-  sheetMenuText: {
-    fontSize: 13.5,
+  sheetMenuText: { fontSize: 13.5 },
+  toast: {
+    position: 'absolute',
+    left: 14,
+    right: 14,
+    bottom: 80,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
   },
+  toastText: { color: '#ffffff', fontSize: 11.5, flex: 1 },
 });

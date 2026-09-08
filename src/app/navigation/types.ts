@@ -13,10 +13,10 @@ export type RootStackParamList = {
   [Routes.FraudDetail]: { claimId: string };
   [Routes.ValidationRules]: { claimId: string };
   [Routes.MedicalCoding]: { claimId: string };
-  [Routes.OcrParsedFields]: { claimId: string };
+  [Routes.OcrParsedFields]: { claimId: string; docKey?: string };
   [Routes.ScanAnalyzer]: { claimId: string };
   [Routes.DocumentGrid]: { claimId: string };
-  [Routes.PatientProfile]: { patientId?: string };
+  [Routes.PatientProfile]: { claimId?: string; patientId?: string };
   [Routes.PatientActivity]: { patientId?: string };
   [Routes.Submission]: { claimId: string };
   [Routes.AuditTrail]: { claimId: string };
@@ -29,4 +29,5 @@ export type BottomTabParamList = {
   [Routes.ClaimsTab]: undefined;
   [Routes.SearchTab]: undefined;
   [Routes.SessionsTab]: undefined;
+  [Routes.AllFeaturesTab]: undefined;
 };

@@ -8,6 +8,7 @@ export const Routes = {
   ClaimsTab: 'ClaimsTab',
   SearchTab: 'SearchTab',
   SessionsTab: 'SessionsTab',
+  AllFeaturesTab: 'AllFeaturesTab',
 
   // Detail / Feature Screens
   ClaimDetail: 'ClaimDetail',
