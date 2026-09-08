@@ -8,6 +8,10 @@ import { RootStackParamList } from './types';
 // Navigators & Screens
 import { TabNavigator } from './TabNavigator';
 import { BrainPreviewScreen } from '../../features/brain/screens/BrainPreviewScreen';
+import { RiskDetailScreen } from '../../features/brain/screens/RiskDetailScreen';
+import { FraudDetailScreen } from '../../features/brain/screens/FraudDetailScreen';
+import { ValidationRulesScreen } from '../../features/brain/screens/ValidationRulesScreen';
+import { MedicalCodingScreen } from '../../features/brain/screens/MedicalCodingScreen';
 import { WorkflowPipelineScreen } from '../../features/workflow/screens/WorkflowPipelineScreen';
 import { ProfileSettingsScreen } from '../../features/profile/screens/ProfileSettingsScreen';
 import { UploadPanelScreen } from '../../features/claims/screens/UploadPanelScreen';
@@ -42,13 +46,22 @@ export const RootNavigator = () => {
         <Stack.Screen
           name={Routes.BrainPreview}
           component={BrainPreviewScreen}
-          options={{
-            headerShown: true,
-            title: 'AI Brain Preview',
-            headerStyle: { backgroundColor: colors.surface },
-            headerTintColor: colors.ink,
-            headerShadowVisible: false,
-          }}
+        />
+        <Stack.Screen
+          name={Routes.RiskDetail}
+          component={RiskDetailScreen}
+        />
+        <Stack.Screen
+          name={Routes.FraudDetail}
+          component={FraudDetailScreen}
+        />
+        <Stack.Screen
+          name={Routes.ValidationRules}
+          component={ValidationRulesScreen}
+        />
+        <Stack.Screen
+          name={Routes.MedicalCoding}
+          component={MedicalCodingScreen}
         />
         <Stack.Screen
           name={Routes.ProfileSettings}

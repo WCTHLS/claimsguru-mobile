@@ -299,7 +299,7 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
               <View style={[styles.kvRow, { borderBottomWidth: 0 }]}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Fields parsed</Text>
                 <Text style={[styles.kvVal, { color: colors.ink }]}>
-                  {claim.fieldsParsed || '20 of 24'}
+                  {claim.fieldsParsed || '23 of 27'}
                 </Text>
               </View>
             </View>
@@ -377,6 +377,8 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
                   onPress={() => {
                     if (svc.route === Routes.BrainPreview) {
                       navigation.navigate(Routes.BrainPreview, { claimId: claim.id });
+                    } else if (svc.route === Routes.MedicalCoding) {
+                      navigation.navigate(Routes.MedicalCoding, { claimId: claim.id });
                     } else {
                       showToast(`Navigating to ${svc.title}…`);
                     }
@@ -413,7 +415,7 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
             onPress={() => navigation.navigate(Routes.ChatTab)}
             activeOpacity={0.7}
           >
-            <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>Ask ClaimGPT</Text>
+            <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>Ask ClaimsGuru</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
