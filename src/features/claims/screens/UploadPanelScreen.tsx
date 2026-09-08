@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
+  Platform,
 } from 'react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useUploadStore, UploadFileItem } from '../../../state/useUploadStore';
@@ -43,25 +44,41 @@ const LAT: Record<string, string> = {
 
 export const UploadPanelScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
-  const { files, eventLogs, claimType, addFile, removeFile, clearFiles, setDocType, setClaimType } =
-    useUploadStore();
+  const {
+    files,
+    eventLogs,
+    claimType,
+    uploading,
+    addFile,
+    addRealFile,
+    removeFile,
+    clearFiles,
+    setDocType,
+    setClaimType,
+    uploadToBackend,
+  } = useUploadStore();
   const { startPipeline } = usePipelineStore();
   const { addOrUpdateClaim } = useClaimsStore();
 
   const [selectedDocTypePicker, setSelectedDocTypePicker] = useState<string | null>(null);
 
   const hasFiles = files.length > 0;
-  const isReady = hasFiles && files.every(f => f.status === 'ready');
+  const isReady = hasFiles && files.every(f => f.status === 'ready') && !uploading;
 
-  const handleStartPipeline = () => {
-    if (!hasFiles) return;
+  const handleStartPipeline = async () => {
+    if (!hasFiles || uploading) return;
+
+    // Trigger real backend upload
+    const { claimId } = await uploadToBackend({
+      policyId: 'SAMPLE-PH-77421',
+      patientId: 'patient_01',
+    });
 
     // Register active new claim in claims store
-    const newClaimId = '3f8a1d6c-52b4-4e7a-9c11-0d5e2ab77104';
     addOrUpdateClaim({
-      id: newClaimId,
-      who: 'R. Menon',
-      dept: 'Cardiology',
+      id: claimId,
+      who: files[0]?.name ? `Processing ${files[0].name}...` : 'Processing claim...',
+      dept: 'General Medicine',
       amt: 184500,
       status: 'running',
       step: 'ocr',
@@ -74,7 +91,8 @@ export const UploadPanelScreen = ({ navigation }: any) => {
         name: f.name,
         docType: f.docType,
         kind: f.kind,
-      }))
+      })),
+      claimId
     );
 
     navigation.navigate(Routes.WorkflowPipeline);
@@ -84,6 +102,40 @@ export const UploadPanelScreen = ({ navigation }: any) => {
     addFile('Discharge_Summary.pdf|digital|discharge_summary|0.96');
     setTimeout(() => addFile('Hospital_Bill.jpg|jpg|hospital_bill|0.93'), 150);
     setTimeout(() => addFile('Policy_Card.pdf|scanned|policy_card|0.90'), 300);
+  };
+
+  const handlePickFiles = () => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.multiple = true;
+      input.accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx';
+      input.onchange = (e: any) => {
+        const selected = e.target.files;
+        if (selected && selected.length > 0) {
+          for (let i = 0; i < selected.length; i++) {
+            const f = selected[i];
+            addRealFile({
+              name: f.name,
+              size: f.size,
+              type: f.type,
+              blob: f,
+            });
+          }
+        }
+      };
+      input.click();
+    } else {
+      addFile('Lab_Report.pdf|digital|lab_report|0.91');
+    }
+  };
+
+  const handleDropZonePress = () => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      handlePickFiles();
+    } else {
+      handleAddDefaultSample();
+    }
   };
 
   return (
@@ -111,13 +163,13 @@ export const UploadPanelScreen = ({ navigation }: any) => {
           {/* Dropzone Card */}
           <TouchableOpacity
             style={[styles.dropZone, { backgroundColor: colors.surface, borderColor: colors.line }]}
-            onPress={handleAddDefaultSample}
+            onPress={handleDropZonePress}
             activeOpacity={0.8}
           >
             <UploadCloud size={34} color={colors.muted} strokeWidth={1.7} />
             <Text style={[styles.dropTitle, { color: colors.ink }]}>Drop claim documents here</Text>
             <Text style={[styles.dropSubtitle, { color: colors.muted }]}>
-              PDF · images · Word · Excel · CSV
+              {Platform.OS === 'web' ? 'Click to browse files · PDF, images, docs' : 'PDF · images · Word · Excel · CSV'}
             </Text>
           </TouchableOpacity>
 
@@ -143,7 +195,7 @@ export const UploadPanelScreen = ({ navigation }: any) => {
 
             <TouchableOpacity
               style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-              onPress={() => addFile('Policy_Card.pdf|scanned|policy_card|0.90')}
+              onPress={handlePickFiles}
               activeOpacity={0.75}
             >
               <FileText size={18} color={colors.muted} strokeWidth={1.8} />
@@ -406,7 +458,7 @@ export const UploadPanelScreen = ({ navigation }: any) => {
             disabled={!isReady}
             activeOpacity={0.85}
           >
-            <Text style={styles.primaryBtnText}>Start pipeline</Text>
+            <Text style={styles.primaryBtnText}>{uploading ? 'Uploading…' : 'Start pipeline'}</Text>
           </TouchableOpacity>
         </View>
       </View>

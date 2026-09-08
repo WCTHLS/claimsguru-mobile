@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { Routes } from '../../../app/navigation/routes';
 import { ICD_CODES, CPT_CODES, CodeItem } from '../../../mocks/codes.mock';
+import { claimsApi } from '../../claims/services/claimsApi';
+import { apiClient } from '../../../core/api/client';
 import {
   ArrowLeft,
   Info,
@@ -26,6 +28,35 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
   const [activeTab, setActiveTab] = useState<'icd' | 'cpt'>('icd');
   const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [realIcdCodes, setRealIcdCodes] = useState<CodeItem[] | null>(null);
+  const [realCptCodes, setRealCptCodes] = useState<CodeItem[] | null>(null);
+
+  useEffect(() => {
+    if (claimId && claimId.length > 20) {
+      claimsApi.getClaimPreview(claimId).then(preview => {
+        if (preview && preview.icd_codes && preview.icd_codes.length > 0) {
+          const formattedIcd: CodeItem[] = preview.icd_codes.map((c: any) => ({
+            code: c.code,
+            desc: c.description || 'Diagnostic code',
+            meta: `confidence ${c.confidence ? c.confidence.toFixed(2) : '0.85'}`,
+            confidence: c.confidence || 0.85,
+          }));
+          setRealIcdCodes(formattedIcd);
+        }
+        if (preview && preview.cpt_codes && preview.cpt_codes.length > 0) {
+          const formattedCpt: CodeItem[] = preview.cpt_codes.map((c: any) => ({
+            code: c.code,
+            desc: c.description || 'Procedure code',
+            meta: c.estimated_cost ? `est. Rs. ${c.estimated_cost}` : `confidence ${c.confidence ? c.confidence.toFixed(2) : '0.80'}`,
+            confidence: c.confidence || 0.80,
+          }));
+          setRealCptCodes(formattedCpt);
+        }
+      }).catch(err => {
+        console.log('[MedicalCodingScreen] Error fetching codes:', err);
+      });
+    }
+  }, [claimId]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -33,14 +64,29 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
   };
 
   const handleFeedback = (code: string, vote: 'up' | 'down') => {
+    const action = vote === 'up' ? 'accept' : 'reject';
     setFeedback(prev => ({
       ...prev,
       [code]: prev[code] === vote ? (undefined as any) : vote,
     }));
-    showToast(`POST /submission/claims/${claimId}/code-feedback → ${code} (${vote === 'up' ? 'accepted' : 'rejected'})`);
+
+    if (claimId && claimId.length > 20) {
+      apiClient.post(`/submission/claims/${claimId}/code-feedback`, {
+        code,
+        action,
+      }).then((res: any) => {
+        showToast(res?.message || `Code ${code} recorded: ${action}`);
+      }).catch(err => {
+        showToast(`Recorded locally: ${code} (${action})`);
+      });
+    } else {
+      showToast(`Code ${code} (${action})`);
+    }
   };
 
-  const currentCodes = activeTab === 'icd' ? ICD_CODES : CPT_CODES;
+  const currentCodes = activeTab === 'icd'
+    ? (realIcdCodes && realIcdCodes.length > 0 ? realIcdCodes : ICD_CODES)
+    : (realCptCodes && realCptCodes.length > 0 ? realCptCodes : CPT_CODES);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>

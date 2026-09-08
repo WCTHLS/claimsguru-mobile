@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useClaimsStore } from '../../../state/useClaimsStore';
+import { claimsApi, transformBackendClaim } from '../services/claimsApi';
 import { formatINR } from '../../../core/utils/currency';
 import { Routes } from '../../../app/navigation/routes';
 import {
@@ -24,11 +25,36 @@ import {
 export const ClaimDetailScreen = ({ route, navigation }: any) => {
   const { colors } = useTheme();
   const claimId = route?.params?.claimId || 'a4f1c9e2-7d30-4b8e-91cf-6ea2b40d7715';
-  const { claims, indexClaim, deleteClaim } = useClaimsStore();
+  const { claims, indexClaim, deleteClaim, addOrUpdateClaim } = useClaimsStore();
   const [activeTab, setActiveTab] = useState<'Summary' | 'Expenses' | 'Services'>('Summary');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [liveExpenses, setLiveExpenses] = useState<{ category: string; amount: number }[] | null>(null);
 
   const claim = claims.find(c => c.id === claimId || c.id.startsWith(claimId)) || claims[0];
+
+  useEffect(() => {
+    // Fetch latest claim details & preview from backend
+    if (claimId && claimId.length > 20) {
+      Promise.all([
+        claimsApi.getClaimDetail(claimId).catch(() => null),
+        claimsApi.getClaimPreview(claimId).catch(() => null),
+      ]).then(([backendData, previewData]) => {
+        if (backendData && backendData.id) {
+          const transformed = transformBackendClaim(backendData, previewData);
+          addOrUpdateClaim(transformed);
+        }
+        if (previewData && previewData.expenses && previewData.expenses.length > 0) {
+          const formatted = previewData.expenses.map((e: any) => ({
+            category: e.category || 'Medical expense',
+            amount: Math.round(e.amount || 0),
+          }));
+          setLiveExpenses(formatted);
+        }
+      }).catch(err => {
+        console.log('[ClaimDetailScreen] Backend claim detail unavailable:', err?.message || err);
+      });
+    }
+  }, [claimId]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -36,7 +62,8 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
   };
 
   const handleDownload = () => {
-    showToast('Downloading claim documents (Discharge_Summary.pdf)...');
+    const fileUrl = claimsApi.getClaimFileUrl(claim.id);
+    showToast(`Downloading original: ${claim.id.slice(0, 8)}...`);
   };
 
   const handleIndex = () => {
@@ -89,7 +116,7 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
     { category: 'Nursing', amount: 3500 },
   ];
 
-  const expenses = claim.expenses || defaultExpenses;
+  const expenses = liveExpenses || claim.expenses || defaultExpenses;
   const totalExpense = expenses.reduce((acc, item) => acc + item.amount, 0);
 
   return (

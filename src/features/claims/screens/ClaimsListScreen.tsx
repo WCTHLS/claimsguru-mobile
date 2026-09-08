@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
+  RefreshControl,
 } from 'react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useClaimsStore } from '../../../state/useClaimsStore';
@@ -17,9 +18,13 @@ import { Routes } from '../../../app/navigation/routes';
 
 export const ClaimsListScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
-  const { claims, selectClaim } = useClaimsStore();
+  const { claims, selectClaim, loadClaims, refreshing, backendConnected } = useClaimsStore();
   const { running: pipelineRunning, claimId: pipelineClaimId } = usePipelineStore();
   const [activeFilter, setActiveFilter] = useState<'All' | 'Running' | 'FAILED' | 'Needs index'>('All');
+
+  useEffect(() => {
+    loadClaims();
+  }, []);
 
   const totalCount = claims.length;
   const inPipelineCount = claims.filter(c => c.status === 'running').length;
@@ -104,6 +109,14 @@ export const ClaimsListScreen = ({ navigation }: any) => {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => loadClaims(true)}
+              tintColor={colors.brand}
+              colors={[colors.brand]}
+            />
+          }
         >
           {/* 2x2 KPI Grid */}
           <View style={styles.kpiGrid}>
