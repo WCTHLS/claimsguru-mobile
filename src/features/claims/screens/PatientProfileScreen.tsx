@@ -92,7 +92,7 @@ export const PatientProfileScreen = ({ navigation }: any) => {
         {/* Patient Identity Card */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line, alignItems: 'center' }]}>
           <UserAvatar
-            size={76}
+            size={68}
             name={userName}
             gender={gender}
             style={{ marginBottom: 10 }}
@@ -101,53 +101,6 @@ export const PatientProfileScreen = ({ navigation }: any) => {
           <Text style={[styles.patientSub, { color: colors.muted }]}>
             {gender || 'Male'} · born {maskVal('dob', dob || '08 Jun 2000')}
           </Text>
-
-          {/* Quick Avatar/Gender Switcher */}
-          <View style={[styles.avatarSwitcherRow, { backgroundColor: isDark ? '#1e293b' : '#f1f5f9' }]}>
-            <TouchableOpacity
-              style={[
-                styles.avatarSwitchBtn,
-                (!gender || gender.toLowerCase() === 'male') && {
-                  backgroundColor: '#0284c7',
-                },
-              ]}
-              onPress={() => setUserDetails({ gender: 'Male' })}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[
-                  styles.avatarSwitchText,
-                  (!gender || gender.toLowerCase() === 'male')
-                    ? { color: '#ffffff', fontWeight: '700' }
-                    : { color: colors.muted },
-                ]}
-              >
-                Male Avatar
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.avatarSwitchBtn,
-                gender?.toLowerCase() === 'female' && {
-                  backgroundColor: '#db2777',
-                },
-              ]}
-              onPress={() => setUserDetails({ gender: 'Female' })}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[
-                  styles.avatarSwitchText,
-                  gender?.toLowerCase() === 'female'
-                    ? { color: '#ffffff', fontWeight: '700' }
-                    : { color: colors.muted },
-                ]}
-              >
-                Female Avatar
-              </Text>
-            </TouchableOpacity>
-          </View>
 
           <View style={styles.pillsRow}>
             <View style={[styles.tagPill, { backgroundColor: colors.brandSoft }]}>

@@ -63,9 +63,9 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
       >
         {/* Profile Card */}
         <View style={[styles.profileCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          {/* Illustrated SVG Avatar (Male & Female from claimgpt-designs) */}
+          {/* Illustrated SVG Avatar (Automatically matches registered gender) */}
           <UserAvatar
-            size={76}
+            size={68}
             name={userName}
             gender={gender}
             style={{ marginBottom: 12 }}
@@ -76,53 +76,6 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
           <Text style={[styles.userDepartment, { color: colors.muted }]}>
             {userEmail}{policyNumber ? ` · Policy ${policyNumber}` : ''}
           </Text>
-
-          {/* Male / Female Avatar Switcher */}
-          <View style={[styles.avatarSwitcherRow, { backgroundColor: isDark ? '#1e293b' : '#f1f5f9' }]}>
-            <TouchableOpacity
-              style={[
-                styles.avatarSwitchBtn,
-                (!gender || gender.toLowerCase() === 'male') && {
-                  backgroundColor: isDark ? '#0284c7' : '#0284c7',
-                },
-              ]}
-              onPress={() => setUserDetails({ gender: 'Male' })}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[
-                  styles.avatarSwitchText,
-                  (!gender || gender.toLowerCase() === 'male')
-                    ? { color: '#ffffff', fontWeight: '700' }
-                    : { color: colors.muted },
-                ]}
-              >
-                Male Avatar
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.avatarSwitchBtn,
-                gender?.toLowerCase() === 'female' && {
-                  backgroundColor: isDark ? '#db2777' : '#db2777',
-                },
-              ]}
-              onPress={() => setUserDetails({ gender: 'Female' })}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[
-                  styles.avatarSwitchText,
-                  gender?.toLowerCase() === 'female'
-                    ? { color: '#ffffff', fontWeight: '700' }
-                    : { color: colors.muted },
-                ]}
-              >
-                Female Avatar
-              </Text>
-            </TouchableOpacity>
-          </View>
 
           {/* Role Badge - Single Role */}
           <View style={styles.rolesRow}>

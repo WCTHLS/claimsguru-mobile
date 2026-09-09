@@ -715,56 +715,17 @@ export const ChatHomeScreen = ({ navigation }: any) => {
             <View style={styles.sheetHandle} />
 
             <View style={styles.sheetProfileHeader}>
-              <UserAvatar size={58} name={userName} gender={gender} />
+              <UserAvatar
+                size={46}
+                name={userName}
+                gender={gender}
+                style={{ marginRight: 14 }}
+              />
               <View style={styles.sheetProfileInfo}>
                 <Text style={[styles.sheetUserName, { color: colors.ink }]}>{userName}</Text>
                 <Text style={[styles.sheetUserEmail, { color: colors.muted }]}>
                   {userEmail} · realm claimgpt
                 </Text>
-                {/* Male/Female quick switcher */}
-                <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
-                  <TouchableOpacity
-                    style={{
-                      paddingHorizontal: 8,
-                      paddingVertical: 3,
-                      borderRadius: 10,
-                      backgroundColor: (!gender || gender.toLowerCase() === 'male') ? '#0284c7' : (isDark ? '#1e293b' : '#f1f5f9'),
-                    }}
-                    onPress={() => setUserDetails({ gender: 'Male' })}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 10.5,
-                        fontWeight: '600',
-                        color: (!gender || gender.toLowerCase() === 'male') ? '#ffffff' : colors.muted,
-                      }}
-                    >
-                      Male Avatar
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={{
-                      paddingHorizontal: 8,
-                      paddingVertical: 3,
-                      borderRadius: 10,
-                      backgroundColor: gender?.toLowerCase() === 'female' ? '#db2777' : (isDark ? '#1e293b' : '#f1f5f9'),
-                    }}
-                    onPress={() => setUserDetails({ gender: 'Female' })}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 10.5,
-                        fontWeight: '600',
-                        color: gender?.toLowerCase() === 'female' ? '#ffffff' : colors.muted,
-                      }}
-                    >
-                      Female Avatar
-                    </Text>
-                  </TouchableOpacity>
-                </View>
               </View>
             </View>
 
