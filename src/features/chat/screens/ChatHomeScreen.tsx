@@ -56,6 +56,7 @@ import { usePipelineStore } from '../../../state/usePipelineStore';
 import { useAuthStore } from '../../../state/useAuthStore';
 import { fetchUserProfile } from '../../../core/api/authApi';
 import { Routes } from '../../../app/navigation/routes';
+import { UserAvatar } from '../../../core/components/UserAvatar';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -104,7 +105,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
   const { messages, sendMessage } = useChatStore();
   const { files, addFile, uploadToBackend } = useUploadStore();
   const { active, startPipeline } = usePipelineStore();
-  const { role, userName, userEmail, userId, signOut } = useAuthStore();
+  const { role, userName, userEmail, userId, signOut, gender, setUserDetails } = useAuthStore();
 
   useEffect(() => {
     if (userEmail || userId) {
@@ -260,11 +261,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
         <View style={styles.headerLeft}>
           <TouchableOpacity style={styles.avatarBtn} onPress={() => setShowProfileModal(true)}>
-            <View style={[styles.avatar, { backgroundColor: '#e6f4f1' }]}>
-              <Text style={[styles.avatarText, { color: '#0d9488' }]}>
-                {userInitials}
-              </Text>
-            </View>
+            <UserAvatar size={34} name={userName} gender={gender} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.ink }]}>ClaimsGuru</Text>
         </View>
@@ -718,11 +715,12 @@ export const ChatHomeScreen = ({ navigation }: any) => {
             <View style={styles.sheetHandle} />
 
             <View style={styles.sheetProfileHeader}>
-              <View style={[styles.sheetAvatar, { backgroundColor: '#e6f4f1' }]}>
-                <Text style={[styles.sheetAvatarText, { color: '#0d9488' }]}>
-                  {userInitials}
-                </Text>
-              </View>
+              <UserAvatar
+                size={46}
+                name={userName}
+                gender={gender}
+                style={{ marginRight: 14 }}
+              />
               <View style={styles.sheetProfileInfo}>
                 <Text style={[styles.sheetUserName, { color: colors.ink }]}>{userName}</Text>
                 <Text style={[styles.sheetUserEmail, { color: colors.muted }]}>
