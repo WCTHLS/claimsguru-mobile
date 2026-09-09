@@ -72,8 +72,9 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
           const patientName = preview?.parsed_fields?.patient_name || detail.patient_name || '';
           const diagnosis = preview?.parsed_fields?.diagnosis || detail.diagnosis || 'Cardiology';
           const fieldCount = preview?.parsed_fields ? Object.keys(preview.parsed_fields).length : 23;
-          const icdCount = preview?.icd_codes ? preview.icd_codes.length : 3;
-          const cptCount = preview?.cpt_codes ? preview.cpt_codes.length : 3;
+          const isDemo = activeClaimId === 'a4f1c9e2';
+          const icdCount = preview ? (preview.icd_codes?.length ?? 0) : (isDemo ? 3 : 0);
+          const cptCount = preview ? (preview.cpt_codes?.length ?? 0) : (isDemo ? 3 : 0);
           const riskScore = Math.round((pred?.prediction?.rejection_score ?? (preview?.predictions?.[0]?.rejection_score ?? 0.58)) * 100);
           const riskCat = pred?.prediction?.risk_category ?? (preview?.predictions?.[0]?.risk_category ?? 'MEDIUM');
           const reasonCount = pred?.prediction?.top_reasons?.length ?? (preview?.predictions?.[0]?.top_reasons?.length ?? 5);
@@ -97,7 +98,9 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
               stepMessages: [
                 `Text extracted from ${detail.documents?.length || docCount} documents`,
                 `${detail.documents?.length || docCount} documents parsed · ${fieldCount} of 27 fields · doc_type set`,
-                `${icdCount + cptCount} codes assigned (${icdCount} ICD-10 · ${cptCount} CPT)`,
+                cptCount > 0
+                  ? `${icdCount + cptCount} codes assigned (${icdCount} ICD-10 · ${cptCount} CPT)`
+                  : `${icdCount} code${icdCount === 1 ? '' : 's'} assigned (${icdCount} ICD-10 · 0 CPT)`,
                 `Risk ${riskScore}% · ${riskCat} · ${reasonCount} factors`,
                 `${rulesPassed} of ${rulesTotal} rules passed`,
               ],

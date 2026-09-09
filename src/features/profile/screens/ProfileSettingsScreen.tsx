@@ -10,6 +10,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ChevronLeft,
+  ChevronRight,
   Lock,
   Shield,
   Bell,
@@ -18,10 +19,13 @@ import {
   Search,
   Clock,
   Moon,
+  LogOut,
+  Terminal,
 } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useAuthStore } from '../../../state/useAuthStore';
 import { Routes } from '../../../app/navigation/routes';
+import { GlobalBottomTabBar } from '../../../app/navigation/GlobalBottomTabBar';
 
 export const ProfileSettingsScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
@@ -58,6 +62,14 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
     return name.slice(0, 2).toUpperCase();
   };
   const initials = getInitials(userName);
+
+  const handleSignOut = () => {
+    useAuthStore.getState().signOut();
+    navigation.reset({
+      index: 0,
+      routes: [{ name: Routes.SignIn }],
+    });
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
@@ -255,51 +267,65 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
             </View>
           </View>
         </View>
+
+        {/* Links Card: Ops console (admin) & Conversation history */}
+        <View style={[styles.settingsCard, { backgroundColor: colors.surface, borderColor: colors.line, marginTop: 12 }]}>
+          <TouchableOpacity
+            style={[styles.linkRow, { borderBottomColor: colors.line, borderBottomWidth: 1 }]}
+            onPress={() => navigation.navigate(Routes.OpsConsole)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.iconContainer}>
+              <Terminal size={18} color={colors.ink} />
+            </View>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingTitle, { color: colors.ink }]}>Ops console</Text>
+              <Text style={[styles.settingSubtitle, { color: colors.muted }]}>
+                service health · queues · models
+              </Text>
+            </View>
+            <View style={[styles.roleBadgeSmall, { backgroundColor: colors.surface2 }]}>
+              <Text style={[styles.roleBadgeSmallText, { color: colors.muted }]}>admin</Text>
+            </View>
+            <ChevronRight size={16} color={colors.muted} style={{ marginLeft: 6 }} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.linkRow}
+            onPress={() => navigation.navigate('MainTabs', { screen: Routes.SessionsTab })}
+            activeOpacity={0.7}
+          >
+            <View style={styles.iconContainer}>
+              <Clock size={18} color={colors.ink} />
+            </View>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingTitle, { color: colors.ink }]}>Conversation history</Text>
+              <Text style={[styles.codeSubtitle, { color: colors.muted }]}>
+                /chat/{'{session_id}'}/history
+              </Text>
+            </View>
+            <ChevronRight size={16} color={colors.muted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Prototype Disclaimer */}
+        <Text style={[styles.prototypeNote, { color: colors.muted }]}>
+          ClaimsGuru prototype · sample data only
+        </Text>
+
+        {/* Sign out button matching prototype button.btn.out */}
+        <TouchableOpacity
+          style={[styles.signOutBtn, { borderColor: colors.line, backgroundColor: colors.surface }]}
+          onPress={handleSignOut}
+          activeOpacity={0.7}
+        >
+          <LogOut size={16} color={colors.red} style={{ marginRight: 8 }} />
+          <Text style={[styles.signOutText, { color: colors.red }]}>Sign out</Text>
+        </TouchableOpacity>
       </ScrollView>
 
-      {/* Bottom Tab Bar */}
-      <View
-        style={[
-          styles.bottomTabBar,
-          {
-            backgroundColor: colors.surface,
-            borderTopColor: colors.line,
-            paddingBottom: Math.max(insets.bottom, 8),
-          },
-        ]}
-      >
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.navigate('MainTabs', { screen: Routes.ChatTab })}
-        >
-          <MessageSquare size={20} color={colors.muted} />
-          <Text style={[styles.tabLabel, { color: colors.muted }]}>Chat</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.navigate('MainTabs', { screen: Routes.ClaimsTab })}
-        >
-          <FileText size={20} color={colors.muted} />
-          <Text style={[styles.tabLabel, { color: colors.muted }]}>Claims</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.navigate('MainTabs', { screen: Routes.SearchTab })}
-        >
-          <Search size={20} color={colors.muted} />
-          <Text style={[styles.tabLabel, { color: colors.muted }]}>Search</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.navigate('MainTabs', { screen: Routes.SessionsTab })}
-        >
-          <Clock size={20} color={colors.muted} />
-          <Text style={[styles.tabLabel, { color: colors.muted }]}>History</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Global Bottom Tab Bar matching app standard */}
+      <GlobalBottomTabBar navigation={navigation} activeTab="all" />
     </View>
   );
 };
@@ -440,21 +466,38 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  bottomTabBar: {
+  linkRow: {
     flexDirection: 'row',
-    height: 60,
-    borderTopWidth: 1,
     alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingTop: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
   },
-  tabItem: {
+  roleBadgeSmall: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  roleBadgeSmallText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  prototypeNote: {
+    textAlign: 'center',
+    fontSize: 11.5,
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  signOutBtn: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 12,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
+    marginBottom: 20,
   },
-  tabLabel: {
-    fontSize: 10.5,
-    marginTop: 3,
+  signOutText: {
+    fontSize: 13.5,
+    fontWeight: '650' as any,
   },
 });

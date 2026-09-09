@@ -33,25 +33,29 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
   const [realCptCodes, setRealCptCodes] = useState<CodeItem[] | null>(null);
 
   const formatCodesFromPreview = (preview: any) => {
-    if (preview?.icd_codes && preview.icd_codes.length > 0) {
-      const formattedIcd: CodeItem[] = preview.icd_codes.map((c: any) => ({
-        code: c.code,
-        desc: c.description || 'Diagnostic code',
-        meta: `confidence ${c.confidence ? c.confidence.toFixed(2) : '0.85'}`,
-        confidence: c.confidence || 0.85,
-      }));
-      setRealIcdCodes(formattedIcd);
-    }
-    if (preview?.cpt_codes && preview.cpt_codes.length > 0) {
-      const formattedCpt: CodeItem[] = preview.cpt_codes.map((c: any) => ({
-        code: c.code,
-        desc: c.description || 'Procedure code',
-        meta: c.estimated_cost
-          ? `est. ₹${Number(c.estimated_cost).toLocaleString('en-IN')}`
-          : `confidence ${c.confidence ? c.confidence.toFixed(2) : '0.80'}`,
-        confidence: c.confidence || 0.80,
-      }));
-      setRealCptCodes(formattedCpt);
+    if (preview) {
+      if (Array.isArray(preview.icd_codes)) {
+        const formattedIcd: CodeItem[] = preview.icd_codes.map((c: any) => ({
+          code: c.code,
+          desc: c.description || 'Diagnostic code',
+          meta: `confidence ${c.confidence ? c.confidence.toFixed(2) : '0.85'}`,
+          confidence: c.confidence || 0.85,
+        }));
+        setRealIcdCodes(formattedIcd);
+      }
+      if (Array.isArray(preview.cpt_codes)) {
+        const formattedCpt: CodeItem[] = preview.cpt_codes.map((c: any) => ({
+          code: c.code,
+          desc: c.description || 'Procedure code',
+          meta: c.estimated_cost
+            ? `est. ₹${Number(c.estimated_cost).toLocaleString('en-IN')}`
+            : `confidence ${c.confidence ? c.confidence.toFixed(2) : '0.80'}`,
+          confidence: c.confidence || 0.80,
+        }));
+        setRealCptCodes(formattedCpt);
+      } else {
+        setRealCptCodes([]);
+      }
     }
   };
 
@@ -99,9 +103,10 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
     }
   };
 
+  const isDemoClaim = !claimId || claimId === 'a4f1c9e2';
   const currentCodes = activeTab === 'icd'
-    ? (realIcdCodes && realIcdCodes.length > 0 ? realIcdCodes : ICD_CODES)
-    : (realCptCodes && realCptCodes.length > 0 ? realCptCodes : CPT_CODES);
+    ? (realIcdCodes !== null ? realIcdCodes : (isDemoClaim ? ICD_CODES : []))
+    : (realCptCodes !== null ? realCptCodes : (isDemoClaim ? CPT_CODES : []));
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>
@@ -184,70 +189,80 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
 
           {/* Codes List Card */}
           <View style={[styles.card, styles.listCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-            {currentCodes.map((item, idx) => {
-              const isLast = idx === currentCodes.length - 1;
-              const currentVote = feedback[item.code];
+            {currentCodes.length > 0 ? (
+              currentCodes.map((item, idx) => {
+                const isLast = idx === currentCodes.length - 1;
+                const currentVote = feedback[item.code];
 
-              return (
-                <View
-                  key={item.code}
-                  style={[
-                    styles.codeRow,
-                    !isLast && { borderBottomWidth: 1, borderBottomColor: colors.line2 },
-                  ]}
-                >
-                  <View style={[styles.codeTag, { backgroundColor: colors.surface2 }]}>
-                    <Text style={[styles.codeTagText, styles.mono, { color: colors.muted }]}>
-                      {item.code}
-                    </Text>
+                return (
+                  <View
+                    key={item.code}
+                    style={[
+                      styles.codeRow,
+                      !isLast && { borderBottomWidth: 1, borderBottomColor: colors.line2 },
+                    ]}
+                  >
+                    <View style={[styles.codeTag, { backgroundColor: colors.surface2 }]}>
+                      <Text style={[styles.codeTagText, styles.mono, { color: colors.muted }]}>
+                        {item.code}
+                      </Text>
+                    </View>
+
+                    <View style={styles.codeInfo}>
+                      <Text style={[styles.codeDesc, { color: colors.ink }]} numberOfLines={1}>
+                        {item.desc}
+                      </Text>
+                      <Text style={[styles.codeMeta, { color: colors.muted }]}>{item.meta}</Text>
+                    </View>
+
+                    {/* Feedback Buttons */}
+                    <View style={styles.voteButtons}>
+                      <TouchableOpacity
+                        style={[
+                          styles.voteBtn,
+                          currentVote === 'up' && {
+                            backgroundColor: colors.greenSoft,
+                            borderColor: colors.green,
+                          },
+                        ]}
+                        onPress={() => handleFeedback(item.code, 'up')}
+                        activeOpacity={0.7}
+                      >
+                        <ThumbsUp
+                          size={15}
+                          color={currentVote === 'up' ? colors.green : colors.muted}
+                        />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.voteBtn,
+                          currentVote === 'down' && {
+                            backgroundColor: colors.redSoft,
+                            borderColor: colors.red,
+                          },
+                        ]}
+                        onPress={() => handleFeedback(item.code, 'down')}
+                        activeOpacity={0.7}
+                      >
+                        <ThumbsDown
+                          size={15}
+                          color={currentVote === 'down' ? colors.red : colors.muted}
+                        />
+                      </TouchableOpacity>
+                    </View>
                   </View>
-
-                  <View style={styles.codeInfo}>
-                    <Text style={[styles.codeDesc, { color: colors.ink }]} numberOfLines={1}>
-                      {item.desc}
-                    </Text>
-                    <Text style={[styles.codeMeta, { color: colors.muted }]}>{item.meta}</Text>
-                  </View>
-
-                  {/* Feedback Buttons */}
-                  <View style={styles.voteButtons}>
-                    <TouchableOpacity
-                      style={[
-                        styles.voteBtn,
-                        currentVote === 'up' && {
-                          backgroundColor: colors.greenSoft,
-                          borderColor: colors.green,
-                        },
-                      ]}
-                      onPress={() => handleFeedback(item.code, 'up')}
-                      activeOpacity={0.7}
-                    >
-                      <ThumbsUp
-                        size={15}
-                        color={currentVote === 'up' ? colors.green : colors.muted}
-                      />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.voteBtn,
-                        currentVote === 'down' && {
-                          backgroundColor: colors.redSoft,
-                          borderColor: colors.red,
-                        },
-                      ]}
-                      onPress={() => handleFeedback(item.code, 'down')}
-                      activeOpacity={0.7}
-                    >
-                      <ThumbsDown
-                        size={15}
-                        color={currentVote === 'down' ? colors.red : colors.muted}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })}
+                );
+              })
+            ) : (
+              <View style={{ padding: 22, alignItems: 'center' }}>
+                <Text style={{ fontSize: 13, color: colors.muted, textAlign: 'center', lineHeight: 18 }}>
+                  {activeTab === 'cpt'
+                    ? 'No CPT procedure codes extracted for this claim. CPT codes apply when surgical or procedural treatment is documented.'
+                    : 'No ICD diagnostic codes extracted for this claim.'}
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Note Card */}
