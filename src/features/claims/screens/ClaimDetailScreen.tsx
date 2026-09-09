@@ -8,6 +8,8 @@ import {
   SafeAreaView,
   StatusBar,
   Alert,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useClaimsStore } from '../../../state/useClaimsStore';
@@ -22,6 +24,7 @@ import {
   LayoutGrid,
   Check,
   ChevronRight,
+  AlertTriangle,
 } from 'lucide-react-native';
 
 export const ClaimDetailScreen = ({ route, navigation }: any) => {
@@ -31,6 +34,8 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
   const [activeTab, setActiveTab] = useState<'Summary' | 'Expenses' | 'Services'>('Summary');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [liveExpenses, setLiveExpenses] = useState<{ category: string; amount: number }[] | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const claim = claims.find(c => c.id === claimId || c.id.startsWith(claimId)) || claims[0] || {
     id: claimId,
@@ -91,21 +96,22 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
   };
 
   const handleDelete = () => {
-    Alert.alert(
-      `Delete claim ${claim.id.slice(0, 8)}?`,
-      'Removes the claim, its documents, parsed fields and results. The audit log keeps a record of the deletion.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete claim',
-          style: 'destructive',
-          onPress: () => {
-            deleteClaim(claim.id);
-            navigation.navigate('MainTabs', { screen: Routes.ClaimsTab });
-          },
-        },
-      ]
-    );
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    try {
+      setIsDeleting(true);
+      await deleteClaim(claim.id);
+      setIsDeleting(false);
+      setShowDeleteModal(false);
+      navigation.navigate('MainTabs', { screen: Routes.ClaimsTab });
+    } catch (err) {
+      console.warn('[ClaimDetailScreen] Delete error:', err);
+      setIsDeleting(false);
+      setShowDeleteModal(false);
+      navigation.navigate('MainTabs', { screen: Routes.ClaimsTab });
+    }
   };
 
   const isFailed = claim.status === 'FAILED';
@@ -471,6 +477,61 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
         {/* Shared Bottom Tab Bar */}
         <GlobalBottomTabBar navigation={navigation} activeTab="claims" />
       </View>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        visible={showDeleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isDeleting) setShowDeleteModal(false);
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <View style={[styles.modalIconBox, { backgroundColor: colors.redSoft }]}>
+              <Trash2 size={24} color={colors.red} />
+            </View>
+
+            <Text style={[styles.modalTitle, { color: colors.ink }]}>Delete claim?</Text>
+
+            <Text style={[styles.modalMessage, { color: colors.muted }]}>
+              Are you sure you want to delete claim{' '}
+              <Text style={{ fontWeight: '700', color: colors.ink }}>
+                {claim.id ? (claim.id.length > 12 ? `${claim.id.slice(0, 8)}...` : claim.id) : ''}
+              </Text>
+              ? This removes the claim, documents, parsed fields, and pipeline metrics. This action cannot be undone.
+            </Text>
+
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { borderColor: colors.line, backgroundColor: colors.surface2 }]}
+                onPress={() => setShowDeleteModal(false)}
+                disabled={isDeleting}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.modalCancelBtnText, { color: colors.ink }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalDeleteBtn, isDeleting && { opacity: 0.7 }]}
+                onPress={handleConfirmDelete}
+                disabled={isDeleting}
+                activeOpacity={0.8}
+              >
+                {isDeleting ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <>
+                    <Trash2 size={16} color="#ffffff" style={{ marginRight: 6 }} />
+                    <Text style={styles.modalDeleteBtnText}>Delete</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -758,6 +819,78 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryBtnText: {
+    color: '#ffffff',
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 22,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalIconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+  },
+  modalCancelBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelBtnText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+  },
+  modalDeleteBtn: {
+    flex: 1,
+    backgroundColor: '#dc2626',
+    borderRadius: 12,
+    paddingVertical: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  modalDeleteBtnText: {
     color: '#ffffff',
     fontSize: 13.5,
     fontWeight: '700',
