@@ -11,6 +11,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ChevronLeft, Info, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useAuthStore } from '../../../state/useAuthStore';
+import { UserAvatar } from '../../../core/components/UserAvatar';
 import { Routes } from '../../../app/navigation/routes';
 
 interface TimelineEvent {
@@ -32,7 +33,7 @@ interface TimelineDay {
 export const PatientActivityScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const { userName } = useAuthStore();
+  const { userName, gender } = useAuthStore();
 
   const getInitials = (name?: string) => {
     if (!name || !name.trim() || name.toLowerCase() === 'sample' || name.toLowerCase() === 'unknown' || name.toLowerCase().includes('sample@')) {
@@ -200,9 +201,7 @@ export const PatientActivityScreen = ({ navigation }: any) => {
         {/* User Card */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <View style={[styles.avatarMini, { backgroundColor: colors.brandSoft }]}>
-              <Text style={[styles.avatarMiniText, { color: colors.brandDark }]}>{initials}</Text>
-            </View>
+            <UserAvatar size={38} name={userName} gender={gender} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.patientTitle, { color: colors.ink }]}>{userName}</Text>
               <Text style={[styles.patientSub, { color: colors.muted }]}>

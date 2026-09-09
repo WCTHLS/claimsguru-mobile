@@ -22,11 +22,12 @@ import {
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useAuthStore } from '../../../state/useAuthStore';
 import { Routes } from '../../../app/navigation/routes';
+import { UserAvatar } from '../../../core/components/UserAvatar';
 
 export const ProfileSettingsScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { colors, isDark, toggleTheme } = useTheme();
-  const { role, userName, userEmail, policyNumber, organization } = useAuthStore();
+  const { role, userName, userEmail, policyNumber, organization, gender, setUserDetails } = useAuthStore();
 
   const [biometric, setBiometric] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
@@ -39,25 +40,6 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
 
   // Active single role (default submitter)
   const currentRole = role || 'submitter';
-
-  // Calculate initials from user name
-  const getInitials = (name?: string) => {
-    if (
-      !name ||
-      !name.trim() ||
-      name.toLowerCase() === 'sample' ||
-      name.toLowerCase() === 'unknown' ||
-      name.toLowerCase().includes('sample@')
-    ) {
-      return 'JD';
-    }
-    const parts = name.trim().split(/\s+/);
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    }
-    return name.slice(0, 2).toUpperCase();
-  };
-  const initials = getInitials(userName);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
@@ -81,16 +63,66 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
       >
         {/* Profile Card */}
         <View style={[styles.profileCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          {/* Avatar Circle */}
-          <View style={[styles.avatar, { backgroundColor: isDark ? '#12302e' : '#e6f4f1' }]}>
-            <Text style={[styles.avatarText, { color: isDark ? '#2dd4bf' : '#0d9488' }]}>{initials}</Text>
-          </View>
+          {/* Illustrated SVG Avatar (Male & Female from claimgpt-designs) */}
+          <UserAvatar
+            size={76}
+            name={userName}
+            gender={gender}
+            style={{ marginBottom: 12 }}
+          />
 
           {/* User Name & Department */}
           <Text style={[styles.userName, { color: colors.ink }]}>{userName}</Text>
           <Text style={[styles.userDepartment, { color: colors.muted }]}>
             {userEmail}{policyNumber ? ` · Policy ${policyNumber}` : ''}
           </Text>
+
+          {/* Male / Female Avatar Switcher */}
+          <View style={[styles.avatarSwitcherRow, { backgroundColor: isDark ? '#1e293b' : '#f1f5f9' }]}>
+            <TouchableOpacity
+              style={[
+                styles.avatarSwitchBtn,
+                (!gender || gender.toLowerCase() === 'male') && {
+                  backgroundColor: isDark ? '#0284c7' : '#0284c7',
+                },
+              ]}
+              onPress={() => setUserDetails({ gender: 'Male' })}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.avatarSwitchText,
+                  (!gender || gender.toLowerCase() === 'male')
+                    ? { color: '#ffffff', fontWeight: '700' }
+                    : { color: colors.muted },
+                ]}
+              >
+                Male Avatar
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.avatarSwitchBtn,
+                gender?.toLowerCase() === 'female' && {
+                  backgroundColor: isDark ? '#db2777' : '#db2777',
+                },
+              ]}
+              onPress={() => setUserDetails({ gender: 'Female' })}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.avatarSwitchText,
+                  gender?.toLowerCase() === 'female'
+                    ? { color: '#ffffff', fontWeight: '700' }
+                    : { color: colors.muted },
+                ]}
+              >
+                Female Avatar
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           {/* Role Badge - Single Role */}
           <View style={styles.rolesRow}>
@@ -340,17 +372,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  avatar: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+  avatarSwitcherRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    padding: 3,
+    borderRadius: 20,
     marginBottom: 12,
+    gap: 4,
   },
-  avatarText: {
-    fontSize: 22,
-    fontWeight: '700',
+  avatarSwitchBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  avatarSwitchText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   userName: {
     fontSize: 17,

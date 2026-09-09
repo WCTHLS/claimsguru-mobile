@@ -17,12 +17,13 @@ import { fetchUserProfile } from '../../../core/api/authApi';
 import { formatINR } from '../../../core/utils/currency';
 import { FileText, Search, Plus } from 'lucide-react-native';
 import { Routes } from '../../../app/navigation/routes';
+import { UserAvatar } from '../../../core/components/UserAvatar';
 
 export const ClaimsListScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
   const { claims, selectClaim, loadClaims, refreshing, backendConnected } = useClaimsStore();
   const { running: pipelineRunning, claimId: pipelineClaimId } = usePipelineStore();
-  const { userName, userId, userEmail } = useAuthStore();
+  const { userName, userId, userEmail, gender } = useAuthStore();
   const [activeFilter, setActiveFilter] = useState<'All' | 'Running' | 'FAILED' | 'Needs index'>('All');
 
   const getInitials = (name?: string) => {
@@ -113,9 +114,7 @@ export const ClaimsListScreen = ({ navigation }: any) => {
           onPress={() => navigation.navigate(Routes.ProfileSettings)}
           activeOpacity={0.7}
         >
-          <View style={[styles.avatar, { backgroundColor: colors.brandSoft }]}>
-            <Text style={[styles.avatarText, { color: colors.brandDark }]}>{userInitials}</Text>
-          </View>
+          <UserAvatar size={34} name={userName} gender={gender} />
         </TouchableOpacity>
 
         <Text style={[styles.title, { color: colors.ink }]}>Claims</Text>

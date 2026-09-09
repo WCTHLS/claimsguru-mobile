@@ -56,6 +56,7 @@ import { usePipelineStore } from '../../../state/usePipelineStore';
 import { useAuthStore } from '../../../state/useAuthStore';
 import { fetchUserProfile } from '../../../core/api/authApi';
 import { Routes } from '../../../app/navigation/routes';
+import { UserAvatar } from '../../../core/components/UserAvatar';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -104,7 +105,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
   const { messages, sendMessage } = useChatStore();
   const { files, addFile, uploadToBackend } = useUploadStore();
   const { active, startPipeline } = usePipelineStore();
-  const { role, userName, userEmail, userId, signOut } = useAuthStore();
+  const { role, userName, userEmail, userId, signOut, gender, setUserDetails } = useAuthStore();
 
   useEffect(() => {
     if (userEmail || userId) {
@@ -260,11 +261,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
         <View style={styles.headerLeft}>
           <TouchableOpacity style={styles.avatarBtn} onPress={() => setShowProfileModal(true)}>
-            <View style={[styles.avatar, { backgroundColor: '#e6f4f1' }]}>
-              <Text style={[styles.avatarText, { color: '#0d9488' }]}>
-                {userInitials}
-              </Text>
-            </View>
+            <UserAvatar size={34} name={userName} gender={gender} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.ink }]}>ClaimsGuru</Text>
         </View>
@@ -718,16 +715,56 @@ export const ChatHomeScreen = ({ navigation }: any) => {
             <View style={styles.sheetHandle} />
 
             <View style={styles.sheetProfileHeader}>
-              <View style={[styles.sheetAvatar, { backgroundColor: '#e6f4f1' }]}>
-                <Text style={[styles.sheetAvatarText, { color: '#0d9488' }]}>
-                  {userInitials}
-                </Text>
-              </View>
+              <UserAvatar size={58} name={userName} gender={gender} />
               <View style={styles.sheetProfileInfo}>
                 <Text style={[styles.sheetUserName, { color: colors.ink }]}>{userName}</Text>
                 <Text style={[styles.sheetUserEmail, { color: colors.muted }]}>
                   {userEmail} · realm claimgpt
                 </Text>
+                {/* Male/Female quick switcher */}
+                <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+                  <TouchableOpacity
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 10,
+                      backgroundColor: (!gender || gender.toLowerCase() === 'male') ? '#0284c7' : (isDark ? '#1e293b' : '#f1f5f9'),
+                    }}
+                    onPress={() => setUserDetails({ gender: 'Male' })}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 10.5,
+                        fontWeight: '600',
+                        color: (!gender || gender.toLowerCase() === 'male') ? '#ffffff' : colors.muted,
+                      }}
+                    >
+                      Male Avatar
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 10,
+                      backgroundColor: gender?.toLowerCase() === 'female' ? '#db2777' : (isDark ? '#1e293b' : '#f1f5f9'),
+                    }}
+                    onPress={() => setUserDetails({ gender: 'Female' })}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 10.5,
+                        fontWeight: '600',
+                        color: gender?.toLowerCase() === 'female' ? '#ffffff' : colors.muted,
+                      }}
+                    >
+                      Female Avatar
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
 

@@ -14,10 +14,11 @@ import { useAuthStore } from '../../../state/useAuthStore';
 import { fetchUserProfile } from '../../../core/api/authApi';
 import { Routes } from '../../../app/navigation/routes';
 import { formatINR } from '../../../core/utils/currency';
+import { UserAvatar } from '../../../core/components/UserAvatar';
 
 export const PatientProfileScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const {
     userName,
     userEmail,
@@ -27,6 +28,7 @@ export const PatientProfileScreen = ({ navigation }: any) => {
     dob,
     gender,
     sumInsured,
+    setUserDetails,
   } = useAuthStore();
 
   const [isMasked, setIsMasked] = useState(true);
@@ -89,13 +91,63 @@ export const PatientProfileScreen = ({ navigation }: any) => {
 
         {/* Patient Identity Card */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line, alignItems: 'center' }]}>
-          <View style={[styles.avatarBox, { backgroundColor: colors.brandSoft }]}>
-            <Text style={[styles.avatarText, { color: colors.brandDark }]}>{initials}</Text>
-          </View>
+          <UserAvatar
+            size={76}
+            name={userName}
+            gender={gender}
+            style={{ marginBottom: 10 }}
+          />
           <Text style={[styles.patientName, { color: colors.ink }]}>{userName}</Text>
           <Text style={[styles.patientSub, { color: colors.muted }]}>
             {gender || 'Male'} · born {maskVal('dob', dob || '08 Jun 2000')}
           </Text>
+
+          {/* Quick Avatar/Gender Switcher */}
+          <View style={[styles.avatarSwitcherRow, { backgroundColor: isDark ? '#1e293b' : '#f1f5f9' }]}>
+            <TouchableOpacity
+              style={[
+                styles.avatarSwitchBtn,
+                (!gender || gender.toLowerCase() === 'male') && {
+                  backgroundColor: '#0284c7',
+                },
+              ]}
+              onPress={() => setUserDetails({ gender: 'Male' })}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.avatarSwitchText,
+                  (!gender || gender.toLowerCase() === 'male')
+                    ? { color: '#ffffff', fontWeight: '700' }
+                    : { color: colors.muted },
+                ]}
+              >
+                Male Avatar
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.avatarSwitchBtn,
+                gender?.toLowerCase() === 'female' && {
+                  backgroundColor: '#db2777',
+                },
+              ]}
+              onPress={() => setUserDetails({ gender: 'Female' })}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.avatarSwitchText,
+                  gender?.toLowerCase() === 'female'
+                    ? { color: '#ffffff', fontWeight: '700' }
+                    : { color: colors.muted },
+                ]}
+              >
+                Female Avatar
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.pillsRow}>
             <View style={[styles.tagPill, { backgroundColor: colors.brandSoft }]}>
@@ -351,15 +403,24 @@ const styles = StyleSheet.create({
     padding: 13,
     marginBottom: 12,
   },
-  avatarBox: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  avatarSwitcherRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
+    padding: 3,
+    borderRadius: 20,
+    marginTop: 8,
+    marginBottom: 4,
+    gap: 4,
   },
-  avatarText: { fontSize: 22, fontWeight: '700' },
+  avatarSwitchBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  avatarSwitchText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
   patientName: { fontSize: 16.5, fontWeight: '700' },
   patientSub: { fontSize: 12, marginTop: 2 },
   pillsRow: { flexDirection: 'row', gap: 6, marginVertical: 8 },
