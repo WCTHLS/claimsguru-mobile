@@ -496,11 +496,7 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
             <Text style={[styles.modalTitle, { color: colors.ink }]}>Delete claim?</Text>
 
             <Text style={[styles.modalMessage, { color: colors.muted }]}>
-              Are you sure you want to delete claim{' '}
-              <Text style={{ fontWeight: '700', color: colors.ink }}>
-                {claim.id ? (claim.id.length > 12 ? `${claim.id.slice(0, 8)}...` : claim.id) : ''}
-              </Text>
-              ? This removes the claim, documents, parsed fields, and pipeline metrics. This action cannot be undone.
+              Are you sure you want to delete this claim?
             </Text>
 
             <View style={styles.modalButtonRow}>
@@ -832,10 +828,10 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     width: '100%',
-    maxWidth: 360,
-    borderRadius: 20,
+    maxWidth: 320,
+    borderRadius: 18,
     borderWidth: 1,
-    padding: 22,
+    padding: 20,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -844,25 +840,25 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   modalIconBox: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     letterSpacing: -0.2,
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'center',
   },
   modalMessage: {
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 13.5,
+    lineHeight: 18,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 18,
   },
   modalButtonRow: {
     flexDirection: 'row',
