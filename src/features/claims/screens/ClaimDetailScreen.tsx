@@ -14,26 +14,46 @@ import { useClaimsStore } from '../../../state/useClaimsStore';
 import { claimsApi, transformBackendClaim } from '../services/claimsApi';
 import { formatINR } from '../../../core/utils/currency';
 import { Routes } from '../../../app/navigation/routes';
+import { GlobalBottomTabBar } from '../../../app/navigation/GlobalBottomTabBar';
 import {
-  ArrowLeft,
+  ChevronLeft,
   Download,
   Trash2,
+  LayoutGrid,
   Check,
   ChevronRight,
 } from 'lucide-react-native';
 
 export const ClaimDetailScreen = ({ route, navigation }: any) => {
   const { colors } = useTheme();
-  const claimId = route?.params?.claimId || 'a4f1c9e2-7d30-4b8e-91cf-6ea2b40d7715';
+  const claimId = route?.params?.claimId || '3f8a1d6c-52b4-4e7a-9c11-0d5e2ab77104';
   const { claims, indexClaim, deleteClaim, addOrUpdateClaim } = useClaimsStore();
   const [activeTab, setActiveTab] = useState<'Summary' | 'Expenses' | 'Services'>('Summary');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [liveExpenses, setLiveExpenses] = useState<{ category: string; amount: number }[] | null>(null);
 
-  const claim = claims.find(c => c.id === claimId || c.id.startsWith(claimId)) || claims[0];
+  const claim = claims.find(c => c.id === claimId || c.id.startsWith(claimId)) || claims[0] || {
+    id: claimId,
+    who: 'R. Menon',
+    dept: 'Cardiology',
+    amt: 184500,
+    status: 'complete',
+    step: 'validate',
+    indexed: false,
+    policyNo: 'SAMPLE-PH-77421',
+    hospital: 'Sunrise Multispecialty',
+    doctor: 'Dr. P. Rangan',
+    diagnosis: 'Acute coronary syndrome',
+    age: 54,
+    gender: 'Male',
+    admissionDate: '12 Aug 2026',
+    dischargeDate: '16 Aug 2026',
+    days: 4,
+    claimType: 'Reimbursement',
+    fieldsParsed: '23 of 27',
+  };
 
   useEffect(() => {
-    // Fetch latest claim details & preview from backend
     if (claimId && claimId.length > 20) {
       Promise.all([
         claimsApi.getClaimDetail(claimId).catch(() => null),
@@ -62,13 +82,12 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
   };
 
   const handleDownload = () => {
-    const fileUrl = claimsApi.getClaimFileUrl(claim.id);
-    showToast(`Downloading original: ${claim.id.slice(0, 8)}...`);
+    showToast(`GET /ingress/claims/${claim.id.slice(0, 8)}.../file → Discharge_Summary.pdf`);
   };
 
   const handleIndex = () => {
     indexClaim(claim.id);
-    showToast('Claim indexed for full-text and vector search');
+    showToast('POST /search/index/… → indexed for full-text + vector search');
   };
 
   const handleDelete = () => {
@@ -82,28 +101,16 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
           style: 'destructive',
           onPress: () => {
             deleteClaim(claim.id);
-            navigation.navigate(Routes.ClaimsTab);
+            navigation.navigate('MainTabs', { screen: Routes.ClaimsTab });
           },
         },
       ]
     );
   };
 
-  const isComplete = claim.status === 'complete';
-  const isSubmitted = claim.status === 'submitted';
   const isFailed = claim.status === 'FAILED';
-
-  const statusBg = isFailed
-    ? colors.redSoft
-    : isSubmitted
-    ? colors.greenSoft
-    : colors.amberSoft;
-
-  const statusColor = isFailed
-    ? colors.red
-    : isSubmitted
-    ? colors.green
-    : colors.amber;
+  const statusBg = isFailed ? colors.redSoft : colors.amberSoft;
+  const statusColor = isFailed ? colors.red : colors.amber;
 
   const defaultExpenses = [
     { category: 'Room', amount: 32000 },
@@ -116,21 +123,22 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
     { category: 'Nursing', amount: 3500 },
   ];
 
-  const expenses = liveExpenses || claim.expenses || defaultExpenses;
+  const expenses = liveExpenses || defaultExpenses;
   const totalExpense = expenses.reduce((acc, item) => acc + item.amount, 0);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
 
-      {/* App Bar */}
+      {/* Top App Bar */}
       <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
         <TouchableOpacity
-          style={styles.iconBtn}
+          style={styles.backBtn}
           onPress={() => navigation.goBack()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           activeOpacity={0.7}
         >
-          <ArrowLeft size={20} color={colors.ink} />
+          <ChevronLeft size={22} color={colors.ink} />
         </TouchableOpacity>
 
         <Text style={[styles.title, { color: colors.ink }]}>Claim detail</Text>
@@ -139,8 +147,17 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
           <TouchableOpacity style={styles.iconBtn} onPress={handleDownload} activeOpacity={0.7}>
             <Download size={19} color={colors.ink} />
           </TouchableOpacity>
+
           <TouchableOpacity style={styles.iconBtn} onPress={handleDelete} activeOpacity={0.7}>
             <Trash2 size={19} color={colors.ink} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => navigation.navigate('MainTabs', { screen: Routes.AllFeaturesTab })}
+            activeOpacity={0.7}
+          >
+            <LayoutGrid size={19} color={colors.ink} />
           </TouchableOpacity>
         </View>
       </View>
@@ -156,7 +173,7 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
             <View style={styles.pillsRow}>
               <View style={[styles.pill, { backgroundColor: statusBg }]}>
                 <Text style={[styles.pillText, { color: statusColor }]}>
-                  {claim.status.toUpperCase()} · step {claim.step}
+                  COMPLETE · step {claim.step || 'validate'}
                 </Text>
               </View>
 
@@ -166,34 +183,28 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
                 </Text>
               </View>
 
-              {claim.indexed ? (
-                <View style={[styles.pill, { backgroundColor: colors.greenSoft }]}>
-                  <Text style={[styles.pillText, { color: colors.green }]}>
-                    Indexed · searchable
-                  </Text>
-                </View>
-              ) : (
-                <View style={[styles.pill, { backgroundColor: colors.surface2 }]}>
-                  <Text style={[styles.pillText, { color: colors.muted }]}>Not indexed</Text>
-                </View>
-              )}
+              <View style={[styles.pill, { backgroundColor: claim.indexed ? colors.greenSoft : colors.surface2 }]}>
+                <Text style={[styles.pillText, { color: claim.indexed ? colors.green : colors.muted }]}>
+                  {claim.indexed ? 'Indexed · searchable' : 'Not indexed'}
+                </Text>
+              </View>
             </View>
 
             {/* Patient Header */}
-              <TouchableOpacity
-                style={styles.patientRow}
-                onPress={() => navigation.navigate(Routes.PatientProfile, { claimId: claim.id })}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.patientName, { color: colors.ink }]}>
-                  {claim.who} · {claim.age || 54} · {claim.gender || 'Male'}
+            <TouchableOpacity
+              style={styles.patientRow}
+              onPress={() => navigation.navigate(Routes.PatientProfile, { claimId: claim.id })}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.patientName, { color: colors.ink }]}>
+                {claim.who || 'R. Menon'} · {claim.age || 54} · {claim.gender || 'Male'}
+              </Text>
+              <View style={[styles.patientBadge, { backgroundColor: colors.brandSoft }]}>
+                <Text style={[styles.patientBadgeText, { color: colors.brandDark }]}>
+                  Patient ›
                 </Text>
-                <View style={[styles.patientBadge, { backgroundColor: colors.brandSoft }]}>
-                  <Text style={[styles.patientBadgeText, { color: colors.brandDark }]}>
-                    Patient ›
-                  </Text>
-                </View>
-              </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
 
             <Text style={[styles.subMeta, { color: colors.muted }]}>
               {claim.hospital || 'Sunrise Multispecialty'} · admitted {claim.admissionDate || '12 Aug 2026'} · {claim.days || 4} days
@@ -210,7 +221,7 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
                 return (
                   <React.Fragment key={step}>
                     <View style={[styles.hStep, { backgroundColor: colors.brand, borderColor: colors.brand }]}>
-                      <Check size={12} color="#ffffff" strokeWidth={3} />
+                      <Check size={11} color="#ffffff" strokeWidth={3.2} />
                     </View>
                     {!isLast && <View style={[styles.hBar, { backgroundColor: colors.brand }]} />}
                   </React.Fragment>
@@ -229,17 +240,15 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
 
           {/* Action Buttons Row */}
           <View style={styles.actionBtnRow}>
-            {!claim.indexed && (
-              <TouchableOpacity
-                style={[styles.actionBtn, { borderColor: colors.line }]}
-                onPress={handleIndex}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.actionBtnText, { color: colors.brandDark }]}>
-                  Index for search
-                </Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={[styles.actionBtn, { borderColor: colors.line }]}
+              onPress={handleIndex}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.actionBtnText, { color: colors.brandDark }]}>
+                Index for search
+              </Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.actionBtn, { borderColor: colors.line }]}
@@ -252,7 +261,7 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
             </TouchableOpacity>
           </View>
 
-          {/* Tabs Selector */}
+          {/* 3 Segmented Tabs */}
           <View style={[styles.tabsContainer, { backgroundColor: colors.surface2 }]}>
             {(['Summary', 'Expenses', 'Services'] as const).map(tab => {
               const isSelected = activeTab === tab;
@@ -284,49 +293,56 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
 
           {/* Tab 1: Summary */}
           {activeTab === 'Summary' && (
-            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <View style={[styles.card, styles.summaryCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
               <View style={styles.kvRow}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Policy number</Text>
                 <Text style={[styles.kvVal, styles.mono, { color: colors.ink }]}>
                   {claim.policyNo || 'SAMPLE-PH-77421'}
                 </Text>
               </View>
+
               <View style={styles.kvRow}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Insurer / TPA</Text>
                 <Text style={[styles.kvVal, { color: colors.ink }]}>
-                  {claim.tpa || 'Sample Health TPA'}
+                  Sample Health TPA
                 </Text>
               </View>
+
               <View style={styles.kvRow}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Admission</Text>
                 <Text style={[styles.kvVal, { color: colors.ink }]}>
                   {claim.admissionDate || '12 Aug 2026'}
                 </Text>
               </View>
+
               <View style={styles.kvRow}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Discharge</Text>
                 <Text style={[styles.kvVal, { color: colors.ink }]}>
                   {claim.dischargeDate || '16 Aug 2026'}
                 </Text>
               </View>
+
               <View style={styles.kvRow}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Primary diagnosis</Text>
                 <Text style={[styles.kvVal, { color: colors.ink }]}>
                   {claim.diagnosis || 'Acute coronary syndrome'}
                 </Text>
               </View>
+
               <View style={styles.kvRow}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Treating doctor</Text>
                 <Text style={[styles.kvVal, { color: colors.ink }]}>
                   {claim.doctor || 'Dr. P. Rangan'}
                 </Text>
               </View>
+
               <View style={styles.kvRow}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Amount claimed</Text>
                 <Text style={[styles.kvVal, { color: colors.ink }]}>
                   {formatINR(claim.amt || 184500)}
                 </Text>
               </View>
+
               <View style={[styles.kvRow, { borderBottomWidth: 0 }]}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Fields parsed</Text>
                 <Text style={[styles.kvVal, { color: colors.ink }]}>
@@ -338,7 +354,7 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
 
           {/* Tab 2: Expenses */}
           {activeTab === 'Expenses' && (
-            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <View style={[styles.card, styles.summaryCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
               <View style={styles.expHeaderRow}>
                 <Text style={[styles.expHeaderTitle, { color: colors.ink }]}>
                   {expenses.length} expense categories
@@ -371,32 +387,32 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
                 {
                   title: 'AI Brain Preview',
                   route: Routes.BrainPreview,
-                  ep: 'Risk, fraud & readiness breakdown',
+                  ep: '/submission/claims/{id}/preview',
                 },
                 {
                   title: 'Documents',
                   route: Routes.DocumentGrid,
-                  ep: 'Attached claim documents and reports',
+                  ep: '/ingress/claims/{id}/documents',
                 },
                 {
                   title: 'OCR & parsed fields',
                   route: Routes.OcrParsedFields,
-                  ep: 'Visual document reader & field editor',
+                  ep: '/ocr · /parser',
                 },
                 {
                   title: 'Scan analysis',
                   route: Routes.ScanAnalyzer,
-                  ep: 'Radiology, CT & ultrasound findings',
+                  ep: 'scan_analyses',
                 },
                 {
                   title: 'Medical coding',
                   route: Routes.MedicalCoding,
-                  ep: 'ICD-10 diagnostic & CPT codes',
+                  ep: '/coding/code-suggest/{id}',
                 },
                 {
                   title: 'Audit trail',
                   route: Routes.AuditTrail,
-                  ep: 'Activity log & state history',
+                  ep: '/ingress/claims/{id}/audit',
                 },
               ].map((svc, idx, arr) => (
                 <TouchableOpacity
@@ -412,7 +428,7 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.serviceTitle, { color: colors.ink }]}>{svc.title}</Text>
-                    <Text style={[styles.serviceEp, { color: colors.muted }]}>
+                    <Text style={[styles.serviceEp, styles.mono, { color: colors.muted }]}>
                       {svc.ep}
                     </Text>
                   </View>
@@ -437,7 +453,7 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
         <View style={[styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
           <TouchableOpacity
             style={[styles.outlineBtn, { borderColor: colors.line }]}
-            onPress={() => navigation.navigate(Routes.ChatTab)}
+            onPress={() => navigation.navigate('MainTabs', { screen: Routes.ChatTab })}
             activeOpacity={0.7}
           >
             <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>Ask ClaimsGuru</Text>
@@ -451,6 +467,9 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
             <Text style={styles.primaryBtnText}>AI Brain Preview</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Shared Bottom Tab Bar */}
+        <GlobalBottomTabBar navigation={navigation} activeTab="claims" />
       </View>
     </SafeAreaView>
   );
@@ -465,27 +484,29 @@ const styles = StyleSheet.create({
   },
   appBar: {
     height: 52,
+    borderBottomWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
+    paddingHorizontal: 13,
+  },
+  backBtn: {
+    padding: 4,
+    marginRight: 6,
   },
   title: {
     fontSize: 16.5,
     fontWeight: '700',
     letterSpacing: -0.2,
-  },
-  iconBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+    flex: 1,
   },
   appBarActions: {
     flexDirection: 'row',
-    gap: 4,
+    alignItems: 'center',
+    gap: 6,
+  },
+  iconBtn: {
+    padding: 6,
+    borderRadius: 8,
   },
   scrollContent: {
     padding: 13,
@@ -494,66 +515,70 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 14,
     borderWidth: 1,
-    overflow: 'hidden',
-    padding: 13,
+    padding: 14,
     marginBottom: 11,
   },
   pillsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    flexWrap: 'wrap',
     marginBottom: 8,
+    flexWrap: 'wrap',
   },
   pill: {
     paddingHorizontal: 8,
-    paddingVertical: 3.5,
+    paddingVertical: 3,
     borderRadius: 99,
   },
   pillText: {
-    fontSize: 10.5,
+    fontSize: 11,
     fontWeight: '700',
   },
   patientRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 3,
+    marginBottom: 2,
   },
   patientName: {
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.3,
+    flex: 1,
   },
   patientBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 99,
   },
   patientBadgeText: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '700',
   },
   subMeta: {
     fontSize: 11.5,
+    marginTop: 3,
   },
   claimIdText: {
-    fontSize: 10.5,
-    marginTop: 5,
+    fontSize: 11,
+    marginTop: 4,
+  },
+  mono: {
+    fontFamily: 'monospace',
   },
   horizontalTrack: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 14,
-    paddingHorizontal: 6,
+    marginTop: 13,
   },
   hStep: {
-    width: 22,
-    height: 22,
+    width: 21,
+    height: 21,
     borderRadius: 11,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 1,
   },
   hBar: {
     flex: 1,
@@ -567,7 +592,7 @@ const styles = StyleSheet.create({
   },
   hLabelText: {
     fontSize: 9.5,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   actionBtnRow: {
     flexDirection: 'row',
@@ -576,148 +601,159 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     flex: 1,
-    paddingVertical: 9,
-    borderRadius: 10,
     borderWidth: 1,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    paddingVertical: 9,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   actionBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 12.5,
+    fontWeight: '700',
   },
   tabsContainer: {
     flexDirection: 'row',
-    padding: 3,
     borderRadius: 11,
+    padding: 3,
     gap: 3,
     marginBottom: 11,
   },
   tabBtn: {
     flex: 1,
     paddingVertical: 8,
-    borderRadius: 9,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9,
   },
   tabBtnOn: {
     shadowColor: '#102030',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 3,
-    elevation: 2,
+    elevation: 1,
   },
   tabBtnText: {
     fontSize: 12,
   },
+  summaryCard: {
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+  },
   kvRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: 9.5,
     borderBottomWidth: 1,
     borderBottomColor: '#eef2f6',
   },
   kvKey: {
-    fontSize: 12,
+    fontSize: 12.2,
   },
   kvVal: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  mono: {
-    fontFamily: 'monospace',
+    fontSize: 12.2,
+    fontWeight: '700',
+    textAlign: 'right',
   },
   expHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eef2f6',
   },
   expHeaderTitle: {
     fontSize: 12.5,
     fontWeight: '700',
   },
   expHeaderSub: {
-    fontSize: 9.5,
+    fontSize: 10,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
     fontWeight: '700',
+    letterSpacing: 0.5,
   },
   totalRow: {
     borderTopWidth: 2,
     marginTop: 4,
     borderBottomWidth: 0,
-    paddingTop: 8,
   },
   totalKey: {
     fontSize: 13,
     fontWeight: '700',
   },
   totalVal: {
-    fontSize: 14.5,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '800',
   },
   servicesCard: {
     padding: 0,
+    overflow: 'hidden',
   },
   serviceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 11,
+    justifyContent: 'space-between',
     paddingHorizontal: 13,
-    gap: 10,
+    paddingVertical: 11,
   },
   serviceTitle: {
     fontSize: 12.5,
     fontWeight: '600',
   },
   serviceEp: {
-    fontSize: 10,
+    fontSize: 10.5,
     marginTop: 2,
   },
   toast: {
     position: 'absolute',
+    bottom: 74,
     left: 14,
     right: 14,
-    bottom: 74,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
     borderRadius: 12,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
-    elevation: 5,
+    gap: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
-    shadowRadius: 5,
+    shadowRadius: 10,
+    elevation: 8,
+    zIndex: 50,
   },
   toastText: {
     color: '#ffffff',
-    fontSize: 11.5,
+    fontSize: 12,
+    fontWeight: '600',
     flex: 1,
   },
   bottomBar: {
-    flexDirection: 'row',
+    borderTopWidth: 1,
     paddingHorizontal: 13,
     paddingVertical: 10,
-    borderTopWidth: 1,
-    gap: 9,
+    flexDirection: 'row',
+    gap: 10,
   },
   outlineBtn: {
-    flex: 0.42,
-    paddingVertical: 12,
-    borderRadius: 12,
+    flex: 0.44,
     borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#ffffff',
   },
   outlineBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 13.5,
+    fontWeight: '700',
   },
   primaryBtn: {
-    flex: 0.58,
-    paddingVertical: 12,
+    flex: 0.56,
     borderRadius: 12,
+    paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },

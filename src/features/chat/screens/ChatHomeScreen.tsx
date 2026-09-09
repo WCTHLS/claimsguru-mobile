@@ -113,7 +113,15 @@ export const ChatHomeScreen = ({ navigation }: any) => {
   }, [userEmail, userId]);
 
   const getInitials = (name?: string) => {
-    if (!name || !name.trim()) return 'JD';
+    if (
+      !name ||
+      !name.trim() ||
+      name.toLowerCase() === 'sample' ||
+      name.toLowerCase() === 'unknown' ||
+      name.toLowerCase().includes('sample@')
+    ) {
+      return 'JD';
+    }
     const parts = name.trim().split(/\s+/);
     if (parts.length >= 2) {
       return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -121,7 +129,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
     return name.slice(0, 2).toUpperCase();
   };
   const userInitials = getInitials(userName);
-  const firstName = userName ? userName.split(' ')[0] : 'Jhon';
+  const firstName = userName && userName.toLowerCase() !== 'sample' ? userName.split(' ')[0] : 'Jhon';
 
   const [input, setInput] = useState('');
   const [isCardExpanded, setIsCardExpanded] = useState(true);

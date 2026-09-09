@@ -54,12 +54,27 @@ export const useAuthStore = create<AuthState>(set => ({
   setUserDetails: details => set(state => ({ ...state, ...details })),
   signIn: (email = 'sample@gmail.com', name?: string, token?: string, extra?: UserExtraDetails) =>
     set(state => {
-      const cleanEmail = (email || '').trim();
-      const resolvedName =
+      const cleanEmail = (email || '').trim().toLowerCase();
+      let resolvedName =
         name ||
-        (extra?.firstName ? `${extra.firstName} ${extra.lastName || ''}`.trim() : '') ||
-        cleanEmail.split('@')[0] ||
-        'Jhon Doe';
+        (extra?.firstName ? `${extra.firstName} ${extra.lastName || ''}`.trim() : '');
+
+      if (!resolvedName || resolvedName.toLowerCase() === 'sample' || resolvedName.toLowerCase() === 'unknown') {
+        if (cleanEmail === 'sample@gmail.com' || cleanEmail.includes('sample')) {
+          resolvedName = 'Jhon Doe';
+        } else {
+          resolvedName = cleanEmail.split('@')[0] || 'Jhon Doe';
+        }
+      }
+
+      const isSampleUser = cleanEmail === 'sample@gmail.com' || resolvedName.toLowerCase() === 'jhon doe';
+      const first = extra?.firstName || (isSampleUser ? 'Jhon' : resolvedName.split(' ')[0]) || 'Jhon';
+      const last = extra?.lastName || (isSampleUser ? 'Doe' : resolvedName.split(' ').slice(1).join(' ')) || 'Doe';
+      const uid = extra?.userId || state.userId || (isSampleUser ? 'ec78998a-0228-434a-84f4-e08b4b7417e2' : undefined);
+      const policy = extra?.policyNumber !== undefined ? extra.policyNumber : (isSampleUser ? 'P-0007401' : state.policyNumber);
+      const dobVal = extra?.dob !== undefined ? extra.dob : (isSampleUser ? '2000-06-08' : state.dob);
+      const genderVal = extra?.gender !== undefined ? extra.gender : (isSampleUser ? 'Male' : state.gender);
+      const sumVal = extra?.sumInsured !== undefined ? extra.sumInsured : (isSampleUser ? 500000 : state.sumInsured);
 
       return {
         isAuthenticated: true,
@@ -67,14 +82,14 @@ export const useAuthStore = create<AuthState>(set => ({
         userName: resolvedName,
         token: token || `token-${Date.now()}`,
         role: extra?.role || state.role || 'submitter',
-        userId: extra?.userId || state.userId || 'ec78998a-0228-434a-84f4-e08b4b7417e2',
-        firstName: extra?.firstName || resolvedName.split(' ')[0] || 'Jhon',
-        lastName: extra?.lastName || resolvedName.split(' ').slice(1).join(' ') || 'Doe',
+        userId: uid,
+        firstName: first,
+        lastName: last,
         phone: extra?.phone !== undefined ? extra.phone : state.phone,
-        dob: extra?.dob !== undefined ? extra.dob : state.dob,
-        gender: extra?.gender !== undefined ? extra.gender : state.gender,
-        policyNumber: extra?.policyNumber !== undefined ? extra.policyNumber : state.policyNumber,
-        sumInsured: extra?.sumInsured !== undefined ? extra.sumInsured : state.sumInsured,
+        dob: dobVal,
+        gender: genderVal,
+        policyNumber: policy,
+        sumInsured: sumVal,
         organization: extra?.organization || state.organization,
       };
     }),

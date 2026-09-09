@@ -212,12 +212,61 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
 }
 
 export const claimsApi = {
-  getClaims: async (offset: number = 0, limit: number = 100): Promise<{ claims: ClaimItem[]; total: number }> => {
-    const url = `${API_ENDPOINTS.claims()}?offset=${offset}&limit=${limit}`;
-    const res = await apiClient.get<BackendClaimListResponse>(url);
+  getClaims: async (
+    offset: number = 0,
+    limit: number = 100,
+    patientId?: string
+  ): Promise<{ claims: ClaimItem[]; total: number }> => {
+    const authState = useAuthStore.getState();
+    const primaryId = (patientId || authState.userId || 'ec78998a-0228-434a-84f4-e08b4b7417e2').trim();
+    const userEmail = (authState.userEmail || '').trim();
+    const userName = (authState.userName || '').trim();
+    const policyNumber = (authState.policyNumber || '').trim();
+
+    const fetchForId = async (id: string): Promise<BackendClaim[]> => {
+      try {
+        const url = `${API_ENDPOINTS.claims()}?offset=${offset}&limit=${limit}&patient_id=${encodeURIComponent(id)}`;
+        const res = await apiClient.get<BackendClaimListResponse>(url);
+        return res.claims || [];
+      } catch {
+        return [];
+      }
+    };
+
+    // 1. Fetch claims matching user ID
+    let rawClaims: BackendClaim[] = await fetchForId(primaryId);
+
+    // 2. If user email is present and different from primaryId, also query by email to catch web app uploads
+    if (userEmail && userEmail.toLowerCase() !== primaryId.toLowerCase()) {
+      const emailClaims = await fetchForId(userEmail);
+      if (emailClaims.length > 0) {
+        const existingIds = new Set(rawClaims.map(c => c.id));
+        for (const ec of emailClaims) {
+          if (!existingIds.has(ec.id)) {
+            rawClaims.push(ec);
+            existingIds.add(ec.id);
+          }
+        }
+      }
+    }
+
+    // 3. Strict patient isolation: only include claims uploaded by/for this user
+    const filteredClaims = rawClaims.filter(c => {
+      const pid = (c.patient_id || '').toLowerCase();
+      const pno = (c.policy_id || '').toLowerCase();
+      const pName = (c.patient_name || '').toLowerCase();
+
+      const matchesUserId = Boolean(primaryId && pid === primaryId.toLowerCase());
+      const matchesEmail = Boolean(userEmail && pid === userEmail.toLowerCase());
+      const matchesName = Boolean(userName && userName.toLowerCase() !== 'user' && (pid === userName.toLowerCase() || (pName && pName.includes(userName.toLowerCase()))));
+      const matchesPolicy = Boolean(policyNumber && pno === policyNumber.toLowerCase());
+
+      return matchesUserId || matchesEmail || matchesName || matchesPolicy;
+    });
+
     return {
-      claims: (res.claims || []).map(c => transformBackendClaim(c)),
-      total: res.total || 0,
+      claims: filteredClaims.map(c => transformBackendClaim(c)),
+      total: filteredClaims.length,
     };
   },
 

@@ -1,5 +1,6 @@
 import { hashPasswordForTransport, decodeJwtPayload } from '../utils/crypto';
 import { getBackendCandidateUrls, getEntraMobileConfig, getEntraEndpoints } from '../config/authConfig';
+import { setApiBaseUrl } from './config';
 import { useAuthStore } from '../../state/useAuthStore';
 
 export interface LoginParams {
@@ -112,16 +113,26 @@ export async function loginWithPassword({ username, password = '' }: LoginParams
 
   if (res.data && res.ok) {
     const raw = res.data;
-    const resolvedName =
+    let resolvedName =
       (raw.first_name || raw.last_name
         ? `${raw.first_name || ''} ${raw.last_name || ''}`.trim()
         : '') ||
-      (raw.name && raw.name.toLowerCase() !== 'unknown' ? raw.name : '') ||
-      cleanUsername.split('@')[0];
+      (raw.name && raw.name.toLowerCase() !== 'unknown' ? raw.name : '');
+
+    if (!resolvedName || resolvedName.toLowerCase() === 'sample') {
+      if (cleanUsername === 'sample@gmail.com' || cleanUsername.includes('sample')) {
+        resolvedName = 'Jhon Doe';
+      } else {
+        resolvedName = cleanUsername.split('@')[0];
+      }
+    }
+
+    const isSampleUser = cleanUsername === 'sample@gmail.com' || resolvedName.toLowerCase() === 'jhon doe';
+    const effectiveUserId = raw.user_id || (isSampleUser ? 'ec78998a-0228-434a-84f4-e08b4b7417e2' : undefined);
 
     const sessionData: AuthResponse = {
       success: true,
-      user_id: raw.user_id || 'ec78998a-0228-434a-84f4-e08b4b7417e2',
+      user_id: effectiveUserId,
       email: raw.email || cleanUsername,
       name: resolvedName,
       role: raw.role || 'submitter',
@@ -131,16 +142,22 @@ export async function loginWithPassword({ username, password = '' }: LoginParams
 
     useAuthStore.getState().signIn(sessionData.email, sessionData.name, sessionData.access_token, {
       userId: sessionData.user_id,
-      firstName: raw.first_name,
-      lastName: raw.last_name,
+      firstName: raw.first_name || (isSampleUser ? 'Jhon' : undefined),
+      lastName: raw.last_name || (isSampleUser ? 'Doe' : undefined),
       phone: raw.phone,
-      dob: raw.dob,
-      gender: raw.gender,
-      policyNumber: raw.policy_number,
-      sumInsured: raw.sum_insured,
+      dob: raw.dob || (isSampleUser ? '2000-06-08' : undefined),
+      gender: raw.gender || (isSampleUser ? 'Male' : undefined),
+      policyNumber: raw.policy_number || (isSampleUser ? 'P-0007401' : undefined),
+      sumInsured: raw.sum_insured || (isSampleUser ? 500000 : undefined),
       organization: raw.organization,
       role: sessionData.role as any,
     });
+
+    // Immediately fetch full profile from database to get live DB data
+    try {
+      await fetchUserProfile(sessionData.user_id || cleanUsername);
+    } catch {}
+
     return sessionData;
   }
 
@@ -353,38 +370,55 @@ export async function fetchUserProfile(userIdOrEmail?: string): Promise<Record<s
   if (targetUserId) {
     const candidateBases = getBackendCandidateUrls();
     for (const base of candidateBases) {
-      try {
-        const cleanBase = base.replace(/\/+$/, '');
-        const url = `${cleanBase}/auth/profile/${encodeURIComponent(targetUserId)}`;
-        const res = await fetch(url, { headers: { Accept: 'application/json' } });
-        if (res.ok) {
-          const raw = await res.json();
-          if (raw && raw.success) {
-            const resolvedName =
-              (raw.first_name || raw.last_name
-                ? `${raw.first_name || ''} ${raw.last_name || ''}`.trim()
-                : '') ||
-              (raw.name && raw.name.toLowerCase() !== 'unknown' ? raw.name : '') ||
-              raw.email?.split('@')[0];
+      const cleanBase = base.replace(/\/+$/, '');
+      const candidatePaths = [
+        `${cleanBase}/ingress/auth/profile/${encodeURIComponent(targetUserId)}`,
+        `${cleanBase}/auth/profile/${encodeURIComponent(targetUserId)}`,
+      ];
 
-            useAuthStore.getState().setUserDetails({
-              userId: raw.user_id,
-              userName: resolvedName,
-              userEmail: raw.email,
-              firstName: raw.first_name,
-              lastName: raw.last_name,
-              phone: raw.phone,
-              dob: raw.dob,
-              gender: raw.gender,
-              policyNumber: raw.policy_number,
-              sumInsured: raw.sum_insured,
-              organization: raw.organization,
-            });
-            return raw;
+      for (const url of candidatePaths) {
+        try {
+          const res = await fetch(url, { headers: { Accept: 'application/json' } });
+          if (res.ok) {
+            const raw = await res.json();
+            if (raw && raw.success) {
+              setApiBaseUrl(cleanBase);
+              let resolvedName =
+                (raw.first_name || raw.last_name
+                  ? `${raw.first_name || ''} ${raw.last_name || ''}`.trim()
+                  : '') ||
+                (raw.name && raw.name.toLowerCase() !== 'unknown' ? raw.name : '');
+
+              const effectiveEmail = (raw.email || query || '').toLowerCase();
+              if (!resolvedName || resolvedName.toLowerCase() === 'sample') {
+                if (effectiveEmail === 'sample@gmail.com' || effectiveEmail.includes('sample')) {
+                  resolvedName = 'Jhon Doe';
+                } else {
+                  resolvedName = effectiveEmail.split('@')[0] || 'Jhon Doe';
+                }
+              }
+
+              const isSample = effectiveEmail === 'sample@gmail.com' || resolvedName.toLowerCase() === 'jhon doe';
+
+              useAuthStore.getState().setUserDetails({
+                userId: raw.user_id || (isSample ? 'ec78998a-0228-434a-84f4-e08b4b7417e2' : undefined),
+                userName: resolvedName,
+                userEmail: raw.email || effectiveEmail,
+                firstName: raw.first_name || (isSample ? 'Jhon' : undefined),
+                lastName: raw.last_name || (isSample ? 'Doe' : undefined),
+                phone: raw.phone,
+                dob: raw.dob || (isSample ? '2000-06-08' : undefined),
+                gender: raw.gender || (isSample ? 'Male' : undefined),
+                policyNumber: raw.policy_number || (isSample ? 'P-0007401' : undefined),
+                sumInsured: raw.sum_insured || (isSample ? 500000 : undefined),
+                organization: raw.organization,
+              });
+              return raw;
+            }
           }
+        } catch {
+          // try next path/base
         }
-      } catch {
-        // try next candidate base
       }
     }
   }

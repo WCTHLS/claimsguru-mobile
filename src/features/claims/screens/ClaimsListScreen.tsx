@@ -12,6 +12,8 @@ import {
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useClaimsStore } from '../../../state/useClaimsStore';
 import { usePipelineStore } from '../../../state/usePipelineStore';
+import { useAuthStore } from '../../../state/useAuthStore';
+import { fetchUserProfile } from '../../../core/api/authApi';
 import { formatINR } from '../../../core/utils/currency';
 import { FileText, Search, Plus } from 'lucide-react-native';
 import { Routes } from '../../../app/navigation/routes';
@@ -20,11 +22,33 @@ export const ClaimsListScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
   const { claims, selectClaim, loadClaims, refreshing, backendConnected } = useClaimsStore();
   const { running: pipelineRunning, claimId: pipelineClaimId } = usePipelineStore();
+  const { userName, userId, userEmail } = useAuthStore();
   const [activeFilter, setActiveFilter] = useState<'All' | 'Running' | 'FAILED' | 'Needs index'>('All');
 
+  const getInitials = (name?: string) => {
+    if (
+      !name ||
+      !name.trim() ||
+      name.toLowerCase() === 'sample' ||
+      name.toLowerCase() === 'unknown' ||
+      name.toLowerCase().includes('sample@')
+    ) {
+      return 'JD';
+    }
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
+  const userInitials = getInitials(userName);
+
   useEffect(() => {
+    if (userId || userEmail) {
+      fetchUserProfile(userId || userEmail).catch(() => {});
+    }
     loadClaims();
-  }, []);
+  }, [userId, userEmail, userName]);
 
   const totalCount = claims.length;
   const inPipelineCount = claims.filter(c => c.status === 'running').length;
@@ -90,7 +114,7 @@ export const ClaimsListScreen = ({ navigation }: any) => {
           activeOpacity={0.7}
         >
           <View style={[styles.avatar, { backgroundColor: colors.brandSoft }]}>
-            <Text style={[styles.avatarText, { color: colors.brandDark }]}>SA</Text>
+            <Text style={[styles.avatarText, { color: colors.brandDark }]}>{userInitials}</Text>
           </View>
         </TouchableOpacity>
 
@@ -180,7 +204,9 @@ export const ClaimsListScreen = ({ navigation }: any) => {
           <View style={[styles.cardList, { backgroundColor: colors.surface, borderColor: colors.line }]}>
             {filteredClaims.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <Text style={[styles.emptyText, { color: colors.muted }]}>No claims match.</Text>
+                <Text style={[styles.emptyText, { color: colors.muted }]}>
+                  {claims.length === 0 ? 'No claims uploaded for your account yet. Tap + to upload.' : 'No claims match this filter.'}
+                </Text>
               </View>
             ) : (
               filteredClaims.map((claim, index) => {

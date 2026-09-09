@@ -10,6 +10,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Info, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
+import { useAuthStore } from '../../../state/useAuthStore';
 import { Routes } from '../../../app/navigation/routes';
 
 interface TimelineEvent {
@@ -31,6 +32,19 @@ interface TimelineDay {
 export const PatientActivityScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const { userName } = useAuthStore();
+
+  const getInitials = (name?: string) => {
+    if (!name || !name.trim() || name.toLowerCase() === 'sample' || name.toLowerCase() === 'unknown' || name.toLowerCase().includes('sample@')) {
+      return 'JD';
+    }
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
+  const initials = getInitials(userName);
 
   const [activeFilter, setActiveFilter] = useState<'all' | 'upload' | 'pipeline' | 'review' | 'submission' | 'chat'>('all');
   const [openDiffIdx, setOpenDiffIdx] = useState<string | null>(null);
@@ -187,12 +201,12 @@ export const PatientActivityScreen = ({ navigation }: any) => {
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <View style={[styles.avatarMini, { backgroundColor: colors.brandSoft }]}>
-              <Text style={[styles.avatarMiniText, { color: colors.brandDark }]}>RM</Text>
+              <Text style={[styles.avatarMiniText, { color: colors.brandDark }]}>{initials}</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.patientTitle, { color: colors.ink }]}>R. Menon</Text>
+              <Text style={[styles.patientTitle, { color: colors.ink }]}>{userName}</Text>
               <Text style={[styles.patientSub, { color: colors.muted }]}>
-                5 claims · 13 documents · last activity today
+                Verified Patient · last activity today
               </Text>
             </View>
           </View>

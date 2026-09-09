@@ -1,4 +1,5 @@
-import { API_BASE_URL, API_ENDPOINTS } from './config';
+import { API_BASE_URL, API_ENDPOINTS, setApiBaseUrl } from './config';
+import { getBackendCandidateUrls } from '../config/authConfig';
 
 export class ApiError extends Error {
   status: number;
@@ -19,11 +20,7 @@ interface RequestOptions {
 
 const DEFAULT_TIMEOUT_MS = 15000;
 
-async function requestWithTimeout<T>(
-  url: string,
-  options: RequestInit = {},
-  timeoutMs: number = DEFAULT_TIMEOUT_MS
-): Promise<T> {
+async function executeSingleFetch<T>(url: string, options: RequestInit, timeoutMs: number): Promise<T> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -35,7 +32,6 @@ async function requestWithTimeout<T>(
 
     clearTimeout(timeoutId);
 
-    // 204 No Content
     if (response.status === 204) {
       return null as T;
     }
@@ -59,7 +55,6 @@ async function requestWithTimeout<T>(
     return responseData as T;
   } catch (error: any) {
     clearTimeout(timeoutId);
-
     if (error.name === 'AbortError') {
       throw new ApiError(`Request to ${url} timed out after ${timeoutMs}ms`, 408);
     }
@@ -67,6 +62,47 @@ async function requestWithTimeout<T>(
       throw error;
     }
     throw new ApiError(error.message || 'Network request failed', 0, error);
+  }
+}
+
+async function requestWithTimeout<T>(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
+): Promise<T> {
+  try {
+    return await executeSingleFetch<T>(url, options, timeoutMs);
+  } catch (err: any) {
+    // If it's an HTTP response error (status >= 400), don't retry across bases
+    if (err instanceof ApiError && err.status >= 400 && err.status !== 408) {
+      throw err;
+    }
+
+    // If network connection failed or timed out, attempt candidate URLs
+    const candidates = getBackendCandidateUrls();
+    for (const candidate of candidates) {
+      const cleanCandidate = candidate.replace(/\/+$/, '');
+      if (url.startsWith(cleanCandidate)) continue;
+
+      // Swap base
+      let altUrl = url;
+      if (url.startsWith(API_BASE_URL)) {
+        altUrl = url.replace(API_BASE_URL, cleanCandidate);
+      } else {
+        const urlObj = new URL(url, 'http://localhost');
+        altUrl = `${cleanCandidate}${urlObj.pathname}${urlObj.search}`;
+      }
+
+      try {
+        const result = await executeSingleFetch<T>(altUrl, options, Math.min(timeoutMs, 5000));
+        setApiBaseUrl(cleanCandidate);
+        return result;
+      } catch {
+        // try next candidate
+      }
+    }
+
+    throw err;
   }
 }
 

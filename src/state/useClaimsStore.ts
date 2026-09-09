@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { ClaimItem, INITIAL_CLAIMS } from '../mocks/claims.mock';
 import { claimsApi, BackendClaimPreview } from '../features/claims/services/claimsApi';
+import { useAuthStore } from './useAuthStore';
 
 interface ClaimsState {
   claims: ClaimItem[];
@@ -14,7 +15,7 @@ interface ClaimsState {
 
   setFilter: (filter: string) => void;
   selectClaim: (id: string) => void;
-  loadClaims: (refresh?: boolean) => Promise<void>;
+  loadClaims: (refresh?: boolean, patientIdOverride?: string) => Promise<void>;
   indexClaim: (id: string) => Promise<void>;
   deleteClaim: (id: string) => Promise<void>;
   addOrUpdateClaim: (claim: Partial<ClaimItem> & { id: string }) => void;
@@ -24,8 +25,8 @@ interface ClaimsState {
 }
 
 export const useClaimsStore = create<ClaimsState>((set, get) => ({
-  claims: INITIAL_CLAIMS,
-  selectedClaimId: INITIAL_CLAIMS[0].id,
+  claims: [],
+  selectedClaimId: '',
   filter: 'All',
   loading: false,
   refreshing: false,
@@ -57,7 +58,7 @@ export const useClaimsStore = create<ClaimsState>((set, get) => ({
     }
   },
 
-  loadClaims: async (refresh = false) => {
+  loadClaims: async (refresh = false, patientIdOverride?: string) => {
     if (refresh) {
       set({ refreshing: true, error: null });
     } else {
@@ -65,25 +66,18 @@ export const useClaimsStore = create<ClaimsState>((set, get) => ({
     }
 
     try {
-      const res = await claimsApi.getClaims(0, 100);
+      const auth = useAuthStore.getState();
+      const patientId = patientIdOverride || auth.userId || undefined;
+      const res = await claimsApi.getClaims(0, 100, patientId);
       const backendClaims = res.claims || [];
 
-      if (backendClaims.length > 0) {
-        const backendIds = new Set(backendClaims.map(c => c.id));
-        const nonDuplicateMock = INITIAL_CLAIMS.filter(c => !backendIds.has(c.id));
-        set({
-          claims: [...backendClaims, ...nonDuplicateMock],
-          backendConnected: true,
-          loading: false,
-          refreshing: false,
-        });
-      } else {
-        set({
-          backendConnected: true,
-          loading: false,
-          refreshing: false,
-        });
-      }
+      set({
+        claims: backendClaims,
+        selectedClaimId: backendClaims[0]?.id || '',
+        backendConnected: true,
+        loading: false,
+        refreshing: false,
+      });
     } catch (err: any) {
       console.warn('[useClaimsStore] Could not fetch claims from backend:', err?.message || err);
       set({

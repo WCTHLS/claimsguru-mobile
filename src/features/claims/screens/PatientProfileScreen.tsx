@@ -39,7 +39,15 @@ export const PatientProfileScreen = ({ navigation }: any) => {
   }, [userEmail, userId]);
 
   const getInitials = (name?: string) => {
-    if (!name || !name.trim()) return 'JD';
+    if (
+      !name ||
+      !name.trim() ||
+      name.toLowerCase() === 'sample' ||
+      name.toLowerCase() === 'unknown' ||
+      name.toLowerCase().includes('sample@')
+    ) {
+      return 'JD';
+    }
     const parts = name.trim().split(/\s+/);
     if (parts.length >= 2) {
       return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
