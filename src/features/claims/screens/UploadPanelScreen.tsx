@@ -13,6 +13,7 @@ import { useTheme } from '../../../core/theme/ThemeContext';
 import { useUploadStore, UploadFileItem } from '../../../state/useUploadStore';
 import { usePipelineStore } from '../../../state/usePipelineStore';
 import { useClaimsStore } from '../../../state/useClaimsStore';
+import { useAuthStore } from '../../../state/useAuthStore';
 import { Routes } from '../../../app/navigation/routes';
 import {
   ArrowLeft,
@@ -69,9 +70,10 @@ export const UploadPanelScreen = ({ navigation }: any) => {
     if (!hasFiles || uploading) return;
 
     // Trigger real backend upload
+    const auth = useAuthStore.getState();
     const { claimId } = await uploadToBackend({
-      policyId: 'SAMPLE-PH-77421',
-      patientId: 'patient_01',
+      policyId: auth.policyNumber || 'P-0007401',
+      patientId: auth.userId || 'ec78998a-0228-434a-84f4-e08b4b7417e2',
     });
 
     // Register active new claim in claims store

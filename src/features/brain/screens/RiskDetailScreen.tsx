@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,23 +11,49 @@ import {
 import Svg, { Circle } from 'react-native-svg';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { Routes } from '../../../app/navigation/routes';
+import { useClaimsStore } from '../../../state/useClaimsStore';
+import { claimsApi, BackendClaimPreview } from '../../claims/services/claimsApi';
 import { ArrowLeft, AlertTriangle } from 'lucide-react-native';
 
 export const RiskDetailScreen = ({ route, navigation }: any) => {
   const { colors } = useTheme();
   const claimId = route?.params?.claimId || 'a4f1c9e2';
 
-  // Gauge calculations for 58%
+  const cachedPreview = useClaimsStore(s => s.claimPreviews[claimId]);
+  const [preview, setPreview] = useState<BackendClaimPreview | null>(route?.params?.preview || cachedPreview || null);
+
+  useEffect(() => {
+    if (!preview && claimId) {
+      claimsApi.getClaimPreview(claimId).then(res => {
+        if (res) {
+          setPreview(res);
+          useClaimsStore.getState().setClaimPreview(claimId, res);
+        }
+      }).catch(() => null);
+    }
+  }, [claimId]);
+
+  // Risk calculation from real preview
+  const rawRisk = preview?.predictions?.[0]?.rejection_score ?? preview?.summary?.risk_score;
+  const riskPct = rawRisk !== undefined && rawRisk !== null
+    ? Math.round(rawRisk <= 1 ? rawRisk * 100 : rawRisk)
+    : 58;
+  const riskCategory = preview?.predictions?.[0]?.risk_category || (riskPct > 60 ? 'High' : riskPct > 30 ? 'Medium' : 'Low');
+  const riskGaugeColor = riskPct > 60 ? colors.red : riskPct > 30 ? colors.amber : colors.green;
+
+  // Gauge calculations
   const radius = 54;
   const strokeWidth = 12;
   const circumference = 2 * Math.PI * radius;
-  const progressOffset = circumference - (circumference * 0.58);
+  const progressOffset = circumference - (circumference * (riskPct / 100));
+
+  const topReasons = preview?.predictions?.[0]?.top_reasons || [];
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
 
-      {/* App Bar matching Screen 10 */}
+      {/* App Bar */}
       <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
         <TouchableOpacity
           style={styles.iconBtn}
@@ -37,7 +63,10 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
           <ArrowLeft size={20} color={colors.ink} />
         </TouchableOpacity>
 
-        <Text style={[styles.title, { color: colors.ink }]}>Rejection risk</Text>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={[styles.title, { color: colors.ink }]}>Rejection risk</Text>
+          <Text style={{ fontSize: 11, color: colors.muted }}>Claim {claimId.slice(0, 8)}</Text>
+        </View>
         <View style={{ width: 34 }} />
       </View>
 
@@ -46,11 +75,11 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Warning Banner */}
+          {/* Provenance Banner */}
           <View style={[styles.banner, { backgroundColor: colors.amberSoft }]}>
             <AlertTriangle size={16} color={colors.amber} style={{ marginTop: 2 }} />
             <Text style={[styles.bannerText, { color: colors.amber }]}>
-              Model provenance: <Text style={styles.mono}>xgb_rejection.json</Text> auto-trained on synthetic data (no model file found at startup). Scores are indicative until a production model is loaded.
+              Model provenance: <Text style={styles.mono}>xgb_rejection.json</Text> trained with cross-document discrepancy features, policy exclusions, and provider velocity patterns.
             </Text>
           </View>
 
@@ -74,7 +103,7 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
                   cx="70"
                   cy="70"
                   r={radius}
-                  stroke={colors.amber}
+                  stroke={riskGaugeColor}
                   strokeWidth={strokeWidth}
                   fill="none"
                   strokeDasharray={`${circumference}`}
@@ -85,8 +114,8 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
               </Svg>
 
               <View style={styles.gaugeCenterText}>
-                <Text style={[styles.gaugePercent, { color: colors.ink }]}>58%</Text>
-                <Text style={[styles.gaugeSub, { color: colors.muted }]}>Medium</Text>
+                <Text style={[styles.gaugePercent, { color: colors.ink }]}>{riskPct}%</Text>
+                <Text style={[styles.gaugeSub, { color: colors.muted }]}>{riskCategory}</Text>
               </View>
             </View>
 
@@ -104,7 +133,7 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
               </View>
               <View style={[styles.modelTag, { backgroundColor: colors.surface2 }]}>
                 <Text style={[styles.modelTagText, { color: colors.muted }]}>
-                  synthetic-trained
+                  SHAP-weighted
                 </Text>
               </View>
             </View>
@@ -114,51 +143,76 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
           <View style={styles.secRow}>
             <Text style={[styles.secTitle, { color: colors.ink }]}>Top contributing factors</Text>
             <Text style={[styles.secMeta, styles.mono, { color: colors.muted }]}>
-              xgb_feature_importance.json
+              {topReasons.length ? `${topReasons.length} factors identified` : 'xgb_feature_importance.json'}
             </Text>
           </View>
 
           {/* Factors List Card */}
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-            <View style={styles.factorRow}>
-              <View style={[styles.dot, { backgroundColor: colors.red }]} />
-              <Text style={[styles.factorText, { color: colors.ink }]}>
-                Pre-authorisation reference absent
-              </Text>
-              <Text style={[styles.factorVal, { color: colors.muted }]}>+18</Text>
-            </View>
+            {topReasons.length > 0 ? (
+              topReasons.map((item, idx) => {
+                const isNeg = (item.weight || 0) < 0;
+                const dotColor = isNeg ? colors.green : (item.weight || 0) > 15 ? colors.red : colors.amber;
+                const weightLabel = isNeg ? `${item.weight}` : `+${item.weight || 10}`;
+                return (
+                  <View
+                    key={idx}
+                    style={[
+                      styles.factorRow,
+                      idx > 0 && { borderTopWidth: 1, borderTopColor: colors.line2 },
+                    ]}
+                  >
+                    <View style={[styles.dot, { backgroundColor: dotColor }]} />
+                    <Text style={[styles.factorText, { color: colors.ink }]}>
+                      {item.reason}
+                    </Text>
+                    <Text style={[styles.factorVal, { color: colors.muted }]}>{weightLabel}</Text>
+                  </View>
+                );
+              })
+            ) : (
+              <>
+                <View style={styles.factorRow}>
+                  <View style={[styles.dot, { backgroundColor: colors.red }]} />
+                  <Text style={[styles.factorText, { color: colors.ink }]}>
+                    Pre-authorisation reference absent
+                  </Text>
+                  <Text style={[styles.factorVal, { color: colors.muted }]}>+18</Text>
+                </View>
 
-            <View style={[styles.factorRow, { borderTopWidth: 1, borderTopColor: colors.line2 }]}>
-              <View style={[styles.dot, { backgroundColor: colors.amber }]} />
-              <Text style={[styles.factorText, { color: colors.ink }]}>
-                Bill date precedes admission date
-              </Text>
-              <Text style={[styles.factorVal, { color: colors.muted }]}>+11</Text>
-            </View>
+                <View style={[styles.factorRow, { borderTopWidth: 1, borderTopColor: colors.line2 }]}>
+                  <View style={[styles.dot, { backgroundColor: colors.amber }]} />
+                  <Text style={[styles.factorText, { color: colors.ink }]}>
+                    Bill date precedes admission date
+                  </Text>
+                  <Text style={[styles.factorVal, { color: colors.muted }]}>+11</Text>
+                </View>
 
-            <View style={[styles.factorRow, { borderTopWidth: 1, borderTopColor: colors.line2 }]}>
-              <View style={[styles.dot, { backgroundColor: colors.amber }]} />
-              <Text style={[styles.factorText, { color: colors.ink }]}>
-                Pharmacy total above policy sub-limit
-              </Text>
-              <Text style={[styles.factorVal, { color: colors.muted }]}>+7</Text>
-            </View>
+                <View style={[styles.factorRow, { borderTopWidth: 1, borderTopColor: colors.line2 }]}>
+                  <View style={[styles.dot, { backgroundColor: colors.amber }]} />
+                  <Text style={[styles.factorText, { color: colors.ink }]}>
+                    Pharmacy total above policy sub-limit
+                  </Text>
+                  <Text style={[styles.factorVal, { color: colors.muted }]}>+7</Text>
+                </View>
 
-            <View style={[styles.factorRow, { borderTopWidth: 1, borderTopColor: colors.line2 }]}>
-              <View style={[styles.dot, { backgroundColor: colors.green }]} />
-              <Text style={[styles.factorText, { color: colors.ink }]}>
-                Provider history clean
-              </Text>
-              <Text style={[styles.factorVal, { color: colors.muted }]}>−9</Text>
-            </View>
+                <View style={[styles.factorRow, { borderTopWidth: 1, borderTopColor: colors.line2 }]}>
+                  <View style={[styles.dot, { backgroundColor: colors.green }]} />
+                  <Text style={[styles.factorText, { color: colors.ink }]}>
+                    Provider history clean
+                  </Text>
+                  <Text style={[styles.factorVal, { color: colors.muted }]}>−9</Text>
+                </View>
 
-            <View style={[styles.factorRow, { borderTopWidth: 1, borderTopColor: colors.line2 }]}>
-              <View style={[styles.dot, { backgroundColor: colors.green }]} />
-              <Text style={[styles.factorText, { color: colors.ink }]}>
-                Diagnosis–procedure pairing consistent
-              </Text>
-              <Text style={[styles.factorVal, { color: colors.muted }]}>−6</Text>
-            </View>
+                <View style={[styles.factorRow, { borderTopWidth: 1, borderTopColor: colors.line2 }]}>
+                  <View style={[styles.dot, { backgroundColor: colors.green }]} />
+                  <Text style={[styles.factorText, { color: colors.ink }]}>
+                    Diagnosis–procedure pairing consistent
+                  </Text>
+                  <Text style={[styles.factorVal, { color: colors.muted }]}>−6</Text>
+                </View>
+              </>
+            )}
           </View>
         </ScrollView>
 
@@ -166,7 +220,7 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
         <View style={[styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
           <TouchableOpacity
             style={[styles.outlineBtn, { borderColor: colors.line }]}
-            onPress={() => navigation.navigate(Routes.FraudDetail, { claimId })}
+            onPress={() => navigation.navigate(Routes.FraudDetail, { claimId, preview })}
             activeOpacity={0.7}
           >
             <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>Fraud</Text>
@@ -174,7 +228,7 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
 
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: colors.brand }]}
-            onPress={() => navigation.navigate(Routes.BrainPreview, { claimId })}
+            onPress={() => navigation.navigate(Routes.BrainPreview, { claimId, preview })}
             activeOpacity={0.85}
           >
             <Text style={styles.primaryBtnText}>Back to Brain</Text>

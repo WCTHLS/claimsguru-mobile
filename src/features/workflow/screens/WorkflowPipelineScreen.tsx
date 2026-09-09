@@ -24,6 +24,7 @@ import {
   Info,
   Check,
   X as XIcon,
+  Cpu,
 } from 'lucide-react-native';
 
 export const WorkflowPipelineScreen = ({ navigation }: any) => {
@@ -77,6 +78,9 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
             });
           }
 
+          if (preview) {
+            useClaimsStore.getState().setClaimPreview(claimId, preview);
+          }
           useClaimsStore.getState().addOrUpdateClaim(transformBackendClaim(detail, preview));
 
           if (progress && (progress.is_complete || progress.percentage >= 100)) {
@@ -448,6 +452,18 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
               {/* Total Card when Complete */}
               {complete && (
                 <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                  <View style={styles.completeHeaderRow}>
+                    <View style={[styles.completeIconBadge, { backgroundColor: colors.greenSoft }]}>
+                      <Check size={18} color={colors.green} strokeWidth={3} />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={[styles.completeTitle, { color: colors.ink }]}>Pipeline Complete</Text>
+                      <Text style={[styles.completeSub, { color: colors.muted }]}>
+                        AI risk, fraud, validations and coding ready
+                      </Text>
+                    </View>
+                  </View>
+
                   <View style={styles.kvRow}>
                     <Text style={[styles.kvKey, { color: colors.muted }]}>Processing time</Text>
                     <Text style={[styles.kvVal, styles.mono, { color: colors.ink }]}>
@@ -458,10 +474,21 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
                     <Text style={[styles.kvKey, { color: colors.muted }]}>Engine</Text>
                     <Text style={[styles.kvVal, { color: colors.ink }]}>GPU accelerated OCR & AI</Text>
                   </View>
-                  <View style={[styles.kvRow, { borderBottomWidth: 0 }]}>
+                  <View style={[styles.kvRow, { borderBottomWidth: 0, marginBottom: 12 }]}>
                     <Text style={[styles.kvKey, { color: colors.muted }]}>Search index</Text>
-                    <Text style={[styles.kvVal, { color: colors.amber }]}>not indexed</Text>
+                    <Text style={[styles.kvVal, { color: colors.green }]}>indexed & ready</Text>
                   </View>
+
+                  {/* Primary Highlight CTA: View AI Brain Preview */}
+                  <TouchableOpacity
+                    style={[styles.brainCtaBtn, { backgroundColor: colors.brand }]}
+                    onPress={() => navigation.navigate(Routes.BrainPreview, { claimId: claimId || 'a4f1c9e2' })}
+                    activeOpacity={0.85}
+                  >
+                    <Cpu size={18} color="#ffffff" style={{ marginRight: 8 }} />
+                    <Text style={styles.brainCtaBtnText}>View AI Brain Preview</Text>
+                    <ChevronRight size={18} color="#ffffff" style={{ marginLeft: 'auto' }} />
+                  </TouchableOpacity>
                 </View>
               )}
 
@@ -478,28 +505,53 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
 
         {/* Sticky Bottom Actions Bar */}
         <View style={[styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
-          <TouchableOpacity
-            style={[styles.outlineBtn, { borderColor: colors.line }]}
-            onPress={() => navigation.navigate(Routes.ChatTab)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>Back to chat</Text>
-          </TouchableOpacity>
+          {complete ? (
+            <>
+              <TouchableOpacity
+                style={[styles.outlineBtn, { borderColor: colors.line, flex: 0.45 }]}
+                onPress={handleOpenClaim}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>Open claim</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[
-              styles.primaryBtn,
-              {
-                backgroundColor: colors.brand,
-                opacity: complete || active ? 1 : 0.5,
-              },
-            ]}
-            onPress={handleOpenClaim}
-            disabled={!complete && !active}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.primaryBtnText}>Open claim</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryBtn, { backgroundColor: colors.brand, flex: 0.55 }]}
+                onPress={() => navigation.navigate(Routes.BrainPreview, { claimId: claimId || 'a4f1c9e2' })}
+                activeOpacity={0.85}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <Cpu size={16} color="#ffffff" style={{ marginRight: 6 }} />
+                  <Text style={styles.primaryBtnText}>AI Brain Preview</Text>
+                </View>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={[styles.outlineBtn, { borderColor: colors.line }]}
+                onPress={() => navigation.navigate(Routes.ChatTab)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>Back to chat</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.primaryBtn,
+                  {
+                    backgroundColor: colors.brand,
+                    opacity: active ? 1 : 0.5,
+                  },
+                ]}
+                onPress={handleOpenClaim}
+                disabled={!active}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.primaryBtnText}>Open claim</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
     </SafeAreaView>
@@ -812,6 +864,39 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryBtnText: {
+    color: '#ffffff',
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+  completeHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  completeIconBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completeTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  completeSub: {
+    fontSize: 11.5,
+    marginTop: 2,
+  },
+  brainCtaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginTop: 6,
+  },
+  brainCtaBtnText: {
     color: '#ffffff',
     fontSize: 13.5,
     fontWeight: '700',

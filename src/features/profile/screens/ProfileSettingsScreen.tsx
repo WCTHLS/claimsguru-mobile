@@ -26,7 +26,7 @@ import { Routes } from '../../../app/navigation/routes';
 export const ProfileSettingsScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { colors, isDark, toggleTheme } = useTheme();
-  const { role, userName, organization } = useAuthStore();
+  const { role, userName, userEmail, policyNumber, organization } = useAuthStore();
 
   const [biometric, setBiometric] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
@@ -41,14 +41,15 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
   const currentRole = role || 'submitter';
 
   // Calculate initials from user name
-  const initials = userName
-    ? userName
-        .split(' ')
-        .map(n => n[0])
-        .join('')
-        .toUpperCase()
-        .substring(0, 2)
-    : 'SA';
+  const getInitials = (name?: string) => {
+    if (!name || !name.trim()) return 'JD';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
+  const initials = getInitials(userName);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
@@ -80,7 +81,7 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
           {/* User Name & Department */}
           <Text style={[styles.userName, { color: colors.ink }]}>{userName}</Text>
           <Text style={[styles.userDepartment, { color: colors.muted }]}>
-            {organization || 'Claims operations'}
+            {userEmail}{policyNumber ? ` · Policy ${policyNumber}` : ''}
           </Text>
 
           {/* Role Badge - Single Role */}

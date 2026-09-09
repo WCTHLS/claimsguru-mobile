@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { claimsApi } from '../features/claims/services/claimsApi';
+import { useAuthStore } from './useAuthStore';
 
 export interface UploadFileItem {
   id: string;
@@ -166,9 +167,11 @@ export const useUploadStore = create<UploadState>((set, get) => ({
     }));
 
     try {
+      const auth = useAuthStore.getState();
       const res = await claimsApi.uploadClaim(filePayloads, {
-        policyId: options?.policyId || 'SAMPLE-PH-77421',
-        patientId: options?.patientId || 'patient_01',
+        policyId: options?.policyId || auth.policyNumber || 'P-0007401',
+        patientId: options?.patientId || auth.userId || 'ec78998a-0228-434a-84f4-e08b4b7417e2',
+        email: auth.userEmail || 'sample@gmail.com',
         force: false,
       });
 

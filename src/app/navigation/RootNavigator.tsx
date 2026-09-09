@@ -35,13 +35,14 @@ export const RootNavigator = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator
+        initialRouteName={Routes.SignIn}
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: colors.bg },
         }}
       >
-        <Stack.Screen name="MainTabs" component={TabNavigator} />
         <Stack.Screen name={Routes.SignIn} component={SignInScreen} />
+        <Stack.Screen name="MainTabs" component={TabNavigator} />
         <Stack.Screen name={Routes.SignUp} component={SignUpScreen} />
 
         <Stack.Screen

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -54,6 +54,7 @@ import { useChatStore } from '../../../state/useChatStore';
 import { useUploadStore, UploadFileItem } from '../../../state/useUploadStore';
 import { usePipelineStore } from '../../../state/usePipelineStore';
 import { useAuthStore } from '../../../state/useAuthStore';
+import { fetchUserProfile } from '../../../core/api/authApi';
 import { Routes } from '../../../app/navigation/routes';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -72,8 +73,8 @@ export interface FeatureDef {
 }
 
 export const ALL_FEATURES: FeatureDef[] = [
-  { id: 'signin', g: 'Access', nav: Routes.SignIn, n: 'Sign in', d: 'Keycloak SSO · PKCE · JWT fallback', iconName: 'lock' },
-  { id: 'signup', g: 'Access', nav: Routes.SignUp, n: 'Request access', d: 'TPA onboarding · role request', iconName: 'user-plus' },
+  { id: 'signin', g: 'Access', nav: Routes.SignIn, n: 'Sign in', d: 'Patient portal sign in · local & Entra', iconName: 'lock' },
+  { id: 'signup', g: 'Access', nav: Routes.SignUp, n: 'Register', d: 'Patient account creation · insurance profile', iconName: 'user-plus' },
   { id: 'chat', g: 'Chat', nav: Routes.ChatTab, n: 'Chat', d: 'AI claims assistant & document Q&A', iconName: 'message-square' },
   { id: 'sessions', g: 'Chat', nav: Routes.SessionsTab, n: 'History', d: 'Conversation history & saved sessions', iconName: 'clock' },
   { id: 'claims', g: 'Claims', nav: Routes.ClaimsTab, n: 'Claims', d: 'Active & processed claims list', iconName: 'file-text' },
@@ -101,10 +102,26 @@ export const ChatHomeScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { colors, isDark, toggleTheme } = useTheme();
   const { messages, sendMessage } = useChatStore();
-  const { files, addFile } = useUploadStore();
+  const { files, addFile, uploadToBackend } = useUploadStore();
   const { active, startPipeline } = usePipelineStore();
-  const { role, userName, userEmail, signOut } = useAuthStore();
-  const firstName = userName ? userName.split(' ')[0] : 'Shaikh';
+  const { role, userName, userEmail, userId, signOut } = useAuthStore();
+
+  useEffect(() => {
+    if (userEmail || userId) {
+      fetchUserProfile(userId || userEmail).catch(() => {});
+    }
+  }, [userEmail, userId]);
+
+  const getInitials = (name?: string) => {
+    if (!name || !name.trim()) return 'JD';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
+  const userInitials = getInitials(userName);
+  const firstName = userName ? userName.split(' ')[0] : 'Jhon';
 
   const [input, setInput] = useState('');
   const [isCardExpanded, setIsCardExpanded] = useState(true);
@@ -137,9 +154,21 @@ export const ChatHomeScreen = ({ navigation }: any) => {
     }
   };
 
-  const handleStartPipeline = () => {
-    startPipeline(files);
-    sendMessage('Uploaded 1 document — start the pipeline');
+  const handleStartPipeline = async () => {
+    if (files.length > 0) {
+      showToast('Starting pipeline upload...');
+      try {
+        const { claimId } = await uploadToBackend();
+        startPipeline(files, claimId);
+        sendMessage(`Uploaded ${files.length} document${files.length > 1 ? 's' : ''} — started pipeline for claim ${claimId.slice(0, 8)}`);
+      } catch {
+        startPipeline(files);
+        sendMessage('Uploaded 1 document — start the pipeline');
+      }
+    } else {
+      startPipeline(files);
+      sendMessage('Uploaded 1 document — start the pipeline');
+    }
   };
 
   const handleNavigateFeature = (feat: FeatureDef) => {
@@ -225,7 +254,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
           <TouchableOpacity style={styles.avatarBtn} onPress={() => setShowProfileModal(true)}>
             <View style={[styles.avatar, { backgroundColor: '#e6f4f1' }]}>
               <Text style={[styles.avatarText, { color: '#0d9488' }]}>
-                {firstName.substring(0, 2).toUpperCase()}
+                {userInitials}
               </Text>
             </View>
           </TouchableOpacity>
@@ -683,7 +712,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
             <View style={styles.sheetProfileHeader}>
               <View style={[styles.sheetAvatar, { backgroundColor: '#e6f4f1' }]}>
                 <Text style={[styles.sheetAvatarText, { color: '#0d9488' }]}>
-                  {firstName.substring(0, 2).toUpperCase()}
+                  {userInitials}
                 </Text>
               </View>
               <View style={styles.sheetProfileInfo}>
@@ -750,6 +779,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
                 onPress={() => {
                   setShowProfileModal(false);
                   signOut();
+                  navigation.navigate(Routes.SignIn);
                 }}
               >
                 <View style={styles.sheetMenuLeft}>

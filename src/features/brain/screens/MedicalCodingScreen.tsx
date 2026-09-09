@@ -11,6 +11,7 @@ import {
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { Routes } from '../../../app/navigation/routes';
 import { ICD_CODES, CPT_CODES, CodeItem } from '../../../mocks/codes.mock';
+import { useClaimsStore } from '../../../state/useClaimsStore';
 import { claimsApi } from '../../claims/services/claimsApi';
 import { apiClient } from '../../../core/api/client';
 import {
@@ -31,26 +32,40 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
   const [realIcdCodes, setRealIcdCodes] = useState<CodeItem[] | null>(null);
   const [realCptCodes, setRealCptCodes] = useState<CodeItem[] | null>(null);
 
+  const formatCodesFromPreview = (preview: any) => {
+    if (preview?.icd_codes && preview.icd_codes.length > 0) {
+      const formattedIcd: CodeItem[] = preview.icd_codes.map((c: any) => ({
+        code: c.code,
+        desc: c.description || 'Diagnostic code',
+        meta: `confidence ${c.confidence ? c.confidence.toFixed(2) : '0.85'}`,
+        confidence: c.confidence || 0.85,
+      }));
+      setRealIcdCodes(formattedIcd);
+    }
+    if (preview?.cpt_codes && preview.cpt_codes.length > 0) {
+      const formattedCpt: CodeItem[] = preview.cpt_codes.map((c: any) => ({
+        code: c.code,
+        desc: c.description || 'Procedure code',
+        meta: c.estimated_cost
+          ? `est. ₹${Number(c.estimated_cost).toLocaleString('en-IN')}`
+          : `confidence ${c.confidence ? c.confidence.toFixed(2) : '0.80'}`,
+        confidence: c.confidence || 0.80,
+      }));
+      setRealCptCodes(formattedCpt);
+    }
+  };
+
   useEffect(() => {
-    if (claimId && claimId.length > 20) {
+    const passedPreview = route?.params?.preview || useClaimsStore.getState().claimPreviews[claimId];
+    if (passedPreview) {
+      formatCodesFromPreview(passedPreview);
+    }
+
+    if (claimId) {
       claimsApi.getClaimPreview(claimId).then(preview => {
-        if (preview && preview.icd_codes && preview.icd_codes.length > 0) {
-          const formattedIcd: CodeItem[] = preview.icd_codes.map((c: any) => ({
-            code: c.code,
-            desc: c.description || 'Diagnostic code',
-            meta: `confidence ${c.confidence ? c.confidence.toFixed(2) : '0.85'}`,
-            confidence: c.confidence || 0.85,
-          }));
-          setRealIcdCodes(formattedIcd);
-        }
-        if (preview && preview.cpt_codes && preview.cpt_codes.length > 0) {
-          const formattedCpt: CodeItem[] = preview.cpt_codes.map((c: any) => ({
-            code: c.code,
-            desc: c.description || 'Procedure code',
-            meta: c.estimated_cost ? `est. Rs. ${c.estimated_cost}` : `confidence ${c.confidence ? c.confidence.toFixed(2) : '0.80'}`,
-            confidence: c.confidence || 0.80,
-          }));
-          setRealCptCodes(formattedCpt);
+        if (preview) {
+          formatCodesFromPreview(preview);
+          useClaimsStore.getState().setClaimPreview(claimId, preview);
         }
       }).catch(err => {
         console.log('[MedicalCodingScreen] Error fetching codes:', err);
@@ -102,7 +117,10 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
           <ArrowLeft size={20} color={colors.ink} />
         </TouchableOpacity>
 
-        <Text style={[styles.title, { color: colors.ink }]}>Medical coding</Text>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={[styles.title, { color: colors.ink }]}>Medical coding</Text>
+          <Text style={{ fontSize: 11, color: colors.muted }}>Claim {claimId.slice(0, 8)}</Text>
+        </View>
         <View style={{ width: 34 }} />
       </View>
 

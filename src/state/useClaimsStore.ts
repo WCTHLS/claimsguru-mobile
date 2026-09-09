@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { ClaimItem, INITIAL_CLAIMS } from '../mocks/claims.mock';
-import { claimsApi } from '../features/claims/services/claimsApi';
+import { claimsApi, BackendClaimPreview } from '../features/claims/services/claimsApi';
 
 interface ClaimsState {
   claims: ClaimItem[];
@@ -10,6 +10,7 @@ interface ClaimsState {
   refreshing: boolean;
   backendConnected: boolean;
   error: string | null;
+  claimPreviews: Record<string, BackendClaimPreview>;
 
   setFilter: (filter: string) => void;
   selectClaim: (id: string) => void;
@@ -18,6 +19,8 @@ interface ClaimsState {
   deleteClaim: (id: string) => Promise<void>;
   addOrUpdateClaim: (claim: Partial<ClaimItem> & { id: string }) => void;
   getClaim: (id: string) => ClaimItem | undefined;
+  setClaimPreview: (id: string, preview: BackendClaimPreview) => void;
+  fetchClaimPreview: (id: string) => Promise<BackendClaimPreview | null>;
 }
 
 export const useClaimsStore = create<ClaimsState>((set, get) => ({
@@ -28,9 +31,31 @@ export const useClaimsStore = create<ClaimsState>((set, get) => ({
   refreshing: false,
   backendConnected: false,
   error: null,
+  claimPreviews: {},
 
   setFilter: filter => set({ filter }),
   selectClaim: id => set({ selectedClaimId: id }),
+
+  setClaimPreview: (id, preview) =>
+    set(state => ({
+      claimPreviews: { ...state.claimPreviews, [id]: preview },
+    })),
+
+  fetchClaimPreview: async id => {
+    try {
+      const preview = await claimsApi.getClaimPreview(id);
+      if (preview) {
+        set(state => ({
+          claimPreviews: { ...state.claimPreviews, [id]: preview },
+        }));
+        return preview;
+      }
+      return null;
+    } catch (err) {
+      console.warn(`[useClaimsStore] Failed to fetch preview for claim ${id}:`, err);
+      return null;
+    }
+  },
 
   loadClaims: async (refresh = false) => {
     if (refresh) {

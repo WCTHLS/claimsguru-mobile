@@ -203,6 +203,12 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
           });
         }
 
+        if (preview) {
+          try {
+            useClaimsStore.getState().setClaimPreview(targetClaimId, preview);
+          } catch {}
+        }
+
         if (detail) {
           try {
             useClaimsStore.getState().addOrUpdateClaim(transformBackendClaim(detail, preview));

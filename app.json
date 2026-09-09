@@ -2,6 +2,7 @@
   "expo": {
     "name": "Claims Guru",
     "slug": "claimsguru-mobile",
+    "scheme": "claimsguru",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",

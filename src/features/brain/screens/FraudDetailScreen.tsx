@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,17 +11,40 @@ import {
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { Routes } from '../../../app/navigation/routes';
 import { FRAUD_FAMILIES } from '../../../mocks/codes.mock';
+import { useClaimsStore } from '../../../state/useClaimsStore';
+import { claimsApi, BackendClaimPreview } from '../../claims/services/claimsApi';
 import { ArrowLeft } from 'lucide-react-native';
 
 export const FraudDetailScreen = ({ route, navigation }: any) => {
   const { colors } = useTheme();
   const claimId = route?.params?.claimId || 'a4f1c9e2';
 
+  const cachedPreview = useClaimsStore(s => s.claimPreviews[claimId]);
+  const [preview, setPreview] = useState<BackendClaimPreview | null>(route?.params?.preview || cachedPreview || null);
+
+  useEffect(() => {
+    if (!preview && claimId) {
+      claimsApi.getClaimPreview(claimId).then(res => {
+        if (res) {
+          setPreview(res);
+          useClaimsStore.getState().setClaimPreview(claimId, res);
+        }
+      }).catch(() => null);
+    }
+  }, [claimId]);
+
+  const rawFraud = preview?.fraud_analysis?.risk_level || preview?.predictions?.[0]?.risk_category || 'MED';
+  const isHigh = rawFraud.toUpperCase().includes('HIGH');
+  const isLow = rawFraud.toUpperCase().includes('LOW');
+  const fraudCategory = isHigh ? 'HIGH' : isLow ? 'LOW' : 'MEDIUM';
+  const fraudColor = isHigh ? colors.red : isLow ? colors.green : colors.amber;
+  const fraudSoftBg = isHigh ? colors.redSoft : isLow ? colors.greenSoft : colors.amberSoft;
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
 
-      {/* App Bar matching Screen 11 */}
+      {/* App Bar */}
       <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
         <TouchableOpacity
           style={styles.iconBtn}
@@ -31,10 +54,13 @@ export const FraudDetailScreen = ({ route, navigation }: any) => {
           <ArrowLeft size={20} color={colors.ink} />
         </TouchableOpacity>
 
-        <Text style={[styles.title, { color: colors.ink }]}>Fraud assessment</Text>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={[styles.title, { color: colors.ink }]}>Fraud assessment</Text>
+          <Text style={{ fontSize: 11, color: colors.muted }}>Claim {claimId.slice(0, 8)}</Text>
+        </View>
 
-        <View style={[styles.pillBadge, { backgroundColor: colors.amberSoft }]}>
-          <Text style={[styles.pillText, { color: colors.amber }]}>MEDIUM</Text>
+        <View style={[styles.pillBadge, { backgroundColor: fraudSoftBg }]}>
+          <Text style={[styles.pillText, { color: fraudColor }]}>{fraudCategory}</Text>
         </View>
       </View>
 
@@ -48,36 +74,40 @@ export const FraudDetailScreen = ({ route, navigation }: any) => {
             <View style={styles.secRow}>
               <Text style={[styles.secTitle, { color: colors.ink }]}>Hybrid score</Text>
               <Text style={[styles.secMeta, { color: colors.muted }]}>
-                10 rules + IsolationForest + optional LLM
+                10 rules + IsolationForest + synthetic LLM
               </Text>
             </View>
 
             {/* Segmented Risk Bar */}
             <View style={styles.segBar}>
-              <View style={[styles.segPiece, { width: '34%', backgroundColor: colors.green }]} />
-              <View style={[styles.segPiece, { width: '33%', backgroundColor: colors.amber }]} />
-              <View style={[styles.segPiece, { width: '33%', backgroundColor: colors.red }]} />
+              <View style={[styles.segPiece, { width: '34%', backgroundColor: isLow ? colors.green : colors.line }]} />
+              <View style={[styles.segPiece, { width: '33%', backgroundColor: !isLow && !isHigh ? colors.amber : colors.line }]} />
+              <View style={[styles.segPiece, { width: '33%', backgroundColor: isHigh ? colors.red : colors.line }]} />
             </View>
 
             <View style={styles.segLabelsRow}>
-              <Text style={[styles.segLabel, { color: colors.muted }]}>LOW</Text>
-              <Text style={[styles.segLabel, { color: colors.amber, fontWeight: '700' }]}>
+              <Text style={[styles.segLabel, { color: isLow ? colors.green : colors.muted, fontWeight: isLow ? '700' : '400' }]}>
+                LOW
+              </Text>
+              <Text style={[styles.segLabel, { color: !isLow && !isHigh ? colors.amber : colors.muted, fontWeight: !isLow && !isHigh ? '700' : '400' }]}>
                 MEDIUM
               </Text>
-              <Text style={[styles.segLabel, { color: colors.muted }]}>HIGH</Text>
+              <Text style={[styles.segLabel, { color: isHigh ? colors.red : colors.muted, fontWeight: isHigh ? '700' : '400' }]}>
+                HIGH
+              </Text>
             </View>
           </View>
 
           {/* Rule Families Header */}
           <View style={styles.secRow}>
             <Text style={[styles.secTitle, { color: colors.ink }]}>Rule families</Text>
-            <Text style={[styles.sampleLabel, { color: colors.muted }]}>FINDINGS ARE SAMPLE</Text>
+            <Text style={[styles.sampleLabel, { color: colors.muted }]}>DETECTION SIGNALS</Text>
           </View>
 
           {/* Rule Families List Card */}
           <View style={[styles.card, styles.listCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
             {FRAUD_FAMILIES.map((item, idx) => {
-              const isClear = item.status === 'ok';
+              const isClear = isLow ? true : (item.family === 'velocity' ? false : item.status === 'ok');
               const isLast = idx === FRAUD_FAMILIES.length - 1;
 
               return (
@@ -127,15 +157,15 @@ export const FraudDetailScreen = ({ route, navigation }: any) => {
         <View style={[styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
           <TouchableOpacity
             style={[styles.outlineBtn, { borderColor: colors.line }]}
-            onPress={() => navigation.navigate(Routes.ValidationRules, { claimId })}
+            onPress={() => navigation.navigate(Routes.ValidationRules, { claimId, preview })}
             activeOpacity={0.7}
           >
-            <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>See R011</Text>
+            <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>Validation</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: colors.brand }]}
-            onPress={() => navigation.navigate(Routes.BrainPreview, { claimId })}
+            onPress={() => navigation.navigate(Routes.BrainPreview, { claimId, preview })}
             activeOpacity={0.85}
           >
             <Text style={styles.primaryBtnText}>Back to Brain</Text>

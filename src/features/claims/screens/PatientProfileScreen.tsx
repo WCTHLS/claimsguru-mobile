@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,15 +10,43 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Eye, EyeOff, Info, ChevronRight, FileText } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
+import { useAuthStore } from '../../../state/useAuthStore';
+import { fetchUserProfile } from '../../../core/api/authApi';
 import { Routes } from '../../../app/navigation/routes';
 import { formatINR } from '../../../core/utils/currency';
 
 export const PatientProfileScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const {
+    userName,
+    userEmail,
+    userId,
+    policyNumber,
+    phone,
+    dob,
+    gender,
+    sumInsured,
+  } = useAuthStore();
 
   const [isMasked, setIsMasked] = useState(true);
   const [activeTab, setActiveTab] = useState<'claims' | 'docs' | 'flags'>('claims');
+
+  useEffect(() => {
+    if (userEmail || userId) {
+      fetchUserProfile(userId || userEmail).catch(() => {});
+    }
+  }, [userEmail, userId]);
+
+  const getInitials = (name?: string) => {
+    if (!name || !name.trim()) return 'JD';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
+  const initials = getInitials(userName);
 
   const maskVal = (type: 'policy' | 'phone' | 'email' | 'mrn' | 'dob', raw: string) => {
     if (!isMasked) return raw;
@@ -54,11 +82,11 @@ export const PatientProfileScreen = ({ navigation }: any) => {
         {/* Patient Identity Card */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line, alignItems: 'center' }]}>
           <View style={[styles.avatarBox, { backgroundColor: colors.brandSoft }]}>
-            <Text style={[styles.avatarText, { color: colors.brandDark }]}>RM</Text>
+            <Text style={[styles.avatarText, { color: colors.brandDark }]}>{initials}</Text>
           </View>
-          <Text style={[styles.patientName, { color: colors.ink }]}>R. Menon</Text>
+          <Text style={[styles.patientName, { color: colors.ink }]}>{userName}</Text>
           <Text style={[styles.patientSub, { color: colors.muted }]}>
-            54 · Male · born {maskVal('dob', '18 Apr 1972')}
+            {gender || 'Male'} · born {maskVal('dob', dob || '08 Jun 2000')}
           </Text>
 
           <View style={styles.pillsRow}>
@@ -69,11 +97,11 @@ export const PatientProfileScreen = ({ navigation }: any) => {
               <Text style={[styles.tagPillText, { color: colors.green }]}>KYC verified</Text>
             </View>
             <View style={[styles.tagPill, { backgroundColor: colors.amberSoft }]}>
-              <Text style={[styles.tagPillText, { color: colors.amber }]}>Fraud MEDIUM</Text>
+              <Text style={[styles.tagPillText, { color: colors.amber }]}>Fraud LOW</Text>
             </View>
           </View>
           <Text style={[styles.maskNote, { color: colors.muted }]}>
-            {isMasked ? 'PHI masked · tap the eye to reveal' : 'PHI revealed · DOB, policy, phone, email, MRN'}
+            {isMasked ? 'PHI masked · tap the eye to reveal' : 'PHI revealed · DOB, policy, phone, email, UID'}
           </Text>
         </View>
 
@@ -99,7 +127,7 @@ export const PatientProfileScreen = ({ navigation }: any) => {
           <View style={styles.kvRow}>
             <Text style={[styles.kvKey, { color: colors.muted }]}>Policy number</Text>
             <Text style={[styles.kvVal, styles.mono, { color: colors.ink }]}>
-              {maskVal('policy', 'SAMPLE-PH-77421')}
+              {maskVal('policy', policyNumber || 'P-0007401')}
             </Text>
           </View>
           <View style={styles.kvRow}>
@@ -109,19 +137,19 @@ export const PatientProfileScreen = ({ navigation }: any) => {
           <View style={styles.kvRow}>
             <Text style={[styles.kvKey, { color: colors.muted }]}>Phone</Text>
             <Text style={[styles.kvVal, { color: colors.ink }]}>
-              {maskVal('phone', '+91 98450 12345')}
+              {maskVal('phone', phone || '+91 98450 12345')}
             </Text>
           </View>
           <View style={styles.kvRow}>
             <Text style={[styles.kvKey, { color: colors.muted }]}>Email</Text>
             <Text style={[styles.kvVal, { color: colors.ink }]}>
-              {maskVal('email', 'r.menon@sample.in')}
+              {maskVal('email', userEmail || 'sample@gmail.com')}
             </Text>
           </View>
           <View style={[styles.kvRow, { borderBottomWidth: 0 }]}>
-            <Text style={[styles.kvKey, { color: colors.muted }]}>MRN</Text>
+            <Text style={[styles.kvKey, { color: colors.muted }]}>User ID</Text>
             <Text style={[styles.kvVal, styles.mono, { color: colors.ink }]}>
-              {maskVal('mrn', 'MRN-204817')}
+              {maskVal('mrn', userId ? `UID-${userId.slice(0, 8).toUpperCase()}` : 'UID-EC78998A')}
             </Text>
           </View>
         </View>
@@ -130,7 +158,7 @@ export const PatientProfileScreen = ({ navigation }: any) => {
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
             <Text style={[styles.sectionTitle, { color: colors.ink }]}>Sum insured</Text>
-            <Text style={[styles.sumSub, { color: colors.muted }]}>Rs. 2,22,700 of Rs. 5,00,000</Text>
+            <Text style={[styles.sumSub, { color: colors.muted }]}>Rs. 2,22,700 of {formatINR(sumInsured || 500000)}</Text>
           </View>
           <View style={styles.segBar}>
             <View style={[styles.seg, { flex: 0.08, backgroundColor: colors.green }]} />

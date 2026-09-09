@@ -7,10 +7,13 @@ import { Platform } from 'react-native';
  * In Android emulator, 10.0.2.2 maps to host machine localhost.
  * On real devices with 'adb reverse tcp:8000 tcp:8000', localhost:8000 works.
  */
-const DEFAULT_HOST = Platform.select({
-  android: 'http://10.0.2.2:8000',
-  default: 'http://localhost:8000',
-});
+const ENV_URL = process.env.EXPO_PUBLIC_API_URL;
+const DEFAULT_HOST =
+  ENV_URL ||
+  Platform.select({
+    android: 'http://10.0.2.2:8000',
+    default: 'http://localhost:8000',
+  });
 
 export let API_BASE_URL = DEFAULT_HOST || 'http://localhost:8000';
 

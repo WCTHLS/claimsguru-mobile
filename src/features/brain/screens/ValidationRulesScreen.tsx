@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,13 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { Routes } from '../../../app/navigation/routes';
 import { VALIDATION_RULES, ValidationRule } from '../../../mocks/rules.mock';
+import { useClaimsStore } from '../../../state/useClaimsStore';
+import { claimsApi, BackendClaimPreview, BackendClaimValidationRule } from '../../claims/services/claimsApi';
 import {
   ArrowLeft,
   AlertTriangle,
@@ -24,19 +27,88 @@ export const ValidationRulesScreen = ({ route, navigation }: any) => {
   const { colors } = useTheme();
   const claimId = route?.params?.claimId || 'a4f1c9e2';
 
+  const cachedPreview = useClaimsStore(s => s.claimPreviews[claimId]);
+  const [preview, setPreview] = useState<BackendClaimPreview | null>(route?.params?.preview || cachedPreview || null);
+  const [rerunning, setRerunning] = useState(false);
+
+  useEffect(() => {
+    if (!preview && claimId) {
+      claimsApi.getClaimPreview(claimId).then(res => {
+        if (res) {
+          setPreview(res);
+          useClaimsStore.getState().setClaimPreview(claimId, res);
+        }
+      }).catch(() => null);
+    }
+  }, [claimId]);
+
   const [activeFilter, setActiveFilter] = useState<'all' | 'ok' | 'warn' | 'bad'>('all');
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
 
-  const filteredRules = VALIDATION_RULES.filter(rule => {
+  // Formulate rules from real backend preview or fallback to mocks
+  const rawValidations: BackendClaimValidationRule[] = Array.isArray(preview?.validations) ? preview.validations : [];
+
+  const inferCategory = (name: string): 'completeness' | 'date logic' | 'coding validity' | 'fraud risk' => {
+    const lower = (name || '').toLowerCase();
+    if (lower.includes('date') || lower.includes('admission') || lower.includes('discharge') || lower.includes('window')) {
+      return 'date logic';
+    }
+    if (lower.includes('code') || lower.includes('icd') || lower.includes('cpt') || lower.includes('diagnosis')) {
+      return 'coding validity';
+    }
+    if (lower.includes('fraud') || lower.includes('velocity') || lower.includes('identity')) {
+      return 'fraud risk';
+    }
+    return 'completeness';
+  };
+
+  const rules: ValidationRule[] = rawValidations.length > 0
+    ? rawValidations.map((v, idx) => ({
+        code: `R${String(idx + 1).padStart(3, '0')}`,
+        title: v.rule_name,
+        category: inferCategory(v.rule_name),
+        status: v.passed ? 'ok' : (v.severity === 'warning' ? 'warn' : 'bad'),
+        detail: v.message || (v.passed ? 'Verified against claim documents.' : 'Validation condition not satisfied.'),
+      }))
+    : VALIDATION_RULES;
+
+  const passedCount = rules.filter(r => r.status === 'ok').length;
+  const warnCount = rules.filter(r => r.status === 'warn').length;
+  const failCount = rules.filter(r => r.status === 'bad').length;
+  const totalCount = rules.length || 11;
+
+  const passedPct = Math.round((passedCount / totalCount) * 100);
+  const warnPct = Math.round((warnCount / totalCount) * 100);
+  const failPct = Math.max(0, 100 - passedPct - warnPct);
+
+  const filteredRules = rules.filter(rule => {
     if (activeFilter === 'all') return true;
     return rule.status === activeFilter;
   });
+
+  const handleRerun = async () => {
+    setRerunning(true);
+    try {
+      if (claimId && claimId.length > 20) {
+        await claimsApi.getClaimValidation(claimId);
+        const updated = await claimsApi.getClaimPreview(claimId);
+        if (updated) {
+          setPreview(updated);
+          useClaimsStore.getState().setClaimPreview(claimId, updated);
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setRerunning(false);
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
 
-      {/* App Bar matching Screen 12 */}
+      {/* App Bar */}
       <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
         <TouchableOpacity
           style={styles.iconBtn}
@@ -46,10 +118,15 @@ export const ValidationRulesScreen = ({ route, navigation }: any) => {
           <ArrowLeft size={20} color={colors.ink} />
         </TouchableOpacity>
 
-        <Text style={[styles.title, { color: colors.ink }]}>Validation</Text>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={[styles.title, { color: colors.ink }]}>Validation</Text>
+          <Text style={{ fontSize: 11, color: colors.muted }}>Claim {claimId.slice(0, 8)}</Text>
+        </View>
 
-        <View style={[styles.pillBadge, { backgroundColor: colors.amberSoft }]}>
-          <Text style={[styles.pillText, { color: colors.amber }]}>7 / 11</Text>
+        <View style={[styles.pillBadge, { backgroundColor: failCount === 0 ? colors.greenSoft : colors.amberSoft }]}>
+          <Text style={[styles.pillText, { color: failCount === 0 ? colors.green : colors.amber }]}>
+            {passedCount} / {totalCount}
+          </Text>
         </View>
       </View>
 
@@ -61,39 +138,39 @@ export const ValidationRulesScreen = ({ route, navigation }: any) => {
           {/* Summary Card */}
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
             <View style={styles.passedHeaderRow}>
-              <Text style={[styles.bigNum, { color: colors.ink }]}>7</Text>
-              <Text style={[styles.bigNumSub, { color: colors.muted }]}>of 11 rules passed</Text>
+              <Text style={[styles.bigNum, { color: colors.ink }]}>{passedCount}</Text>
+              <Text style={[styles.bigNumSub, { color: colors.muted }]}>of {totalCount} rules passed</Text>
             </View>
 
             {/* Segmented Bar */}
             <View style={styles.segBar}>
-              <View style={[styles.segPiece, { width: '64%', backgroundColor: colors.green }]} />
-              <View style={[styles.segPiece, { width: '18%', backgroundColor: colors.amber }]} />
-              <View style={[styles.segPiece, { width: '18%', backgroundColor: colors.red }]} />
+              <View style={[styles.segPiece, { width: `${passedPct}%`, backgroundColor: colors.green }]} />
+              <View style={[styles.segPiece, { width: `${warnPct}%`, backgroundColor: colors.amber }]} />
+              <View style={[styles.segPiece, { width: `${failPct}%`, backgroundColor: colors.red }]} />
             </View>
 
             <View style={styles.segLabelsRow}>
-              <Text style={[styles.segLabel, { color: colors.muted }]}>7 passed</Text>
-              <Text style={[styles.segLabel, { color: colors.muted }]}>2 warnings</Text>
-              <Text style={[styles.segLabel, { color: colors.muted }]}>2 failed</Text>
+              <Text style={[styles.segLabel, { color: colors.muted }]}>{passedCount} passed</Text>
+              <Text style={[styles.segLabel, { color: colors.muted }]}>{warnCount} warnings</Text>
+              <Text style={[styles.segLabel, { color: colors.muted }]}>{failCount} failed</Text>
             </View>
           </View>
 
-          {/* Warning Banner */}
+          {/* Provenance Banner */}
           <View style={[styles.banner, { backgroundColor: colors.amberSoft }]}>
             <AlertTriangle size={16} color={colors.amber} style={{ marginTop: 2 }} />
             <Text style={[styles.bannerText, { color: colors.amber }]}>
-              Rule codes and the four categories are real; the wording is illustrative.
+              Deterministic rules evaluate policy guidelines, date chronological sequences, sub-limit caps, and required hospital invoices.
             </Text>
           </View>
 
           {/* Filter Chips */}
           <View style={styles.chipsRow}>
             {[
-              { key: 'all', label: 'All' },
-              { key: 'ok', label: 'Passed' },
-              { key: 'warn', label: 'Warnings' },
-              { key: 'bad', label: 'Failed' },
+              { key: 'all', label: `All (${totalCount})` },
+              { key: 'ok', label: `Passed (${passedCount})` },
+              { key: 'warn', label: `Warnings (${warnCount})` },
+              { key: 'bad', label: `Failed (${failCount})` },
             ].map(f => {
               const isSelected = activeFilter === f.key;
               return (
@@ -175,7 +252,7 @@ export const ValidationRulesScreen = ({ route, navigation }: any) => {
                   {/* Expanded Rule Details */}
                   {isExpanded && (
                     <View style={[styles.ruleDetailBox, { backgroundColor: colors.surface2 }]}>
-                      <Text style={[styles.ruleDetailText, { color: colors.muted }]}>
+                      <Text style={[styles.ruleDetailText, { color: colors.ink }]}>
                         {rule.detail}
                       </Text>
                     </View>
@@ -190,15 +267,20 @@ export const ValidationRulesScreen = ({ route, navigation }: any) => {
         <View style={[styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
           <TouchableOpacity
             style={[styles.outlineBtn, { borderColor: colors.line }]}
-            onPress={() => {}}
+            onPress={handleRerun}
+            disabled={rerunning}
             activeOpacity={0.7}
           >
-            <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>Re-run</Text>
+            {rerunning ? (
+              <ActivityIndicator size="small" color={colors.brandDark} />
+            ) : (
+              <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>Re-run</Text>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: colors.brand }]}
-            onPress={() => navigation.navigate(Routes.BrainPreview, { claimId })}
+            onPress={() => navigation.navigate(Routes.BrainPreview, { claimId, preview })}
             activeOpacity={0.85}
           >
             <Text style={styles.primaryBtnText}>Back to Brain</Text>

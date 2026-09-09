@@ -1,6 +1,7 @@
 import { apiClient } from '../../../core/api/client';
 import { API_ENDPOINTS } from '../../../core/api/config';
 import { ClaimItem } from '../../../mocks/claims.mock';
+import { useAuthStore } from '../../../state/useAuthStore';
 
 export interface BackendDocument {
   id: string;
@@ -50,21 +51,78 @@ export interface UploadFilePayload {
   blob?: Blob;
 }
 
+export interface BackendClaimValidationRule {
+  rule_name: string;
+  severity: string;
+  message: string;
+  passed: boolean;
+}
+
+export interface BackendClaimPredictionReason {
+  reason: string;
+  weight: number;
+}
+
+export interface BackendClaimPrediction {
+  rejection_score: number;
+  risk_category?: string;
+  top_reasons?: BackendClaimPredictionReason[];
+}
+
+export interface BackendClaimDocument {
+  id: string;
+  file_name?: string;
+  original_filename?: string;
+  doc_type?: string;
+  display_title?: string;
+  page_count?: number;
+  pages?: string[];
+  ocr_text?: string;
+}
+
+export interface BackendClaimPreviewSummary {
+  patient_name?: string;
+  policy_number?: string;
+  age?: string;
+  gender?: string;
+  hospital?: string;
+  doctor?: string;
+  admission_date?: string;
+  discharge_date?: string;
+  diagnosis?: string;
+  total_amount?: string;
+  icd_count?: number;
+  cpt_count?: number;
+  risk_score?: number | null;
+  validation_passed?: number;
+  validation_total?: number;
+  manual_review_required?: boolean;
+}
+
 export interface BackendClaimPreview {
   claim_id: string;
   status: string;
   policy_id?: string;
   patient_id?: string;
   parsed_fields?: Record<string, any>;
-  icd_codes?: { code: string; description: string; confidence?: number }[];
-  cpt_codes?: any[];
+  icd_codes?: { code: string; description: string; confidence?: number; estimated_cost?: number }[];
+  cpt_codes?: { code: string; description: string; confidence?: number; estimated_cost?: number }[];
   cost_summary?: any;
-  expenses?: any[];
+  expenses?: { category: string; description?: string; amount: number }[];
   expense_total?: number;
   billed_total?: number;
-  predictions?: { rejection_score?: number; risk_category?: string; top_reasons?: any[] }[];
-  validations?: { total_rules?: number; passed?: number; failed?: number };
-  documents?: { id: string; file_name: string; doc_type?: string }[];
+  predictions?: BackendClaimPrediction[];
+  validations?: BackendClaimValidationRule[] | { total_rules?: number; passed?: number; failed?: number };
+  summary?: BackendClaimPreviewSummary;
+  brain_insights?: any[];
+  reimbursement_brain?: any[];
+  fraud_analysis?: {
+    risk_level?: string;
+    risk_score?: number;
+    signals?: Array<{ rule_id?: string; name: string; description?: string; severity?: string; score?: number }>;
+  };
+  fraud_signals?: any[];
+  documents?: BackendClaimDocument[];
 }
 
 export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimPreview | null): ClaimItem {
@@ -235,9 +293,14 @@ export const claimsApi = {
       });
     }
 
-    if (options?.policyId) formData.append('policy_id', options.policyId);
-    if (options?.patientId) formData.append('patient_id', options.patientId);
-    if (options?.email) formData.append('email', options.email);
+    const authState = useAuthStore.getState();
+    const effectivePolicyId = options?.policyId || authState.policyNumber || 'P-0007401';
+    const effectivePatientId = options?.patientId || authState.userId || 'ec78998a-0228-434a-84f4-e08b4b7417e2';
+    const effectiveEmail = options?.email || authState.userEmail || 'sample@gmail.com';
+
+    if (effectivePolicyId) formData.append('policy_id', effectivePolicyId);
+    if (effectivePatientId) formData.append('patient_id', effectivePatientId);
+    if (effectiveEmail) formData.append('email', effectiveEmail);
     formData.append('force', options?.force ? 'true' : 'false');
 
     return apiClient.upload<BackendUploadResponse>(API_ENDPOINTS.claimsUpload(), formData);
