@@ -82,23 +82,51 @@ export const useUploadStore = create<UploadState>((set, get) => ({
   },
 
   addRealFile: file => {
-    const existing = get().files.find(f => f.name === file.name);
-    if (existing) return;
-
     let docType = 'discharge_summary';
     const lower = file.name.toLowerCase();
     if (lower.includes('bill') || lower.includes('invoice') || lower.includes('receipt')) docType = 'hospital_bill';
-    else if (lower.includes('card') || lower.includes('policy')) docType = 'policy_card';
-    else if (lower.includes('lab') || lower.includes('test') || lower.includes('report')) docType = 'lab_report';
-    else if (lower.includes('presc') || lower.includes('rx')) docType = 'prescription';
+    else if (lower.includes('card') || lower.includes('policy') || lower.includes('insurance')) docType = 'policy_card';
+    else if (lower.includes('lab') || lower.includes('test') || lower.includes('report') || lower.includes('pathology')) docType = 'lab_report';
+    else if (lower.includes('presc') || lower.includes('rx') || lower.includes('med')) docType = 'prescription';
+    else if (lower.includes('discharge') || lower.includes('summary')) docType = 'discharge_summary';
+    else if (lower.includes('scan') || lower.includes('xray') || lower.includes('mri') || lower.includes('ct')) docType = 'scan_report';
+    else if (lower.includes('id') || lower.includes('aadhaar') || lower.includes('pan') || lower.includes('passport')) docType = 'id_proof';
+    else docType = 'other';
 
-    const sizeStr = file.size ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : '1.2 MB';
-    const kind = lower.endsWith('.pdf') ? 'digital' : lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') ? 'jpg' : 'digital';
+    const sizeStr = file.size
+      ? file.size < 1024 * 1024
+        ? `${Math.max(1, Math.round(file.size / 1024))} KB`
+        : `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+      : '1.2 MB';
+
+    let kind: 'digital' | 'scanned' | 'jpg' | 'docx' = 'digital';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.webp')) {
+      kind = 'jpg';
+    } else if (lower.endsWith('.doc') || lower.endsWith('.docx')) {
+      kind = 'docx';
+    } else if (lower.includes('scan')) {
+      kind = 'scanned';
+    } else {
+      kind = 'digital';
+    }
+
+    const existing = get().files.find(f => f.name === file.name);
+    if (existing) {
+      set(state => ({
+        files: state.files.map(f =>
+          f.id === existing.id
+            ? { ...f, fileBlob: file.blob, uri: file.uri, size: sizeStr, status: 'ready', pct: 100 }
+            : f
+        ),
+      }));
+      get().logEvent('FILE_UPDATED', `${file.name} replaced`);
+      return;
+    }
 
     const newFile: UploadFileItem = {
       id: Math.random().toString(36).substring(7),
       name: file.name,
-      kind: kind as any,
+      kind,
       docType,
       conf: 0.94,
       size: sizeStr,

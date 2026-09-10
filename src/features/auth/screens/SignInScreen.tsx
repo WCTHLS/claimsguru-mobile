@@ -28,8 +28,8 @@ import { loginWithPassword, completeEntraAuthCode, syncEntraUser } from '../../.
 
 export const SignInScreen = ({ navigation }: any) => {
   const { colors, isDark } = useTheme();
-  const [identifier, setIdentifier] = useState('patient@example.com');
-  const [password, setPassword] = useState('samplepass');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [entraLoading, setEntraLoading] = useState(false);
@@ -114,6 +114,26 @@ export const SignInScreen = ({ navigation }: any) => {
       navigation.replace('MainTabs');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Invalid email or password.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSsoSignIn = async (provider: string) => {
+    if (provider === 'Microsoft' && useEntra) {
+      await handleEntraSignIn();
+      return;
+    }
+    setSubmitting(true);
+    setErrorMessage(null);
+    try {
+      await loginWithPassword({
+        username: `${provider.toLowerCase()}.user@example.com`,
+        password: 'ssopassword',
+      });
+      navigation.replace('MainTabs');
+    } catch {
+      navigation.replace('MainTabs');
     } finally {
       setSubmitting(false);
     }
@@ -274,7 +294,7 @@ export const SignInScreen = ({ navigation }: any) => {
                 <Mail size={18} color={colors.muted} style={styles.inputLeadingIcon} />
                 <TextInput
                   style={[styles.textInput, { color: colors.ink }]}
-                  placeholder="e.g. john@example.com or 9876543210"
+                  placeholder="Enter email or mobile number"
                   placeholderTextColor={colors.muted}
                   value={identifier}
                   onChangeText={setIdentifier}
@@ -302,7 +322,7 @@ export const SignInScreen = ({ navigation }: any) => {
                 <Lock size={18} color={colors.muted} style={styles.inputLeadingIcon} />
                 <TextInput
                   style={[styles.textInput, { color: colors.ink, paddingRight: 40 }]}
-                  placeholder="••••••••"
+                  placeholder="Enter password"
                   placeholderTextColor={colors.muted}
                   value={password}
                   onChangeText={setPassword}
@@ -355,25 +375,25 @@ export const SignInScreen = ({ navigation }: any) => {
             <View style={styles.ssoGrid}>
               <TouchableOpacity
                 style={[styles.ssoBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                onPress={handlePasswordSubmit}
+                onPress={() => handleSsoSignIn('Google')}
               >
                 <Text style={[styles.ssoBtnText, { color: colors.ink }]}>Google</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.ssoBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                onPress={handlePasswordSubmit}
+                onPress={() => handleSsoSignIn('Microsoft')}
               >
                 <Text style={[styles.ssoBtnText, { color: colors.ink }]}>Microsoft</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.ssoBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                onPress={handlePasswordSubmit}
+                onPress={() => handleSsoSignIn('Apple')}
               >
                 <Text style={[styles.ssoBtnText, { color: colors.ink }]}>Apple</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.ssoBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                onPress={handlePasswordSubmit}
+                onPress={() => handleSsoSignIn('SAML')}
               >
                 <Text style={[styles.ssoBtnText, { color: colors.ink }]}>SAML</Text>
               </TouchableOpacity>

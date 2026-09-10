@@ -106,12 +106,12 @@ export const UploadPanelScreen = ({ navigation }: any) => {
     setTimeout(() => addFile('Policy_Card.pdf|scanned|policy_card|0.90'), 300);
   };
 
-  const handlePickFiles = () => {
+  const handlePickFiles = (accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx') => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const input = document.createElement('input');
       input.type = 'file';
       input.multiple = true;
-      input.accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx';
+      input.accept = accept;
       input.onchange = (e: any) => {
         const selected = e.target.files;
         if (selected && selected.length > 0) {
@@ -129,6 +129,32 @@ export const UploadPanelScreen = ({ navigation }: any) => {
       input.click();
     } else {
       addFile('Lab_Report.pdf|digital|lab_report|0.91');
+    }
+  };
+
+  const handleCameraPick = () => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.setAttribute('capture', 'environment');
+      input.onchange = (e: any) => {
+        const selected = e.target.files;
+        if (selected && selected.length > 0) {
+          for (let i = 0; i < selected.length; i++) {
+            const f = selected[i];
+            addRealFile({
+              name: f.name || `camera_${Date.now()}.jpg`,
+              size: f.size,
+              type: f.type || 'image/jpeg',
+              blob: f,
+            });
+          }
+        }
+      };
+      input.click();
+    } else {
+      addFile('Discharge_Summary.pdf|digital|discharge_summary|0.96');
     }
   };
 
@@ -179,7 +205,7 @@ export const UploadPanelScreen = ({ navigation }: any) => {
           <View style={styles.srcGrid}>
             <TouchableOpacity
               style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-              onPress={() => addFile('Discharge_Summary.pdf|digital|discharge_summary|0.96')}
+              onPress={handleCameraPick}
               activeOpacity={0.75}
             >
               <Camera size={18} color={colors.muted} strokeWidth={1.8} />
@@ -188,7 +214,7 @@ export const UploadPanelScreen = ({ navigation }: any) => {
 
             <TouchableOpacity
               style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-              onPress={() => addFile('Hospital_Bill.jpg|jpg|hospital_bill|0.93')}
+              onPress={() => handlePickFiles('image/*')}
               activeOpacity={0.75}
             >
               <ImageIcon size={18} color={colors.muted} strokeWidth={1.8} />
@@ -197,7 +223,7 @@ export const UploadPanelScreen = ({ navigation }: any) => {
 
             <TouchableOpacity
               style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-              onPress={handlePickFiles}
+              onPress={() => handlePickFiles('.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx')}
               activeOpacity={0.75}
             >
               <FileText size={18} color={colors.muted} strokeWidth={1.8} />
@@ -206,7 +232,7 @@ export const UploadPanelScreen = ({ navigation }: any) => {
 
             <TouchableOpacity
               style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-              onPress={() => addFile('Screenshot_2026-09-07.png|jpg|pharmacy_bill|0.81')}
+              onPress={() => handlePickFiles('image/*')}
               activeOpacity={0.75}
             >
               <Smartphone size={18} color={colors.muted} strokeWidth={1.8} />

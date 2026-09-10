@@ -55,7 +55,7 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
   const { claims } = useClaimsStore();
   const [accordionOpen, setAccordionOpen] = useState(false);
 
-  const activeClaimId = claimId || '3f8a1d6c-52b4-4e7a-9c11-0d5e2ab77104';
+  const activeClaimId = claimId || claims[0]?.id || '73cae928-5f39-4129-a4f2-f667e94f3f6a';
   const claimRecord = claims.find(c => c.id === activeClaimId) || claims[0];
   const docCount = docs.length > 0 ? docs.length : 3;
 
@@ -67,7 +67,8 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
         claimsApi.getClaimValidation(activeClaimId).catch(() => null),
         claimsApi.getClaimPrediction(activeClaimId).catch(() => null),
         workflowApi.getProgress(activeClaimId).catch(() => null),
-      ]).then(([detail, preview, val, pred, progress]) => {
+        workflowApi.getStatus(activeClaimId).catch(() => null),
+      ]).then(([detail, preview, val, pred, progress, statusRes]) => {
         if (detail && detail.id) {
           const patientName = preview?.parsed_fields?.patient_name || detail.patient_name || '';
           const diagnosis = preview?.parsed_fields?.diagnosis || detail.diagnosis || 'Cardiology';
@@ -86,13 +87,24 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
           }
           useClaimsStore.getState().addOrUpdateClaim(transformBackendClaim(detail, preview));
 
-          if (progress && (progress.is_complete || progress.percentage >= 100)) {
+          let calcSeconds: string | null = null;
+          if (detail.created_at && detail.updated_at) {
+            const start = new Date(detail.created_at).getTime();
+            const end = new Date(detail.updated_at).getTime();
+            const diff = (end - start) / 1000;
+            if (diff > 0 && diff < 3600) {
+              calcSeconds = diff.toFixed(1);
+            }
+          }
+
+          if (progress && (progress.is_complete || progress.percentage >= 100 || detail.status === 'COMPLETED')) {
             usePipelineStore.setState({
               complete: true,
               running: false,
               progressPercentage: 100,
               currentStepIndex: 4,
               stepStates: ['d', 'd', 'd', 'd', 'd'],
+              totalSeconds: calcSeconds || usePipelineStore.getState().totalSeconds || '11.1',
               claimWho: patientName || 'R. Menon',
               claimDept: diagnosis,
               stepMessages: [
@@ -105,6 +117,8 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
                 `${rulesPassed} of ${rulesTotal} rules passed`,
               ],
             });
+          } else if (calcSeconds && !usePipelineStore.getState().running) {
+            usePipelineStore.setState({ totalSeconds: calcSeconds });
           }
         }
       });
@@ -369,7 +383,7 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
             <View style={styles.kvRow}>
               <Text style={[styles.kvKey, { color: colors.muted }]}>total_processing_seconds</Text>
               <Text style={[styles.kvVal, styles.mono, { color: colors.ink }]}>
-                {totalSeconds ? `${totalSeconds} s` : '8.0 s'}
+                {totalSeconds ? `${totalSeconds} s` : isRunningState ? '0.1 s' : '—'}
               </Text>
             </View>
 

@@ -91,6 +91,9 @@ interface PipelineState {
   resetPipeline: () => void;
 }
 
+let activePollInterval: any = null;
+let activeTimerInterval: any = null;
+
 export const usePipelineStore = create<PipelineState>((set, get) => ({
   active: false,
   running: false,
@@ -109,13 +112,22 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   attempt: 1,
   totalSeconds: null,
   docs: [],
-  claimId: 'a4f1c9e2-7d30-4b8e-91cf-6ea2b40d7715',
+  claimId: '73cae928-5f39-4129-a4f2-f667e94f3f6a',
   claimWho: 'Parsing…',
   claimDept: 'General Medicine',
   claimAmt: 184500,
 
   startPipeline: (files, claimIdOverride) => {
-    const targetClaimId = claimIdOverride || get().claimId;
+    if (activePollInterval) {
+      clearInterval(activePollInterval);
+      activePollInterval = null;
+    }
+    if (activeTimerInterval) {
+      clearInterval(activeTimerInterval);
+      activeTimerInterval = null;
+    }
+
+    const targetClaimId = claimIdOverride || useClaimsStore.getState().claims[0]?.id || get().claimId;
 
     const docs: PipelineDoc[] = (files.length > 0 ? files : [
       { name: 'Discharge_Summary.pdf', docType: 'discharge_summary', kind: 'digital' },
@@ -148,7 +160,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       stepStates: ['r', 'q', 'q', 'q', 'q'],
       stepMessages: initialMessages,
       attempt: 1,
-      totalSeconds: null,
+      totalSeconds: '0.1',
       docs,
       claimId: targetClaimId,
       claimWho: 'Parsing…',
@@ -164,21 +176,35 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     const docCount = docs.length;
     const startTime = Date.now();
 
+    // Real-time timer updating totalSeconds live on every 100ms
+    activeTimerInterval = setInterval(() => {
+      const s = get();
+      if (!s.running || s.complete) {
+        if (activeTimerInterval) {
+          clearInterval(activeTimerInterval);
+          activeTimerInterval = null;
+        }
+        return;
+      }
+      const liveSeconds = ((Date.now() - startTime) / 1000).toFixed(1);
+      set({ totalSeconds: liveSeconds });
+    }, 100);
+
     // 2. Poll live backend progress, preview, validations and predictions
-    let pollInterval: NodeJS.Timeout | null = null;
     let backendCompleted = false;
 
-    pollInterval = setInterval(async () => {
+    activePollInterval = setInterval(async () => {
       try {
-        const [progress, detail, preview, val, pred] = await Promise.all([
+        const [progress, statusRes, detail, preview, val, pred] = await Promise.all([
           workflowApi.getProgress(targetClaimId).catch(() => null),
+          workflowApi.getStatus(targetClaimId).catch(() => null),
           claimsApi.getClaimDetail(targetClaimId).catch(() => null),
           claimsApi.getClaimPreview(targetClaimId).catch(() => null),
           claimsApi.getClaimValidation(targetClaimId).catch(() => null),
           claimsApi.getClaimPrediction(targetClaimId).catch(() => null),
         ]);
 
-        const pct = progress?.percentage || 0;
+        const pct = Math.max(progress?.percentage || 0, statusRes?.percentage || 0);
         if (pct > 0) {
           set({ progressPercentage: Math.max(get().progressPercentage, pct) });
         }
@@ -218,9 +244,25 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
         // Live step progression based on real backend progress
         if (pct >= 100 || progress?.is_complete || detail?.status === 'COMPLETED' || detail?.status === 'WORKFLOW_FAILED') {
           backendCompleted = true;
-          if (pollInterval) clearInterval(pollInterval);
+          if (activePollInterval) {
+            clearInterval(activePollInterval);
+            activePollInterval = null;
+          }
+          if (activeTimerInterval) {
+            clearInterval(activeTimerInterval);
+            activeTimerInterval = null;
+          }
 
-          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          let elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          if (detail?.created_at && detail?.updated_at) {
+            const t1 = new Date(detail.created_at).getTime();
+            const t2 = new Date(detail.updated_at).getTime();
+            const diff = (t2 - t1) / 1000;
+            if (diff > 0 && diff < 3600) {
+              elapsed = diff.toFixed(1);
+            }
+          }
+
           set({
             progressPercentage: 100,
             currentStepIndex: 4,
@@ -319,7 +361,15 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     get().startPipeline(get().docs);
   },
 
-  resetPipeline: () =>
+  resetPipeline: () => {
+    if (activePollInterval) {
+      clearInterval(activePollInterval);
+      activePollInterval = null;
+    }
+    if (activeTimerInterval) {
+      clearInterval(activeTimerInterval);
+      activeTimerInterval = null;
+    }
     set({
       active: false,
       running: false,
@@ -337,5 +387,6 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       attempt: 1,
       totalSeconds: null,
       docs: [],
-    }),
+    });
+  },
 }));
