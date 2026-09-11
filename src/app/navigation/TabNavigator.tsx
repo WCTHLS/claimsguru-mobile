@@ -1,6 +1,7 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MessageSquare, FileText, Search, Clock, LayoutGrid } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../core/theme/ThemeContext';
 import { Routes } from './routes';
 import { BottomTabParamList } from './types';
@@ -16,6 +17,7 @@ const Tab = createBottomTabNavigator<BottomTabParamList>();
 
 export const TabNavigator = () => {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
@@ -24,8 +26,8 @@ export const TabNavigator = () => {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.line,
-          height: 62,
-          paddingBottom: 8,
+          height: 56 + Math.max(insets.bottom, 6),
+          paddingBottom: Math.max(insets.bottom, 6),
           paddingTop: 6,
         },
         tabBarActiveTintColor: colors.brand,

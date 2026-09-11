@@ -5,10 +5,10 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { usePipelineStore } from '../../../state/usePipelineStore';
 import { useClaimsStore } from '../../../state/useClaimsStore';

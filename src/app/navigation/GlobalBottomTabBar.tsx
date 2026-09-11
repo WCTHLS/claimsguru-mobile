@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MessageSquare, FileText, Search, Clock, LayoutGrid } from 'lucide-react-native';
 import { useTheme } from '../../core/theme/ThemeContext';
 import { Routes } from './routes';
@@ -11,6 +12,7 @@ interface GlobalBottomTabBarProps {
 
 export const GlobalBottomTabBar = ({ navigation, activeTab = 'claims' }: GlobalBottomTabBarProps) => {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const tabs = [
     {
@@ -46,7 +48,17 @@ export const GlobalBottomTabBar = ({ navigation, activeTab = 'claims' }: GlobalB
   ];
 
   return (
-    <View style={[styles.tabBar, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
+    <View
+      style={[
+        styles.tabBar,
+        {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.line,
+          height: 52 + Math.max(insets.bottom, 6),
+          paddingBottom: Math.max(insets.bottom, 6),
+        },
+      ]}
+    >
       {tabs.map(tab => {
         const isActive = activeTab === tab.key;
         const IconComponent = tab.icon;

@@ -1065,7 +1065,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
       </Modal>
 
       {/* Sticky Bottom Action Bar matching exact reference */}
-      <View style={[styles.bottomStickyBar, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
+      <View style={[styles.bottomStickyBar, { backgroundColor: colors.surface, borderTopColor: colors.line, paddingBottom: Math.max(insets.bottom, 12) }]}>
         <TouchableOpacity
           style={[styles.btnOutSm, { borderColor: colors.line, backgroundColor: colors.surface }]}
           onPress={handlePreviewPdf}

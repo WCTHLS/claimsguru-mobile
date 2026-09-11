@@ -5,10 +5,10 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { Routes } from '../../../app/navigation/routes';
 import { VALIDATION_RULES } from '../../../mocks/rules.mock';
@@ -35,6 +35,7 @@ import {
 
 export const BrainPreviewScreen = ({ route, navigation }: any) => {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const pipelineClaimId = usePipelineStore(s => s.claimId);
   const claimId = route?.params?.claimId || pipelineClaimId || 'a4f1c9e2';
 
