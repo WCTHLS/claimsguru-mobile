@@ -446,24 +446,37 @@ export const claimsApi = {
     claimId: string,
     style: string = 'legacy',
     blank: boolean = false
-  ): Promise<{ blob: Blob; url: string; filename: string }> => {
-    const url = API_ENDPOINTS.irdaPdf(claimId, style, blank, true);
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to load IRDA form (${response.status} ${response.statusText})`);
-    }
-    const blob = await response.blob();
-    const disposition = response.headers.get('content-disposition') || '';
+  ): Promise<{ blob?: any; url: string; filename: string }> => {
+    const directUrl = API_ENDPOINTS.irdaPdf(claimId, style, blank, true);
     let filename = `IRDA_Claim_${claimId.slice(0, 8)}.pdf`;
-    const match = disposition.match(/filename="?([^"]+)"?/);
-    if (match && match[1]) {
-      filename = match[1];
+
+    // 1. On Web (browsers): Fetch blob and create object URL to bypass iframe X-Frame-Options: DENY
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      try {
+        const response = await fetch(directUrl);
+        if (response.ok) {
+          const blob = await response.blob();
+          const disposition = response.headers.get('content-disposition') || '';
+          const match = disposition.match(/filename="?([^"]+)"?/);
+          if (match && match[1]) {
+            filename = match[1];
+          }
+          if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+            const blobUrl = URL.createObjectURL(blob);
+            return { blob, url: blobUrl, filename };
+          }
+        }
+      } catch (e) {
+        console.warn('[claimsApi] Web blob creation fallback to direct URL:', e);
+      }
+      return { url: directUrl, filename };
     }
-    let blobUrl = '';
-    if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
-      blobUrl = URL.createObjectURL(blob);
-    }
-    return { blob, url: blobUrl, filename };
+
+    // 2. On Native Mobile (iOS & Android):
+    // React Native does not support URL.createObjectURL (throws "Cannot create URL for blob").
+    // Native mobile handles the direct HTTPS URL directly.
+    return { url: directUrl, filename };
   },
 };
+
 
