@@ -353,96 +353,20 @@ export async function syncEntraUser(params: SyncEntraParams): Promise<AuthRespon
  * Updates useAuthStore automatically.
  */
 export async function fetchUserProfile(userIdOrEmail?: string): Promise<Record<string, any> | null> {
-  const query = (userIdOrEmail || useAuthStore.getState().userId || useAuthStore.getState().userEmail || '').trim();
+  const currentAuth = useAuthStore.getState();
+  const query = (userIdOrEmail || currentAuth.userId || currentAuth.userEmail || '').trim();
   if (!query) return null;
 
-  const isEmail = query.includes('@');
-  let targetUserId = isEmail ? '' : query;
-
-  // If we only have an email, resolve via sync-entra-user endpoint which queries users table by email
-  if (isEmail) {
-    const syncRes = await postToCandidateEndpoints(
-      ['/auth/sync-entra-user', '/ingress/auth/sync-entra-user'],
-      { email: query.toLowerCase(), requested_role: 'patient' }
-    );
-    if (syncRes.ok && syncRes.data) {
-      const raw = syncRes.data;
-      targetUserId = raw.user_id || '';
-      const resolvedName =
-        (raw.first_name || raw.last_name
-          ? `${raw.first_name || ''} ${raw.last_name || ''}`.trim()
-          : '') ||
-        (raw.name && raw.name.toLowerCase() !== 'unknown' ? raw.name : '') ||
-        query.split('@')[0];
-
-      useAuthStore.getState().setUserDetails({
-        userId: raw.user_id,
-        userName: resolvedName,
-        userEmail: raw.email || query,
-        firstName: raw.first_name,
-        lastName: raw.last_name,
-      });
-    }
-  }
-
-  // If targetUserId is resolved or provided, query /auth/profile/{targetUserId}
-  if (targetUserId) {
-    const candidateBases = getBackendCandidateUrls();
-    for (const base of candidateBases) {
-      const cleanBase = base.replace(/\/+$/, '');
-      const candidatePaths = [
-        `${cleanBase}/ingress/auth/profile/${encodeURIComponent(targetUserId)}`,
-        `${cleanBase}/auth/profile/${encodeURIComponent(targetUserId)}`,
-      ];
-
-      for (const url of candidatePaths) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 1500);
-          const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
-          clearTimeout(timeoutId);
-          if (res.ok) {
-            const raw = await res.json();
-            if (raw && raw.success) {
-              setApiBaseUrl(cleanBase);
-              let resolvedName =
-                (raw.first_name || raw.last_name
-                  ? `${raw.first_name || ''} ${raw.last_name || ''}`.trim()
-                  : '') ||
-                (raw.name && raw.name.toLowerCase() !== 'unknown' ? raw.name : '');
-
-              const effectiveEmail = (raw.email || query || '').toLowerCase();
-              if (!resolvedName || resolvedName.toLowerCase() === 'sample') {
-                if (effectiveEmail === 'sample@gmail.com' || effectiveEmail.includes('sample')) {
-                  resolvedName = 'Jhon Doe';
-                } else {
-                  resolvedName = effectiveEmail.split('@')[0] || 'Jhon Doe';
-                }
-              }
-
-              const isSample = effectiveEmail === 'sample@gmail.com' || resolvedName.toLowerCase() === 'jhon doe';
-
-              useAuthStore.getState().setUserDetails({
-                userId: raw.user_id || (isSample ? 'ec78998a-0228-434a-84f4-e08b4b7417e2' : undefined),
-                userName: resolvedName,
-                userEmail: raw.email || effectiveEmail,
-                firstName: raw.first_name || (isSample ? 'Jhon' : undefined),
-                lastName: raw.last_name || (isSample ? 'Doe' : undefined),
-                phone: raw.phone,
-                dob: raw.dob || (isSample ? '2000-06-08' : undefined),
-                gender: raw.gender || (isSample ? 'Male' : undefined),
-                policyNumber: raw.policy_number || (isSample ? 'P-0007401' : undefined),
-                sumInsured: raw.sum_insured || (isSample ? 500000 : undefined),
-                organization: raw.organization,
-              });
-              return raw;
-            }
-          }
-        } catch {
-          // try next path/base
-        }
-      }
-    }
+  // Return already loaded profile details from store if available
+  if (currentAuth.userId && currentAuth.userEmail) {
+    return {
+      user_id: currentAuth.userId,
+      email: currentAuth.userEmail,
+      name: currentAuth.userName,
+      first_name: currentAuth.firstName,
+      last_name: currentAuth.lastName,
+      policy_number: currentAuth.policyNumber,
+    };
   }
 
   return null;

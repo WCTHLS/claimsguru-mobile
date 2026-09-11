@@ -48,18 +48,10 @@ export function getBackendCandidateUrls(): string[] {
   const envUrl = process.env.EXPO_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE;
   const candidates: string[] = [];
 
-  // Always include preprod deployed Azure ingress URL
   if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
     candidates.push(envUrl.replace(/\/+$/, ''));
   }
   candidates.push(PREPROD_DEPLOYED_URL);
-  candidates.push('https://holder-described-movies-lives.trycloudflare.com');
-  candidates.push('http://192.168.1.6:8000');
-  candidates.push('http://localhost:8000');
-
-  if (Platform.OS === 'android') {
-    candidates.push('http://10.0.2.2:8000');
-  }
 
   return Array.from(new Set(candidates));
 }
