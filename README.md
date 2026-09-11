@@ -22,8 +22,10 @@ You can run and test this app on your **physical Android phone** or **iPhone** i
 Clone the repository and install dependencies:
 
 ```bash
-# Clone branch
-git clone -b claimsflowbackend https://github.com/WCTHLS/claimsguru-mobile.git
+# Clone branch or checkout
+git clone -b feat/claims-azure-preprod https://github.com/WCTHLS/claimsguru-mobile.git
+# Or if already cloned:
+git fetch origin && git checkout feat/claims-azure-preprod
 cd claimsguru-mobile
 
 # Install packages
