@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Linking,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -182,9 +183,11 @@ export const SignInScreen = ({ navigation }: any) => {
       >
         {/* Brand Header */}
         <View style={styles.brandBox}>
-          <View style={[styles.logoIcon, { backgroundColor: colors.brand }]}>
-            <ShieldCheck size={36} color="#ffffff" strokeWidth={2.2} />
-          </View>
+          <Image
+            source={require('../../../../assets/logo.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
           <Text style={[styles.brandTitle, { color: colors.ink }]}>ClaimsGuru</Text>
           <Text style={[styles.brandTagline, { color: colors.muted }]}>
             Smarter Claims. Faster Care.
@@ -441,17 +444,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 22,
   },
-  logoIcon: {
-    width: 68,
-    height: 68,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#0d9488',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 6,
+  logoImage: {
+    width: 72,
+    height: 72,
+    marginBottom: 4,
   },
   brandTitle: {
     fontSize: 26,
