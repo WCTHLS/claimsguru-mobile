@@ -344,54 +344,95 @@ export const claimsApi = {
       return apiClient.upload<BackendUploadResponse>(API_ENDPOINTS.claimsUpload(), formData);
     }
 
-    // Native iOS & Android: Use Native FileSystem.uploadAsync to bypass React Native JS FormData limitations
+    // Native iOS & Android: Ensure file is in a guaranteed accessible cache location for Android 11+ scoped storage
     const primaryFile = (files && files.length > 0) ? files[0] : { name: 'document.pdf' };
     const primaryName = primaryFile.name || 'document.pdf';
     const primaryMime = getEffectiveMimeType(primaryName, primaryFile.type);
 
-    let primaryUri = primaryFile.uri;
-    if (!primaryUri) {
+    let uploadUri = primaryFile.uri;
+    const safeName = primaryName.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+    if (!uploadUri) {
       try {
-        const safeName = primaryName.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const cacheFile = new FileSystem.File(FileSystem.Paths.cache, safeName);
-        cacheFile.write('%PDF-1.4 sample claim document content');
-        primaryUri = cacheFile.uri;
-      } catch {
-        const fallbackPath = `${FileSystemLegacy.cacheDirectory}${primaryName}`;
+        const fallbackPath = `${FileSystemLegacy.cacheDirectory}claim_${Date.now()}_${safeName}`;
         await FileSystemLegacy.writeAsStringAsync(fallbackPath, '%PDF-1.4 sample claim document content');
-        primaryUri = fallbackPath;
+        uploadUri = fallbackPath;
+      } catch {
+        uploadUri = `${FileSystemLegacy.cacheDirectory}${safeName}`;
+      }
+    } else {
+      // For Android 11+ compatibility: Copy picked document from DocumentPicker cache to app's own cacheDirectory
+      try {
+        const targetPath = `${FileSystemLegacy.cacheDirectory}ready_${Date.now()}_${safeName}`;
+        await FileSystemLegacy.copyAsync({ from: uploadUri, to: targetPath });
+        uploadUri = targetPath;
+      } catch (copyErr) {
+        console.warn('[claimsApi] copyAsync failed, trying base64 rewrite:', copyErr);
+        try {
+          const content = await FileSystemLegacy.readAsStringAsync(uploadUri, {
+            encoding: FileSystemLegacy.EncodingType.Base64,
+          });
+          const targetPath = `${FileSystemLegacy.cacheDirectory}ready_${Date.now()}_${safeName}`;
+          await FileSystemLegacy.writeAsStringAsync(targetPath, content, {
+            encoding: FileSystemLegacy.EncodingType.Base64,
+          });
+          uploadUri = targetPath;
+        } catch (base64Err) {
+          console.warn('[claimsApi] Base64 rewrite fallback failed, proceeding with original URI:', base64Err);
+        }
       }
     }
 
     const uploadUrl = API_ENDPOINTS.claimsUpload();
-    const result = await FileSystemLegacy.uploadAsync(uploadUrl, primaryUri, {
-      httpMethod: 'POST',
-      uploadType: FileSystemLegacy.FileSystemUploadType.MULTIPART,
-      fieldName: 'files',
-      mimeType: primaryMime,
-      parameters: {
-        policy_id: String(effectivePolicyId),
-        patient_id: String(effectivePatientId),
-        email: String(effectiveEmail),
-        force: isForce,
-      },
-      headers: {
-        Accept: 'application/json',
-        ...(authState.token ? { Authorization: `Bearer ${authState.token}` } : {}),
-        ...(effectivePatientId ? { 'X-Patient-Id': String(effectivePatientId), 'X-User-Id': String(effectivePatientId) } : {}),
-      },
-    });
+    let resData: any = null;
 
-    let resData: any = {};
     try {
-      resData = JSON.parse(result.body);
-    } catch {
-      resData = { message: result.body };
-    }
+      const result = await FileSystemLegacy.uploadAsync(uploadUrl, uploadUri, {
+        httpMethod: 'POST',
+        uploadType: FileSystemLegacy.FileSystemUploadType.MULTIPART,
+        fieldName: 'files',
+        mimeType: primaryMime,
+        parameters: {
+          policy_id: String(effectivePolicyId),
+          patient_id: String(effectivePatientId),
+          email: String(effectiveEmail),
+          force: isForce,
+        },
+        headers: {
+          Accept: 'application/json',
+          ...(authState.token ? { Authorization: `Bearer ${authState.token}` } : {}),
+          ...(effectivePatientId ? { 'X-Patient-Id': String(effectivePatientId), 'X-User-Id': String(effectivePatientId) } : {}),
+        },
+      });
 
-    if (result.status >= 400) {
-      const errorMsg = resData?.detail || resData?.message || `Upload failed with status ${result.status}`;
-      throw new ApiError(errorMsg, result.status, resData);
+      try {
+        resData = JSON.parse(result.body);
+      } catch {
+        resData = { message: result.body };
+      }
+
+      if (result.status >= 400) {
+        const errorMsg = resData?.detail || resData?.message || `Upload failed with status ${result.status}`;
+        throw new ApiError(errorMsg, result.status, resData);
+      }
+    } catch (uploadErr: any) {
+      if (uploadErr instanceof ApiError) {
+        throw uploadErr;
+      }
+      console.warn('[claimsApi] FileSystem.uploadAsync failed, attempting fallback FormData upload:', uploadErr);
+      
+      const formData = new FormData();
+      formData.append('files', {
+        uri: uploadUri,
+        name: primaryName,
+        type: primaryMime,
+      } as any);
+      if (effectivePolicyId) formData.append('policy_id', String(effectivePolicyId));
+      if (effectivePatientId) formData.append('patient_id', String(effectivePatientId));
+      if (effectiveEmail) formData.append('email', String(effectiveEmail));
+      formData.append('force', isForce);
+
+      resData = await apiClient.upload<BackendUploadResponse>(uploadUrl, formData);
     }
 
     const claimResponse = resData as BackendUploadResponse;
@@ -404,12 +445,23 @@ export const claimsApi = {
         const extra = files[i];
         if (extra.uri) {
           try {
-            await FileSystemLegacy.uploadAsync(docUploadUrl, extra.uri, {
+            let extraUri = extra.uri;
+            const extraSafe = (extra.name || 'document.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
+            const extraTarget = `${FileSystemLegacy.cacheDirectory}extra_${Date.now()}_${extraSafe}`;
+            try {
+              await FileSystemLegacy.copyAsync({ from: extraUri, to: extraTarget });
+              extraUri = extraTarget;
+            } catch {}
+
+            await FileSystemLegacy.uploadAsync(docUploadUrl, extraUri, {
               httpMethod: 'POST',
               uploadType: FileSystemLegacy.FileSystemUploadType.MULTIPART,
               fieldName: 'file',
               mimeType: getEffectiveMimeType(extra.name, extra.type),
-              headers: { Accept: 'application/json' },
+              headers: { 
+                Accept: 'application/json',
+                ...(authState.token ? { Authorization: `Bearer ${authState.token}` } : {}),
+              },
             });
           } catch (extraErr) {
             console.warn('[claimsApi] Extra file upload failed:', extraErr);
