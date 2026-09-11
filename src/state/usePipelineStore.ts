@@ -282,8 +282,37 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
           return;
         }
 
-        // Live step progression based on real backend progress & responses
-        if (pct >= 100 || progress?.is_complete || detail?.status === 'COMPLETED' || (hasValidations && hasPredictions && hasCodes && hasFields)) {
+        // Check if the backend pipeline is completed
+        const isCompletedStatus = [
+          'COMPLETED',
+          'VALIDATED',
+          'FINISHED',
+          'DONE',
+          'SUBMITTED',
+          'APPROVED',
+          'REJECTED',
+        ].includes(String(detail?.status || '').toUpperCase());
+
+        const isValidationFinished = Boolean(
+          val?.passed !== undefined ||
+          (val?.results && val.results.length > 0) ||
+          preview?.validations ||
+          val?.status === 'COMPLETED' ||
+          val?.status === 'VALIDATED'
+        );
+
+        const isWorkflowComplete = Boolean(
+          pct >= 100 ||
+          progress?.is_complete ||
+          statusRes?.status === 'FINISHED' ||
+          statusRes?.current_step === 'FINISHED' ||
+          (statusRes?.step_index !== undefined && statusRes.step_index >= 5) ||
+          isCompletedStatus ||
+          isValidationFinished ||
+          (hasValidations && (hasPredictions || hasFields))
+        );
+
+        if (isWorkflowComplete) {
           backendCompleted = true;
           if (activePollInterval) {
             clearInterval(activePollInterval);
@@ -310,6 +339,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             stepStates: ['d', 'd', 'd', 'd', 'd'],
             running: false,
             complete: true,
+            failed: false,
             totalSeconds: elapsed,
             claimWho: patientName || 'Complete',
             claimDept: diagnosis,
@@ -325,7 +355,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
           return;
         }
 
-        if (pct >= 75 || hasValidations) {
+        // Intermediate progression: Steps 3, 2, 1, 0
+        if (pct >= 75 || hasPredictions) {
           set(state => ({
             progressPercentage: Math.max(state.progressPercentage, 85),
             currentStepIndex: 4,
@@ -339,7 +370,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             ],
             docs: state.docs.map(d => ({ ...d, ocr: 'd', parse: 'd' })),
           }));
-        } else if (pct >= 50 || hasPredictions) {
+        } else if (pct >= 50 || hasCodes) {
           set(state => ({
             progressPercentage: Math.max(state.progressPercentage, 65),
             currentStepIndex: 3,
@@ -353,7 +384,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             ],
             docs: state.docs.map(d => ({ ...d, ocr: 'd', parse: 'd' })),
           }));
-        } else if (pct >= 25 || hasCodes) {
+        } else if (pct >= 25 || hasFields) {
           set(state => ({
             progressPercentage: Math.max(state.progressPercentage, 45),
             currentStepIndex: 2,
@@ -367,7 +398,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             ],
             docs: state.docs.map(d => ({ ...d, ocr: 'd', parse: 'd' })),
           }));
-        } else if (pct >= 10 || hasFields) {
+        } else if (pct >= 10) {
           set(state => ({
             progressPercentage: Math.max(state.progressPercentage, 20),
             currentStepIndex: 1,
@@ -382,6 +413,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             docs: state.docs.map(d => ({ ...d, ocr: 'd', parse: 'r' })),
           }));
         }
+
       } catch (err) {
         console.log('[usePipelineStore] Polling error:', err);
       }

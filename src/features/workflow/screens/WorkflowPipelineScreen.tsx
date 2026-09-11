@@ -97,10 +97,30 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
             }
           }
 
-          if (progress && (progress.is_complete || progress.percentage >= 100 || detail.status === 'COMPLETED')) {
+          const isCompletedStatus = [
+            'COMPLETED',
+            'VALIDATED',
+            'FINISHED',
+            'DONE',
+            'SUBMITTED',
+            'APPROVED',
+            'REJECTED',
+          ].includes(String(detail.status || '').toUpperCase());
+
+          const isWorkflowComplete = Boolean(
+            (progress && (progress.is_complete || progress.percentage >= 100)) ||
+            statusRes?.status === 'FINISHED' ||
+            (statusRes?.step_index !== undefined && statusRes.step_index >= 5) ||
+            isCompletedStatus ||
+            val?.passed !== undefined ||
+            (val?.results && val.results.length > 0)
+          );
+
+          if (isWorkflowComplete) {
             usePipelineStore.setState({
               complete: true,
               running: false,
+              failed: false,
               progressPercentage: 100,
               currentStepIndex: 4,
               stepStates: ['d', 'd', 'd', 'd', 'd'],
@@ -121,6 +141,7 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
             usePipelineStore.setState({ totalSeconds: calcSeconds });
           }
         }
+
       });
     }
   }, [activeClaimId]);
