@@ -366,4 +366,38 @@ export const claimsApi = {
   getClaimFileUrl: (claimId: string): string => {
     return API_ENDPOINTS.claimFile(claimId);
   },
+
+  getIrdaPdfUrl: (
+    claimId: string,
+    style: string = 'legacy',
+    blank: boolean = false,
+    inline: boolean = true
+  ): string => {
+    return API_ENDPOINTS.irdaPdf(claimId, style, blank, inline);
+  },
+
+  fetchIrdaPdfBlob: async (
+    claimId: string,
+    style: string = 'legacy',
+    blank: boolean = false
+  ): Promise<{ blob: Blob; url: string; filename: string }> => {
+    const url = API_ENDPOINTS.irdaPdf(claimId, style, blank, true);
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to load IRDA form (${response.status} ${response.statusText})`);
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('content-disposition') || '';
+    let filename = `IRDA_Claim_${claimId.slice(0, 8)}.pdf`;
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+    let blobUrl = '';
+    if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+      blobUrl = URL.createObjectURL(blob);
+    }
+    return { blob, url: blobUrl, filename };
+  },
 };
+
