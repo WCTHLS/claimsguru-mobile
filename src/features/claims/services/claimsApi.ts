@@ -377,6 +377,8 @@ export const claimsApi = {
       },
       headers: {
         Accept: 'application/json',
+        ...(authState.token ? { Authorization: `Bearer ${authState.token}` } : {}),
+        ...(effectivePatientId ? { 'X-Patient-Id': String(effectivePatientId), 'X-User-Id': String(effectivePatientId) } : {}),
       },
     });
 
