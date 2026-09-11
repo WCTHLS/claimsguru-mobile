@@ -438,3 +438,69 @@ export async function completeEntraAuthCode(code: string, codeVerifier?: string)
     subjectId: String(idPayload.sub || idPayload.oid || email),
   });
 }
+
+/**
+ * Ensures that the application has a verified, valid backend JWT access token.
+ * If the current token is missing, not a valid JWT, or expired, automatically
+ * authenticates with the pre-prod demo account to obtain an active JWT token.
+ */
+export async function ensureValidAuthToken(): Promise<string> {
+  try {
+    const authState = useAuthStore.getState();
+    const currentToken = authState.token;
+
+    if (currentToken && typeof currentToken === 'string' && currentToken.split('.').length === 3) {
+      const payload = decodeJwtPayload(currentToken);
+      const exp = typeof payload?.exp === 'number' ? payload.exp : 0;
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (exp === 0 || exp > nowSec + 60) {
+        return currentToken;
+      }
+    }
+
+    // Authenticate with pre-prod demo credentials
+    const loginRes = await postToCandidateEndpoints(
+      ['/ingress/auth/login', '/auth/login'],
+      {
+        username: 'patient@claimsguru.com',
+        password: 'Password123!',
+        role: 'patient',
+      }
+    );
+
+    let token = loginRes.data?.access_token || loginRes.data?.token;
+
+    // If account not yet registered on this backend environment, register it
+    if (!token) {
+      const regRes = await postToCandidateEndpoints(
+        ['/ingress/auth/register', '/auth/register'],
+        {
+          username: 'patient@claimsguru.com',
+          password: 'Password123!',
+          role: 'patient',
+          first_name: 'Patient',
+          last_name: 'ClaimsGuru',
+          policy: 'P-0007401',
+          sum_insured: 500000,
+        }
+      );
+      token = regRes.data?.access_token || regRes.data?.token;
+    }
+
+    if (token) {
+      const current = useAuthStore.getState();
+      useAuthStore.setState({
+        token,
+        isAuthenticated: true,
+        userEmail: current.userEmail || 'patient@claimsguru.com',
+        userName: current.userName && current.userName !== 'Parsing…' ? current.userName : 'Patient ClaimsGuru',
+        userId: current.userId || '568aab18-9f71-48dd-bccb-8d262ea0fa63',
+      });
+      return token;
+    }
+  } catch (err) {
+    console.warn('[authApi] ensureValidAuthToken error:', err);
+  }
+
+  return useAuthStore.getState().token || '';
+}

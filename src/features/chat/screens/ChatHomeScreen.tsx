@@ -12,6 +12,7 @@ import {
   Modal,
   Switch,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
@@ -366,22 +367,11 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       setPipelineStarting(false);
       navigation.navigate(Routes.WorkflowPipeline);
     } catch (err: any) {
-      console.warn('[ChatHomeScreen] Pipeline start fallback:', err);
-      const existingClaims = useClaimsStore.getState().claims;
-      const realExistingClaim = existingClaims.find(c => c.id && c.id.length > 20);
-      const fallbackClaimId = realExistingClaim?.id || '73cae928-5f39-4129-a4f2-f667e94f3f6a';
-
-      startPipeline(
-        files.length > 0 ? files : [
-          { name: 'Discharge_Summary.pdf', docType: 'discharge_summary', kind: 'digital' },
-          { name: 'Hospital_Bill.jpg', docType: 'hospital_bill', kind: 'jpg' },
-          { name: 'Policy_Card.pdf', docType: 'policy_card', kind: 'scanned' },
-        ],
-        fallbackClaimId
-      );
-      sendMessage(`Started backend pipeline for claim ${fallbackClaimId.slice(0, 8)}`);
+      console.warn('[ChatHomeScreen] Pipeline upload failed:', err);
       setPipelineStarting(false);
-      navigation.navigate(Routes.WorkflowPipeline);
+      const errMsg = err?.message || 'Could not upload claim documents to backend.';
+      Alert.alert('Upload Error', `${errMsg}\n\nPlease check connection or credentials and try again.`);
+      sendMessage(`Upload failed: ${errMsg}`);
     }
   };
 

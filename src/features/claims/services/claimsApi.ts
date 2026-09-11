@@ -5,6 +5,7 @@ import { apiClient, ApiError } from '../../../core/api/client';
 import { API_ENDPOINTS } from '../../../core/api/config';
 import { ClaimItem } from '../../../mocks/claims.mock';
 import { useAuthStore } from '../../../state/useAuthStore';
+import { ensureValidAuthToken } from '../../../core/api/authApi';
 
 function getEffectiveMimeType(fileName: string, explicitType?: string): string {
   if (explicitType && explicitType.includes('/')) {
@@ -316,10 +317,11 @@ export const claimsApi = {
       force?: boolean;
     }
   ): Promise<BackendUploadResponse> => {
+    const validToken = await ensureValidAuthToken();
     const authState = useAuthStore.getState();
     const effectivePolicyId = options?.policyId || authState.policyNumber || 'P-0007401';
-    const effectivePatientId = options?.patientId || authState.userId || '181c3248-94a5-426f-8aca-92adcf0ff765';
-    const effectiveEmail = options?.email || authState.userEmail || 'sample@gmail.com';
+    const effectivePatientId = options?.patientId || authState.userId || '568aab18-9f71-48dd-bccb-8d262ea0fa63';
+    const effectiveEmail = options?.email || authState.userEmail || 'patient@claimsguru.com';
     const isForce = options?.force ? 'true' : 'false';
 
     if (Platform.OS === 'web') {
@@ -341,7 +343,9 @@ export const claimsApi = {
       if (effectiveEmail) formData.append('email', String(effectiveEmail));
       formData.append('force', isForce);
 
-      return apiClient.upload<BackendUploadResponse>(API_ENDPOINTS.claimsUpload(), formData);
+      return apiClient.upload<BackendUploadResponse>(API_ENDPOINTS.claimsUpload(), formData, {
+        headers: validToken ? { Authorization: `Bearer ${validToken}` } : undefined,
+      });
     }
 
     // Native iOS & Android: Use Native FileSystem.uploadAsync to bypass React Native JS FormData limitations
@@ -377,7 +381,7 @@ export const claimsApi = {
       },
       headers: {
         Accept: 'application/json',
-        ...(authState.token ? { Authorization: `Bearer ${authState.token}` } : {}),
+        ...(validToken ? { Authorization: `Bearer ${validToken}` } : {}),
         ...(effectivePatientId ? { 'X-Patient-Id': String(effectivePatientId), 'X-User-Id': String(effectivePatientId) } : {}),
       },
     });

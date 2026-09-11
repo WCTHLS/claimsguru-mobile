@@ -35,7 +35,7 @@ interface UploadState {
   setDocType: (id: string, docType: string) => void;
   setClaimType: (type: 'Reimbursement' | 'Cashless' | 'Pre-authorisation') => void;
   logEvent: (event: string, detail: string, isError?: boolean) => void;
-  uploadToBackend: (options?: { policyId?: string; patientId?: string }) => Promise<{ claimId: string; taskId?: string }>;
+  uploadToBackend: (options?: { policyId?: string; patientId?: string; email?: string }) => Promise<{ claimId: string; taskId?: string }>;
 }
 
 export const useUploadStore = create<UploadState>((set, get) => ({
@@ -207,8 +207,8 @@ export const useUploadStore = create<UploadState>((set, get) => ({
       const auth = useAuthStore.getState();
       const res = await claimsApi.uploadClaim(filePayloads, {
         policyId: options?.policyId || auth.policyNumber || 'P-0007401',
-        patientId: options?.patientId || auth.userId || '181c3248-94a5-426f-8aca-92adcf0ff765',
-        email: auth.userEmail || 'sample@gmail.com',
+        patientId: options?.patientId || auth.userId || '568aab18-9f71-48dd-bccb-8d262ea0fa63',
+        email: options?.email || auth.userEmail || 'patient@claimsguru.com',
         force: true,
       });
 
