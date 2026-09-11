@@ -216,7 +216,10 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
       const isBlank = renderStyle === 'blank';
       const effectiveStyle = isBlank ? 'modern' : renderStyle;
       const directUrl = claimsApi.getIrdaPdfUrl(claim.id, effectiveStyle, isBlank, true);
-      Linking.openURL(directUrl).catch(() => {
+      const viewerUrl = directUrl.startsWith('https://')
+        ? `https://docs.google.com/viewer?url=${encodeURIComponent(directUrl)}`
+        : directUrl;
+      Linking.openURL(viewerUrl).catch(() => {
         showToast('Unable to open external viewer');
       });
     }
@@ -1135,28 +1138,32 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                 />
               </View>
             ) : (
-              <View style={[styles.pdfNativeCardWrap, { backgroundColor: colors.bg }]}>
+              <ScrollView style={styles.pdfNativeScroll} contentContainerStyle={styles.pdfNativeScrollInner}>
                 <View style={[styles.pdfNativeCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                  <FileText size={48} color={colors.brand} />
+                  <FileText size={44} color={colors.brand} />
                   <Text style={[styles.pdfNativeTitle, { color: colors.ink }]}>
-                    IRDA Standard Claim Form
+                    Official IRDAI Claim Form
                   </Text>
                   <Text style={[styles.pdfNativeSub, { color: colors.muted }]}>
-                    Part A &amp; Part B · Renderer: {renderStyle.toUpperCase()}
+                    Standard Health Insurance Reimbursement Form (Part A &amp; B)
                   </Text>
-                  <Text style={[styles.pdfNativeFilename, { color: colors.brandDark }]}>
-                    {pdfFilename}
-                  </Text>
+
+                  <View style={[styles.pdfBadgeRow, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
+                    <Text style={[styles.pdfBadgeText, { color: colors.brandDark }]}>
+                      Renderer: {renderStyle.toUpperCase()}
+                    </Text>
+                  </View>
+
                   <View style={styles.pdfNativeActions}>
                     <TouchableOpacity
                       style={[styles.pdfActionPrimary, { backgroundColor: colors.brand }]}
                       onPress={handleOpenPdfExternal}
                     >
-                      <ExternalLink size={16} color="#ffffff" style={{ marginRight: 6 }} />
-                      <Text style={styles.pdfActionPrimaryText}>Open IRDA Form</Text>
+                      <Eye size={17} color="#ffffff" style={{ marginRight: 6 }} />
+                      <Text style={styles.pdfActionPrimaryText}>View Full PDF Form</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.pdfActionSecondary, { borderColor: colors.line }]}
+                      style={[styles.pdfActionSecondary, { borderColor: colors.line, backgroundColor: colors.surface2 }]}
                       onPress={handleDownloadPdf}
                     >
                       <Download size={16} color={colors.ink} style={{ marginRight: 6 }} />
@@ -1164,9 +1171,51 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                     </TouchableOpacity>
                   </View>
                 </View>
-              </View>
+
+                {/* Form Data Summary Cards matching official IRDA sections */}
+                <View style={[styles.pdfSummaryCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                  <Text style={[styles.pdfSummaryTitle, { color: colors.ink }]}>SECTION A: PRIMARY INSURED</Text>
+                  <View style={styles.pdfSummaryRow}>
+                    <Text style={[styles.pdfSummaryLabel, { color: colors.muted }]}>Name:</Text>
+                    <Text style={[styles.pdfSummaryValue, { color: colors.ink }]}>{fName}</Text>
+                  </View>
+                  <View style={styles.pdfSummaryRow}>
+                    <Text style={[styles.pdfSummaryLabel, { color: colors.muted }]}>Policy No:</Text>
+                    <Text style={[styles.pdfSummaryValue, { color: colors.ink }]}>{fPolicy}</Text>
+                  </View>
+                  <View style={styles.pdfSummaryRow}>
+                    <Text style={[styles.pdfSummaryLabel, { color: colors.muted }]}>Relationship:</Text>
+                    <Text style={[styles.pdfSummaryValue, { color: colors.ink }]}>{fRelation}</Text>
+                  </View>
+                  <View style={styles.pdfSummaryRow}>
+                    <Text style={[styles.pdfSummaryLabel, { color: colors.muted }]}>Diagnosis:</Text>
+                    <Text style={[styles.pdfSummaryValue, { color: colors.ink }]}>{fIllness}</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.pdfSummaryCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                  <Text style={[styles.pdfSummaryTitle, { color: colors.ink }]}>SECTION B: HOSPITALIZATION</Text>
+                  <View style={styles.pdfSummaryRow}>
+                    <Text style={[styles.pdfSummaryLabel, { color: colors.muted }]}>Hospital:</Text>
+                    <Text style={[styles.pdfSummaryValue, { color: colors.ink }]}>{fHospName}</Text>
+                  </View>
+                  <View style={styles.pdfSummaryRow}>
+                    <Text style={[styles.pdfSummaryLabel, { color: colors.muted }]}>Doctor:</Text>
+                    <Text style={[styles.pdfSummaryValue, { color: colors.ink }]}>{fDoctor}</Text>
+                  </View>
+                  <View style={styles.pdfSummaryRow}>
+                    <Text style={[styles.pdfSummaryLabel, { color: colors.muted }]}>Period:</Text>
+                    <Text style={[styles.pdfSummaryValue, { color: colors.ink }]}>{fAdmission} to {fDischarge}</Text>
+                  </View>
+                  <View style={styles.pdfSummaryRow}>
+                    <Text style={[styles.pdfSummaryLabel, { color: colors.muted }]}>Payable Claim:</Text>
+                    <Text style={[styles.pdfSummaryValue, { color: colors.green, fontWeight: '700' }]}>{formatINR(netPayable)}</Text>
+                  </View>
+                </View>
+              </ScrollView>
             )}
           </View>
+
 
           <View style={[styles.pdfFooter, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
             <TouchableOpacity
@@ -1710,16 +1759,48 @@ const styles = StyleSheet.create({
   pdfErrorSub: { marginTop: 6, fontSize: 13, textAlign: 'center' },
   pdfRetryBtn: { marginTop: 16, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8 },
   pdfRetryBtnText: { color: '#ffffff', fontWeight: '600', fontSize: 14 },
-  pdfNativeCardWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  pdfNativeCard: { width: '100%', maxWidth: 400, borderRadius: 12, borderWidth: 1, padding: 24, alignItems: 'center' },
-  pdfNativeTitle: { fontSize: 17, fontWeight: '700', marginTop: 14, textAlign: 'center' },
-  pdfNativeSub: { fontSize: 13, marginTop: 4, textAlign: 'center' },
-  pdfNativeFilename: { fontSize: 12, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', marginTop: 10, textAlign: 'center' },
-  pdfNativeActions: { flexDirection: 'row', gap: 10, marginTop: 20, width: '100%' },
+  pdfNativeScroll: { flex: 1 },
+  pdfNativeScrollInner: { padding: 14, paddingBottom: 24 },
+  pdfNativeCard: { width: '100%', borderRadius: 12, borderWidth: 1, padding: 18, alignItems: 'center' },
+  pdfNativeTitle: { fontSize: 16, fontWeight: '700', marginTop: 10, textAlign: 'center' },
+  pdfNativeSub: { fontSize: 12, marginTop: 4, textAlign: 'center' },
+  pdfBadgeRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  pdfBadgeText: { fontSize: 11, fontWeight: '700' },
+  pdfNativeActions: { flexDirection: 'row', gap: 10, marginTop: 16, width: '100%' },
   pdfActionPrimary: { flex: 1, flexDirection: 'row', height: 42, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   pdfActionPrimaryText: { color: '#ffffff', fontWeight: '600', fontSize: 13 },
   pdfActionSecondary: { flex: 1, flexDirection: 'row', height: 42, borderRadius: 8, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   pdfActionSecondaryText: { fontWeight: '600', fontSize: 13 },
+  pdfSummaryCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+    marginTop: 12,
+  },
+  pdfSummaryTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+    paddingBottom: 4,
+  },
+  pdfSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 3,
+  },
+  pdfSummaryLabel: { fontSize: 11 },
+  pdfSummaryValue: { fontSize: 11, fontWeight: '600', flexShrink: 1, textAlign: 'right' },
+
   irdaFormCardBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8, borderWidth: 1, marginTop: 10, gap: 8 },
   irdaFormCardBtnText: { fontSize: 13, fontWeight: '600' },
   pdfFooter: { padding: 12, borderTopWidth: 1, flexDirection: 'row', alignItems: 'center' },
