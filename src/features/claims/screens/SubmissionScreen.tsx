@@ -45,7 +45,28 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
   const claimId = route?.params?.claimId || 'a4f1c9e2';
   const { claims, addOrUpdateClaim } = useClaimsStore();
 
-  const claim = claims.find(c => c.id === claimId || c.id.startsWith(claimId)) || claims[0];
+  const fallbackClaim = {
+    id: claimId || 'a4f1c9e2',
+    who: 'R. Menon',
+    dept: 'Cardiology',
+    amt: 184500,
+    status: 'complete' as const,
+    step: 'validate' as const,
+    indexed: false,
+    policyNo: 'SAMPLE-PH-77421',
+    hospital: 'Sunrise Multispecialty',
+    doctor: 'Dr. P. Rangan',
+    diagnosis: 'Chest pain on exertion; acute coronary event.',
+    age: 54,
+    gender: 'Male',
+    admissionDate: '12-08-2026',
+    dischargeDate: '16-08-2026',
+    days: 4,
+    claimType: 'Reimbursement',
+    fieldsParsed: '23 of 27',
+  };
+
+  const claim = claims.find(c => c.id === claimId || c.id.startsWith(claimId)) || claims[0] || fallbackClaim;
 
   // Payer / Adapter state (default 'generic' as in reference prototype)
   const [payer, setPayer] = useState<'generic' | 'fhir' | 'x12'>('generic');
