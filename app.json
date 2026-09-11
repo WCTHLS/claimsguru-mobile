@@ -8,13 +8,40 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.claimsguru.ios"
+      "bundleIdentifier": "com.claimsguru.ios",
+      "infoPlist": {
+        "NSCameraUsageDescription": "ClaimsGuru needs access to your camera to capture and attach medical bills and discharge summaries.",
+        "NSPhotoLibraryUsageDescription": "ClaimsGuru needs access to your photos to attach existing medical documents and reports."
+      }
     },
     "android": {
-      "package": "com.claimsguru.app"
+      "package": "com.claimsguru.app",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "INTERNET"
+      ]
     },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you upload claim documents.",
+          "cameraPermission": "The app accesses your camera to let you take photos of medical receipts and claim documents."
+        }
+      ],
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ]
+    ],
     "web": {
       "bundler": "metro"
     }
   }
 }
+

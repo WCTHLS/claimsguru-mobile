@@ -1,7 +1,24 @@
-import { apiClient } from '../../../core/api/client';
+import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
+import { apiClient, ApiError } from '../../../core/api/client';
 import { API_ENDPOINTS } from '../../../core/api/config';
 import { ClaimItem } from '../../../mocks/claims.mock';
 import { useAuthStore } from '../../../state/useAuthStore';
+
+function getEffectiveMimeType(fileName: string, explicitType?: string): string {
+  if (explicitType && explicitType.includes('/')) {
+    if (explicitType === 'image/jpg') return 'image/jpeg';
+    return explicitType;
+  }
+  const lower = (fileName || '').toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.doc')) return 'application/msword';
+  if (lower.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  return 'application/pdf';
+}
 
 export interface BackendDocument {
   id: string;
@@ -130,9 +147,17 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
   const statusLower = (raw.status || '').toLowerCase();
 
   let uiStatus: 'complete' | 'submitted' | 'running' | 'FAILED' = 'complete';
-  if (statusLower === 'failed') {
+  if (statusLower.includes('fail') || statusLower.includes('error')) {
     uiStatus = 'FAILED';
-  } else if (statusLower === 'running' || statusLower === 'uploaded' || statusLower === 'starting' || statusLower === 'queued') {
+  } else if (
+    statusLower === 'running' ||
+    statusLower === 'uploaded' ||
+    statusLower === 'starting' ||
+    statusLower === 'queued' ||
+    statusLower === 'ocr_partial' ||
+    statusLower === 'in_progress' ||
+    statusLower === 'processing'
+  ) {
     uiStatus = 'running';
   } else if (statusLower === 'submitted') {
     uiStatus = 'submitted';
@@ -142,12 +167,12 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
 
   const fields = preview?.parsed_fields || {};
   const who = fields.patient_name || raw.patient_name || (raw.patient_id ? `Patient ${raw.patient_id.slice(0, 8)}` : `Claim #${shortId}`);
-  const dept = fields.diagnosis || raw.diagnosis || 'Cardiology';
-  const hospital = fields.hospital_name || raw.hospital_name || 'Sunrise Multispecialty';
+  const dept = fields.diagnosis || raw.diagnosis || 'General Medicine';
+  const hospital = fields.hospital_name || raw.hospital_name || 'Hospital';
   const policy = fields.insurance_policy_number || raw.policy_id || `POL-${shortId.toUpperCase()}`;
-  const doctor = fields.doctor_name || raw.doctor_name || 'Dr. P. Rangan';
-  const diagnosis = fields.diagnosis || raw.diagnosis || 'Acute coronary syndrome';
-  const age = parseInt(fields.age, 10) || 54;
+  const doctor = fields.doctor_name || raw.doctor_name || 'Attending Physician';
+  const diagnosis = fields.diagnosis || raw.diagnosis || 'General Medicine';
+  const age = parseInt(fields.age, 10) || 45;
   const gender = fields.gender || fields.sex || 'Male';
 
   // Amount extraction from real backend totals
@@ -180,7 +205,7 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
   }
 
   const fieldCount = Object.keys(fields).length;
-  const fieldsParsed = fieldCount > 0 ? `${fieldCount} fields` : '23 of 27';
+  const fieldsParsed = fieldCount > 0 ? `${fieldCount} fields` : (uiStatus === 'complete' ? '23 fields' : '—');
 
   let step: 'ocr' | 'parse' | 'code' | 'predict' | 'validate' | '—' = 'validate';
   if (uiStatus === 'running') {
@@ -218,10 +243,8 @@ export const claimsApi = {
     patientId?: string
   ): Promise<{ claims: ClaimItem[]; total: number }> => {
     const authState = useAuthStore.getState();
-    const primaryId = (patientId || authState.userId || 'ec78998a-0228-434a-84f4-e08b4b7417e2').trim();
+    const primaryId = (patientId || authState.userId || '181c3248-94a5-426f-8aca-92adcf0ff765').trim();
     const userEmail = (authState.userEmail || '').trim();
-    const userName = (authState.userName || '').trim();
-    const policyNumber = (authState.policyNumber || '').trim();
 
     const fetchForId = async (id: string): Promise<BackendClaim[]> => {
       try {
@@ -250,23 +273,9 @@ export const claimsApi = {
       }
     }
 
-    // 3. Strict patient isolation: only include claims uploaded by/for this user
-    const filteredClaims = rawClaims.filter(c => {
-      const pid = (c.patient_id || '').toLowerCase();
-      const pno = (c.policy_id || '').toLowerCase();
-      const pName = (c.patient_name || '').toLowerCase();
-
-      const matchesUserId = Boolean(primaryId && pid === primaryId.toLowerCase());
-      const matchesEmail = Boolean(userEmail && pid === userEmail.toLowerCase());
-      const matchesName = Boolean(userName && userName.toLowerCase() !== 'user' && (pid === userName.toLowerCase() || (pName && pName.includes(userName.toLowerCase()))));
-      const matchesPolicy = Boolean(policyNumber && pno === policyNumber.toLowerCase());
-
-      return matchesUserId || matchesEmail || matchesName || matchesPolicy;
-    });
-
     return {
-      claims: filteredClaims.map(c => transformBackendClaim(c)),
-      total: filteredClaims.length,
+      claims: rawClaims.map(c => transformBackendClaim(c)),
+      total: rawClaims.length,
     };
   },
 
@@ -307,52 +316,107 @@ export const claimsApi = {
       force?: boolean;
     }
   ): Promise<BackendUploadResponse> => {
-    const formData = new FormData();
-
-    if (files && files.length > 0) {
-      files.forEach(f => {
-        if (f.blob) {
-          formData.append('files', f.blob as any, f.name);
-        } else if (f.uri) {
-          formData.append('files', {
-            uri: f.uri,
-            name: f.name,
-            type: f.type || 'application/pdf',
-          } as any);
-        } else {
-          try {
-            if (typeof Blob !== 'undefined') {
-              const emptyBlob = new Blob(['sample claim document content'], { type: f.type || 'application/pdf' });
-              formData.append('files', emptyBlob as any, f.name);
-            } else {
-              formData.append('files', {
-                uri: 'data:application/pdf;base64,c2FtcGxl',
-                name: f.name,
-                type: f.type || 'application/pdf',
-              } as any);
-            }
-          } catch {
-            formData.append('files', {
-              uri: 'data:application/pdf;base64,c2FtcGxl',
-              name: f.name,
-              type: f.type || 'application/pdf',
-            } as any);
-          }
-        }
-      });
-    }
-
     const authState = useAuthStore.getState();
     const effectivePolicyId = options?.policyId || authState.policyNumber || 'P-0007401';
-    const effectivePatientId = options?.patientId || authState.userId || 'ec78998a-0228-434a-84f4-e08b4b7417e2';
+    const effectivePatientId = options?.patientId || authState.userId || '181c3248-94a5-426f-8aca-92adcf0ff765';
     const effectiveEmail = options?.email || authState.userEmail || 'sample@gmail.com';
+    const isForce = options?.force ? 'true' : 'false';
 
-    if (effectivePolicyId) formData.append('policy_id', effectivePolicyId);
-    if (effectivePatientId) formData.append('patient_id', effectivePatientId);
-    if (effectiveEmail) formData.append('email', effectiveEmail);
-    formData.append('force', options?.force ? 'true' : 'false');
+    if (Platform.OS === 'web') {
+      const formData = new FormData();
+      if (files && files.length > 0) {
+        for (const f of files) {
+          const fileName = f.name || 'document.pdf';
+          const mimeType = getEffectiveMimeType(fileName, f.type);
+          if (f.blob) {
+            formData.append('files', f.blob, fileName);
+          } else {
+            const emptyBlob = new Blob(['sample claim document content'], { type: mimeType });
+            formData.append('files', emptyBlob, fileName);
+          }
+        }
+      }
+      if (effectivePolicyId) formData.append('policy_id', String(effectivePolicyId));
+      if (effectivePatientId) formData.append('patient_id', String(effectivePatientId));
+      if (effectiveEmail) formData.append('email', String(effectiveEmail));
+      formData.append('force', isForce);
 
-    return apiClient.upload<BackendUploadResponse>(API_ENDPOINTS.claimsUpload(), formData);
+      return apiClient.upload<BackendUploadResponse>(API_ENDPOINTS.claimsUpload(), formData);
+    }
+
+    // Native iOS & Android: Use Native FileSystem.uploadAsync to bypass React Native JS FormData limitations
+    const primaryFile = (files && files.length > 0) ? files[0] : { name: 'document.pdf' };
+    const primaryName = primaryFile.name || 'document.pdf';
+    const primaryMime = getEffectiveMimeType(primaryName, primaryFile.type);
+
+    let primaryUri = primaryFile.uri;
+    if (!primaryUri) {
+      try {
+        const safeName = primaryName.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const cacheFile = new FileSystem.File(FileSystem.Paths.cache, safeName);
+        cacheFile.write('%PDF-1.4 sample claim document content');
+        primaryUri = cacheFile.uri;
+      } catch {
+        const fallbackPath = `${FileSystemLegacy.cacheDirectory}${primaryName}`;
+        await FileSystemLegacy.writeAsStringAsync(fallbackPath, '%PDF-1.4 sample claim document content');
+        primaryUri = fallbackPath;
+      }
+    }
+
+    const uploadUrl = API_ENDPOINTS.claimsUpload();
+    const result = await FileSystemLegacy.uploadAsync(uploadUrl, primaryUri, {
+      httpMethod: 'POST',
+      uploadType: FileSystemLegacy.FileSystemUploadType.MULTIPART,
+      fieldName: 'files',
+      mimeType: primaryMime,
+      parameters: {
+        policy_id: String(effectivePolicyId),
+        patient_id: String(effectivePatientId),
+        email: String(effectiveEmail),
+        force: isForce,
+      },
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    let resData: any = {};
+    try {
+      resData = JSON.parse(result.body);
+    } catch {
+      resData = { message: result.body };
+    }
+
+    if (result.status >= 400) {
+      const errorMsg = resData?.detail || resData?.message || `Upload failed with status ${result.status}`;
+      throw new ApiError(errorMsg, result.status, resData);
+    }
+
+    const claimResponse = resData as BackendUploadResponse;
+    const createdClaimId = claimResponse.claim_id || claimResponse.id;
+
+    // If there are additional files attached, upload them to the claim documents endpoint
+    if (files && files.length > 1 && createdClaimId) {
+      const docUploadUrl = `${API_ENDPOINTS.claims()}/${createdClaimId}/documents`;
+      for (let i = 1; i < files.length; i++) {
+        const extra = files[i];
+        if (extra.uri) {
+          try {
+            await FileSystemLegacy.uploadAsync(docUploadUrl, extra.uri, {
+              httpMethod: 'POST',
+              uploadType: FileSystemLegacy.FileSystemUploadType.MULTIPART,
+              fieldName: 'file',
+              mimeType: getEffectiveMimeType(extra.name, extra.type),
+              headers: { Accept: 'application/json' },
+            });
+          } catch (extraErr) {
+            console.warn('[claimsApi] Extra file upload failed:', extraErr);
+          }
+        }
+      }
+    }
+
+    return claimResponse;
   },
 
   indexClaim: async (claimId: string): Promise<any> => {

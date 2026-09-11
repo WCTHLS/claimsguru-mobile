@@ -14,6 +14,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import {
   Camera,
   Image as ImageIcon,
@@ -161,7 +163,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
     }, 2800);
   };
 
-  const handlePickFiles = (accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx') => {
+  const handlePickFiles = async (accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx') => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const input = document.createElement('input');
       input.type = 'file';
@@ -184,12 +186,60 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       };
       input.click();
     } else {
-      addFile('Policy_Card.pdf|scanned|policy_card|0.90');
-      showToast('Document attached');
+      try {
+        const result = await DocumentPicker.getDocumentAsync({
+          type: accept === 'image/*' ? ['image/*'] : ['*/*'],
+          multiple: true,
+          copyToCacheDirectory: true,
+        });
+
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          for (const asset of result.assets) {
+            addRealFile({
+              name: asset.name,
+              size: asset.size,
+              type: asset.mimeType || 'application/pdf',
+              uri: asset.uri,
+            });
+          }
+          showToast(`Attached ${result.assets.length} file${result.assets.length > 1 ? 's' : ''}`);
+        }
+      } catch (err) {
+        console.warn('[ChatHomeScreen] Document picker error:', err);
+      }
     }
   };
 
-  const handleCameraPick = () => {
+  const handlePickGallery = async () => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      handlePickFiles('image/*');
+      return;
+    }
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        for (const asset of result.assets) {
+          const name = asset.fileName || `Photo_${Date.now()}.jpg`;
+          addRealFile({
+            name,
+            size: asset.fileSize || 1024 * 1024,
+            type: asset.mimeType || 'image/jpeg',
+            uri: asset.uri,
+          });
+        }
+        showToast(`Attached ${result.assets.length} photo${result.assets.length > 1 ? 's' : ''}`);
+      }
+    } catch (err) {
+      console.warn('[ChatHomeScreen] Gallery picker error:', err);
+    }
+  };
+
+  const handleCameraPick = async () => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const input = document.createElement('input');
       input.type = 'file';
@@ -212,8 +262,32 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       };
       input.click();
     } else {
-      addFile('Discharge_Summary.pdf|digital|discharge_summary|0.96');
-      showToast('Document attached');
+      try {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          showToast('Camera permission required');
+          return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          const asset = result.assets[0];
+          const name = asset.fileName || `Camera_Scan_${Date.now()}.jpg`;
+          addRealFile({
+            name,
+            size: asset.fileSize || 1024 * 1024,
+            type: asset.mimeType || 'image/jpeg',
+            uri: asset.uri,
+          });
+          showToast('Attached photo from camera');
+        }
+      } catch (err) {
+        console.warn('[ChatHomeScreen] Camera picker error:', err);
+      }
     }
   };
 
@@ -257,7 +331,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
         })),
         {
           policyId: auth.policyNumber || 'P-0007401',
-          patientId: auth.userId || 'ec78998a-0228-434a-84f4-e08b4b7417e2',
+          patientId: auth.userId || '181c3248-94a5-426f-8aca-92adcf0ff765',
           email: auth.userEmail || 'sample@gmail.com',
           force: true,
         }
@@ -470,7 +544,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
 
                 <TouchableOpacity
                   style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                  onPress={() => handlePickFiles('image/*')}
+                  onPress={handlePickGallery}
                   activeOpacity={0.75}
                 >
                   <ImageIcon size={18} color={colors.muted} style={{ marginBottom: 4 }} />
@@ -488,7 +562,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
 
                 <TouchableOpacity
                   style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                  onPress={() => handlePickFiles('image/*')}
+                  onPress={handlePickGallery}
                   activeOpacity={0.75}
                 >
                   <Smartphone size={18} color={colors.muted} style={{ marginBottom: 4 }} />

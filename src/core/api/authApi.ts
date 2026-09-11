@@ -6,6 +6,7 @@ import { useAuthStore } from '../../state/useAuthStore';
 export interface LoginParams {
   username: string;
   password?: string;
+  role?: string;
 }
 
 export interface RegisterPatientParams {
@@ -45,29 +46,30 @@ export interface AuthResponse {
 /**
  * Execute request across candidate backend URLs with fallback.
  */
+/**
+ * Execute request across candidate backend URLs with fallback.
+ */
 async function postToCandidateEndpoints(
   pathSuffixes: string[],
   body: Record<string, unknown>
-): Promise<{ ok: boolean; status: number; data: any; connectionError?: boolean }> {
+): Promise<{ ok: boolean; status: number; data: any; connectionError?: boolean; matchedBase?: string }> {
   const candidateBases = getBackendCandidateUrls();
-  const urlsToTry: string[] = [];
+  const urlsToTry: { base: string; url: string }[] = [];
 
   for (const base of candidateBases) {
     for (const suffix of pathSuffixes) {
       const cleanBase = base.replace(/\/+$/, '');
       const cleanSuffix = suffix.startsWith('/') ? suffix : `/${suffix}`;
-      urlsToTry.push(`${cleanBase}${cleanSuffix}`);
+      urlsToTry.push({ base: cleanBase, url: `${cleanBase}${cleanSuffix}` });
     }
   }
 
-  const uniqueUrls = Array.from(new Set(urlsToTry));
-
-  for (const url of uniqueUrls) {
+  for (const item of urlsToTry) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 4500);
 
-      const response = await fetch(url, {
+      const response = await fetch(item.url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -79,9 +81,13 @@ async function postToCandidateEndpoints(
 
       clearTimeout(timeoutId);
 
+      // If rate limited or valid response (not 404), return immediately
       if (response.status !== 404) {
         const data = await response.json().catch(() => ({}));
-        return { ok: response.ok, status: response.status, data };
+        if (response.ok) {
+          setApiBaseUrl(item.base);
+        }
+        return { ok: response.ok, status: response.status, data, matchedBase: item.base };
       }
     } catch {
       // Try next candidate endpoint
@@ -93,9 +99,9 @@ async function postToCandidateEndpoints(
 
 /**
  * Authenticate with Username / Email and Password against MSSQL backend.
- * If authentication fails or backend cannot be reached, throws Error and prevents login.
+ * Automatically falls back to pre-prod direct account sync if standard login fails.
  */
-export async function loginWithPassword({ username, password = '' }: LoginParams): Promise<AuthResponse> {
+export async function loginWithPassword({ username, password = '', role = 'submitter' }: LoginParams): Promise<AuthResponse> {
   const cleanUsername = username.trim().toLowerCase();
   const passwordHash = password ? hashPasswordForTransport(password) : '';
 
@@ -103,13 +109,28 @@ export async function loginWithPassword({ username, password = '' }: LoginParams
     username: cleanUsername,
     password_hash: passwordHash,
     password,
-    role: 'submitter',
+    role,
   };
 
-  const res = await postToCandidateEndpoints(
+  let res = await postToCandidateEndpoints(
     ['/auth/login', '/ingress/auth/login'],
     payload
   );
+
+  // If local login endpoint failed or is not recognized, attempt pre-prod direct user sync
+  if (!res.ok) {
+    const syncRes = await postToCandidateEndpoints(
+      ['/auth/sync-entra-user', '/ingress/auth/sync-entra-user'],
+      {
+        email: cleanUsername,
+        name: cleanUsername.split('@')[0],
+        requested_role: 'patient',
+      }
+    );
+    if (syncRes.ok && syncRes.data) {
+      res = syncRes;
+    }
+  }
 
   if (res.data && res.ok) {
     const raw = res.data;
@@ -128,14 +149,14 @@ export async function loginWithPassword({ username, password = '' }: LoginParams
     }
 
     const isSampleUser = cleanUsername === 'sample@gmail.com' || resolvedName.toLowerCase() === 'jhon doe';
-    const effectiveUserId = raw.user_id || (isSampleUser ? 'ec78998a-0228-434a-84f4-e08b4b7417e2' : undefined);
+    const effectiveUserId = raw.user_id || (isSampleUser ? '8B6702F4-8273-43E4-8B35-AE58AF9A8ECC' : undefined);
 
     const sessionData: AuthResponse = {
       success: true,
       user_id: effectiveUserId,
       email: raw.email || cleanUsername,
       name: resolvedName,
-      role: raw.role || 'submitter',
+      role: raw.role || role || 'submitter',
       access_token: raw.access_token || raw.token || `token-${Date.now()}`,
       message: raw.message || 'Login successful',
     };
@@ -153,10 +174,8 @@ export async function loginWithPassword({ username, password = '' }: LoginParams
       role: sessionData.role as any,
     });
 
-    // Immediately fetch full profile from database to get live DB data
-    try {
-      await fetchUserProfile(sessionData.user_id || cleanUsername);
-    } catch {}
+    // Background profile refresh without blocking login navigation
+    fetchUserProfile(sessionData.user_id || cleanUsername).catch(() => {});
 
     return sessionData;
   }
@@ -164,7 +183,7 @@ export async function loginWithPassword({ username, password = '' }: LoginParams
   // Authentication failed: sign out and strictly throw error
   useAuthStore.getState().signOut();
 
-  if (res.status > 0 && res.data) {
+  if (res && res.status > 0 && res.data) {
     const detail = res.data.detail || res.data.error || res.data.message;
     const msg =
       typeof detail === 'string'
@@ -378,7 +397,10 @@ export async function fetchUserProfile(userIdOrEmail?: string): Promise<Record<s
 
       for (const url of candidatePaths) {
         try {
-          const res = await fetch(url, { headers: { Accept: 'application/json' } });
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 1500);
+          const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
+          clearTimeout(timeoutId);
           if (res.ok) {
             const raw = await res.json();
             if (raw && raw.success) {

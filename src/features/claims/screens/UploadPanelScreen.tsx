@@ -8,7 +8,10 @@ import {
   SafeAreaView,
   StatusBar,
   Platform,
+  Alert,
 } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useUploadStore, UploadFileItem } from '../../../state/useUploadStore';
 import { usePipelineStore } from '../../../state/usePipelineStore';
@@ -69,44 +72,44 @@ export const UploadPanelScreen = ({ navigation }: any) => {
   const handleStartPipeline = async () => {
     if (!hasFiles || uploading) return;
 
-    // Trigger real backend upload
-    const auth = useAuthStore.getState();
-    const { claimId } = await uploadToBackend({
-      policyId: auth.policyNumber || 'P-0007401',
-      patientId: auth.userId || 'ec78998a-0228-434a-84f4-e08b4b7417e2',
-    });
+    try {
+      const auth = useAuthStore.getState();
+      const { claimId } = await uploadToBackend({
+        policyId: auth.policyNumber || 'P-0007401',
+        patientId: auth.userId || '181c3248-94a5-426f-8aca-92adcf0ff765',
+      });
 
-    // Register active new claim in claims store
-    addOrUpdateClaim({
-      id: claimId,
-      who: files[0]?.name ? `Processing ${files[0].name}...` : 'Processing claim...',
-      dept: 'General Medicine',
-      amt: 184500,
-      status: 'running',
-      step: 'ocr',
-      indexed: false,
-      claimType: claimType,
-    });
+      // Register active new claim in claims store
+      addOrUpdateClaim({
+        id: claimId,
+        who: files[0]?.name ? `Processing ${files[0].name}...` : 'Processing claim...',
+        dept: 'General Medicine',
+        amt: 184500,
+        status: 'running',
+        step: 'ocr',
+        indexed: false,
+        claimType: claimType,
+      });
 
-    startPipeline(
-      files.map(f => ({
-        name: f.name,
-        docType: f.docType,
-        kind: f.kind,
-      })),
-      claimId
-    );
+      startPipeline(
+        files.map(f => ({
+          name: f.name,
+          docType: f.docType,
+          kind: f.kind,
+        })),
+        claimId
+      );
 
-    navigation.navigate(Routes.WorkflowPipeline);
+      navigation.navigate(Routes.WorkflowPipeline);
+    } catch (err: any) {
+      Alert.alert(
+        'Upload Error',
+        err?.message || 'Could not upload claim document to ClaimsGuru backend. Please check connection and try again.'
+      );
+    }
   };
 
-  const handleAddDefaultSample = () => {
-    addFile('Discharge_Summary.pdf|digital|discharge_summary|0.96');
-    setTimeout(() => addFile('Hospital_Bill.jpg|jpg|hospital_bill|0.93'), 150);
-    setTimeout(() => addFile('Policy_Card.pdf|scanned|policy_card|0.90'), 300);
-  };
-
-  const handlePickFiles = (accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx') => {
+  const handlePickFiles = async (accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx') => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const input = document.createElement('input');
       input.type = 'file';
@@ -128,42 +131,83 @@ export const UploadPanelScreen = ({ navigation }: any) => {
       };
       input.click();
     } else {
-      addFile('Lab_Report.pdf|digital|lab_report|0.91');
-    }
-  };
+      try {
+        const result = await DocumentPicker.getDocumentAsync({
+          type: ['*/*'],
+          multiple: true,
+          copyToCacheDirectory: true,
+        });
 
-  const handleCameraPick = () => {
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.setAttribute('capture', 'environment');
-      input.onchange = (e: any) => {
-        const selected = e.target.files;
-        if (selected && selected.length > 0) {
-          for (let i = 0; i < selected.length; i++) {
-            const f = selected[i];
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          for (const asset of result.assets) {
             addRealFile({
-              name: f.name || `camera_${Date.now()}.jpg`,
-              size: f.size,
-              type: f.type || 'image/jpeg',
-              blob: f,
+              name: asset.name,
+              size: asset.size,
+              type: asset.mimeType || 'application/pdf',
+              uri: asset.uri,
             });
           }
         }
-      };
-      input.click();
-    } else {
-      addFile('Discharge_Summary.pdf|digital|discharge_summary|0.96');
+      } catch (err) {
+        console.warn('Document picker error:', err);
+      }
+    }
+  };
+
+  const handlePickGallery = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        for (const asset of result.assets) {
+          const name = asset.fileName || `Photo_${Date.now()}.jpg`;
+          addRealFile({
+            name,
+            size: asset.fileSize || 1024 * 1024,
+            type: asset.mimeType || 'image/jpeg',
+            uri: asset.uri,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Image picker error:', err);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Camera permission is required to capture documents.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const name = asset.fileName || `Camera_Scan_${Date.now()}.jpg`;
+        addRealFile({
+          name,
+          size: asset.fileSize || 1024 * 1024,
+          type: asset.mimeType || 'image/jpeg',
+          uri: asset.uri,
+        });
+      }
+    } catch (err) {
+      console.warn('Camera error:', err);
     }
   };
 
   const handleDropZonePress = () => {
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      handlePickFiles();
-    } else {
-      handleAddDefaultSample();
-    }
+    handlePickFiles();
   };
 
   return (
@@ -197,7 +241,7 @@ export const UploadPanelScreen = ({ navigation }: any) => {
             <UploadCloud size={34} color={colors.muted} strokeWidth={1.7} />
             <Text style={[styles.dropTitle, { color: colors.ink }]}>Drop claim documents here</Text>
             <Text style={[styles.dropSubtitle, { color: colors.muted }]}>
-              {Platform.OS === 'web' ? 'Click to browse files · PDF, images, docs' : 'PDF · images · Word · Excel · CSV'}
+              {Platform.OS === 'web' ? 'Click to browse files · PDF, images, docs' : 'Tap to browse phone files · PDF, images, docs'}
             </Text>
           </TouchableOpacity>
 
@@ -205,7 +249,7 @@ export const UploadPanelScreen = ({ navigation }: any) => {
           <View style={styles.srcGrid}>
             <TouchableOpacity
               style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-              onPress={handleCameraPick}
+              onPress={handleTakePhoto}
               activeOpacity={0.75}
             >
               <Camera size={18} color={colors.muted} strokeWidth={1.8} />
@@ -214,7 +258,7 @@ export const UploadPanelScreen = ({ navigation }: any) => {
 
             <TouchableOpacity
               style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-              onPress={() => handlePickFiles('image/*')}
+              onPress={handlePickGallery}
               activeOpacity={0.75}
             >
               <ImageIcon size={18} color={colors.muted} strokeWidth={1.8} />
@@ -232,7 +276,7 @@ export const UploadPanelScreen = ({ navigation }: any) => {
 
             <TouchableOpacity
               style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-              onPress={() => handlePickFiles('image/*')}
+              onPress={handlePickGallery}
               activeOpacity={0.75}
             >
               <Smartphone size={18} color={colors.muted} strokeWidth={1.8} />

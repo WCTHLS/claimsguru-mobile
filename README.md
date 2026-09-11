@@ -1,125 +1,121 @@
-﻿# Claims Guru Mobile Client (Android & iOS)
+# ClaimsGuru Mobile Client (Android & iOS)
 
-Cross-platform mobile application for **Claims Guru**, built with **React Native** and **Expo**. Features a chat-first interface, 5-stage AI pipeline runner, medical document analyzer, and IRDAI claim form generator.
+Enterprise cross-platform mobile application for **ClaimsGuru**, built with **React Native (Expo)**. Directly integrated with the deployed **Microsoft Azure Pre-Prod Cloud Backend**.
 
 ---
 
-## 🚀 Quick Start (For Developers)
+## 🚀 Quick Start for Team Members
+
+You can run and test this app on your **physical Android phone** or **iPhone** in under 2 minutes using **Expo Go**.
 
 ### 1. Prerequisites
-- **Node.js**: Version `18.x` or `20.x` installed ([Download Node.js](https://nodejs.org/))
-- **Git**
+* **Node.js**: `v18.x`, `v20.x`, or higher installed ([Download Node.js](https://nodejs.org/))
+* **Git**: Installed
+* **Expo Go App**:
+  * 🤖 **Android**: Download **Expo Go** from [Google Play Store](https://play.google.com/store/apps/details?id=host.exp.exponent)
+  * 🍏 **iOS**: Download **Expo Go** from [Apple App Store](https://apps.apple.com/app/expo-go/id982107779)
 
-### 2. Installation
+---
+
+### 2. Setup & Installation
+
 Clone the repository and install dependencies:
 
 ```bash
-# 1. Install project packages
+# Clone branch
+git clone -b claimsflowbackend https://github.com/WCTHLS/claimsguru-mobile.git
+cd claimsguru-mobile
+
+# Install packages
 npm install
-
-# 2. Ensure web preview dependencies are installed
-npx expo install react-native-web react-dom @expo/metro-runtime
 ```
 
-### 3. Running the App
-Start the interactive Metro development server:
+---
 
+### 3. Launch the Team Dev Server
+
+#### Option A: One-Click PowerShell Script (Recommended on Windows)
+```powershell
+.\start_team_expo.ps1 -Tunnel
+```
+
+#### Option B: Standard NPM / Expo CLI Command (Windows / macOS / Linux)
 ```bash
-npm start
+npx expo start --go --tunnel -c
 ```
+
+> **Why `--tunnel`?** The tunnel flag allows your phone to connect securely over Cloudflare/ngrok tunnels even if your phone and computer are on different Wi-Fi networks or mobile data.
 
 ---
 
-## 📱 How to Preview & Test
+### 4. Open the App on Your Phone
 
-Once `npm start` is running in your terminal:
-
-| Target | How to Open | Requirements |
-| :--- | :--- | :--- |
-| **🌐 Web Browser** *(Fastest)* | Press **`w`** in terminal | Any browser (Chrome / Edge / Safari) at `http://localhost:8081` |
-| **📱 Real Android Phone** | Scan the terminal QR code | Install **Expo Go** from Google Play Store (Phone & PC on same Wi-Fi) |
-| **🍏 Real iPhone** | Scan the terminal QR code | Open default **Camera app** (Phone & PC on same Wi-Fi) |
-| **🤖 Android Emulator** | Press **`a`** in terminal | Android Studio installed with an active Android Virtual Device (AVD) |
-| **💻 iOS Simulator** | Press **`i`** in terminal | macOS with Xcode installed |
+1. Once the terminal shows the large **QR code**:
+   * 🤖 **Android**: Open the **Expo Go** app &rarr; Tap **"Scan QR Code"** &rarr; Point camera at terminal.
+   * 🍏 **iOS**: Open the native **Camera app** &rarr; Point at QR code &rarr; Tap the **"Open in Expo Go"** banner.
+2. The JavaScript bundle will download (`100%`) and launch the ClaimsGuru app immediately.
 
 ---
 
-## 📂 Repository Architecture
+## 🧪 End-to-End Testing Workflow
 
-```
-claimsguru-mobile/
-│
-├── 🤖 android/                     # Android Native Build Project (Google Play Store)
-│   ├── app/
-│   │   ├── build.gradle            # Android build configs & SDK versions
-│   │   └── src/main/
-│   │       └── AndroidManifest.xml # Camera, Storage, Biometric permissions
-│   └── build.gradle                # Root Gradle configuration
-│
-├── 🍏 ios/                         # iOS Native Build Project (Apple App Store)
-│   ├── Podfile                     # CocoaPods dependencies
-│   └── ClaimsGuru/
-│       └── Info.plist              # Privacy descriptions (Camera, FaceID)
-│
-├── 🌐 src/                         # Shared Cross-Platform Source (All 23 Screens)
-│   ├── app/
-│   │   ├── App.tsx                 # App Root & Providers
-│   │   └── navigation/             # Typed React Navigation (Tabs & Stacks)
-│   │
-│   ├── core/
-│   │   ├── theme/                  # Design tokens: Brand (#0d9488), Dark mode surfaces
-│   │   ├── rbac/                   # Role engine (viewer, submitter, reviewer, admin)
-│   │   └── utils/                  # en-IN INR formatter, PHI regex scrubber, date helpers
-│   │
-│   ├── features/                   # Modular Feature Screens
-│   │   ├── auth/                   # Sign In (Keycloak SSO) & Sign Up (TPA onboarding)
-│   │   ├── chat/                   # Chat-First Home + Upload Tray + Pipeline Card
-│   │   ├── sessions/               # Conversation history & replays
-│   │   ├── claims/                 # Claims list & Claim detail
-│   │   ├── workflow/               # 5-stage pipeline runner (OCR -> Validate)
-│   │   ├── brain/                  # AI Brain Preview, Risk, Fraud, Validation (R001–R011)
-│   │   ├── documents-ocr/          # Document grid, OCR fields, Scan analyzer
-│   │   ├── search/                 # Full-text & FAISS semantic search
-│   │   ├── submission/             # IRDAI claim form generator (Part A/B)
-│   │   ├── patient/                # Patient profile & activity timeline (proposals)
-│   │   └── profile/                # Profile & RBAC role switcher
-│   │
-│   ├── mocks/                      # Standalone Mock Data Layer
-│   ├── shared/                     # Reusable UI Primitives (Gauges, Steppers, Badges)
-│   └── state/                      # Zustand Global State Stores
-│
-├── app.json                        # Expo app metadata & package identifiers
-├── package.json                    # Dependencies and run scripts
-└── tsconfig.json                   # TypeScript configuration
-```
+### Step 1: Sign Up or Log In
+* Open the app.
+* Enter your Name, Email, Phone, and Password &rarr; Tap **Create Account** (or **Sign In** if you already created one).
+* *The account is saved directly into Azure MSSQL (`users` and `patient_profiles` tables).*
+
+### Step 2: Upload a Claim Document
+* On the Home / Chat screen, tap the **+** or **Upload Document** action.
+* Select a Medical Bill, Discharge Summary, or Prescriptions (PDF, JPG, PNG).
+* Tap **Upload to Backend**.
+
+### Step 3: Live 5-Stage AI Pipeline Execution
+* The app automatically connects to Azure Ingress (`/ingress/claims/`) and tracks live pipeline progress:
+  1. **OCR Extraction** *(Azure Document Intelligence)*
+  2. **Clinical Parsing** *(Field mapping: Hospital, Diagnosis, Amount, Dates)*
+  3. **Medical Coding** *(ICD-10 & CPT Code mapping)*
+  4. **Adjudication Scoring** *(Rejection risk calculation)*
+  5. **Validation Rules** *(IRDAI checklist compliance)*
+
+### Step 4: Review Adjudicated Claim & IRDAI Form
+* Inspect the extracted fields (Diagnosis, Admission/Discharge dates, Billed total).
+* Tap into the Claim Summary to view the generated TPA analysis.
 
 ---
 
-## 🔐 Role-Based Access Control (RBAC)
+## ⚙️ Backend Configuration
 
-The app includes an interactive **RBAC role switcher** in the **Profile** screen:
+The mobile app is pre-configured to communicate with the Azure Pre-Prod Ingress Gateway:
 
-| Role | Permissions |
+```env
+# .env
+EXPO_PUBLIC_ENABLE_ENTRA_ID=false
+EXPO_PUBLIC_API_URL=https://cg-preprod-cin-ingress.purpleocean-4441f644.centralindia.azurecontainerapps.io
+```
+
+### Endpoints Overview:
+* **Ingress API Gateway**: `https://cg-preprod-cin-ingress.purpleocean-4441f644.centralindia.azurecontainerapps.io`
+* **Web Portal**: `https://cg-preprod-cin-frontend.purpleocean-4441f644.centralindia.azurecontainerapps.io`
+
+---
+
+## 🛠️ Useful Scripts
+
+| Command | Purpose |
 | :--- | :--- |
-| **`viewer`** | Read-only access: Chat, search, and view existing claims. |
-| **`submitter`** | Upload documents, run pipeline, and submit claims to payers. |
-| **`reviewer`** | Submitter rights + Medical code feedback, field edits, and validation re-runs. |
-| **`admin`** | Full rights: Claim deletion, processing configuration, and Ops console. |
+| `npm start` | Start standard interactive Metro bundler |
+| `npm run start -- --tunnel` | Start with Cloudflare tunnel for remote devices |
+| `npm run web` | Run and preview on desktop browser (`http://localhost:8081`) |
+| `npx tsc --noEmit` | Validate TypeScript types (0 errors) |
 
 ---
 
-## 📦 Production Builds & Store Deployment
+## ❓ Troubleshooting
 
-### Google Play Store (Android)
-```bash
-# Builds signed release .aab (Android App Bundle)
-npm run build:android
-```
-*Output: `android/app/build/outputs/bundle/release/app-release.aab`*
-
-### Apple App Store (iOS)
-```bash
-# Generates iOS Archive (.ipa)
-npm run build:ios
-```
-*Output: `ClaimsGuru.ipa` uploaded to App Store Connect / TestFlight.*
+1. **"Could not connect to development server"**:
+   * Ensure you ran with `--tunnel` (`npx expo start --go --tunnel -c`).
+   * Verify your phone has internet access.
+2. **Bundle cache issue**:
+   * Run with `-c` flag to clear the Metro bundler cache: `npx expo start --go --tunnel -c`.
+3. **Camera / Document Picker permissions**:
+   * If prompted, grant photo and camera permissions in your device settings.
