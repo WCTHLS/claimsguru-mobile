@@ -96,8 +96,6 @@ export const ALL_FEATURES: FeatureDef[] = [
   { id: 'validation', g: 'AI Brain', nav: Routes.ValidationRules, n: 'Validation', d: 'R001–R011 deterministic rules checklist', iconName: 'check-square', params: { claimId: 'a4f1c9e2' } },
   { id: 'coding', g: 'AI Brain', nav: Routes.MedicalCoding, n: 'Coding', d: 'ICD-10 & CPT procedure code review', iconName: 'code', params: { claimId: 'a4f1c9e2' } },
   { id: 'docs', g: 'Documents', nav: Routes.DocumentGrid, n: 'Documents', d: 'Manage & inspect attached files', iconName: 'folder', params: { claimId: 'a4f1c9e2' } },
-  { id: 'ocr', g: 'Documents', nav: Routes.OcrParsedFields, n: 'OCR & fields', d: 'Visual document reader & field editor', iconName: 'scan', params: { claimId: 'a4f1c9e2' } },
-  { id: 'scan', g: 'Documents', nav: Routes.ScanAnalyzer, n: 'Scan analyzer', d: 'MRI, CT, X-Ray radiology analyzer', iconName: 'file-search', params: { claimId: 'a4f1c9e2' } },
   { id: 'patient', g: 'Patient', nav: Routes.PatientProfile, n: 'Patient', d: 'Demographics, policy & KYC details', iconName: 'user' },
   { id: 'activity', g: 'Patient', nav: Routes.PatientActivity, n: 'Activity', d: 'Audit history & state change diffs', iconName: 'clock' },
   { id: 'search', g: 'Other', nav: Routes.SearchTab, n: 'Search', d: 'Full-text & semantic vector search', iconName: 'search' },
@@ -152,7 +150,6 @@ export const ChatHomeScreen = ({ navigation }: any) => {
 
   const [input, setInput] = useState('');
   const [isCardExpanded, setIsCardExpanded] = useState(true);
-  const [isFeaturesExpanded, setIsFeaturesExpanded] = useState(true);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showFeaturesModal, setShowFeaturesModal] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -296,11 +293,6 @@ export const ChatHomeScreen = ({ navigation }: any) => {
   const toggleCard = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setIsCardExpanded(!isCardExpanded);
-  };
-
-  const toggleFeaturesCard = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIsFeaturesExpanded(!isFeaturesExpanded);
   };
 
   const handleSend = () => {
@@ -703,69 +695,6 @@ export const ChatHomeScreen = ({ navigation }: any) => {
           </TouchableOpacity>
         )}
 
-        {/* ALL FEATURES CARD - COLLAPSIBLE 3-COLUMN GRID */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <TouchableOpacity style={styles.cardHeader} onPress={toggleFeaturesCard} activeOpacity={0.7}>
-            <View style={styles.cardHeaderLeft}>
-              <LayoutGrid size={18} color={colors.brand} style={{ marginRight: 8 }} />
-              <Text style={[styles.cardTitle, { color: colors.ink }]}>All features</Text>
-              <View style={[styles.fileBadge, { backgroundColor: colors.surface2 }]}>
-                <Text style={[styles.fileBadgeText, { color: colors.muted }]}>23 screens</Text>
-              </View>
-            </View>
-            {isFeaturesExpanded ? <ChevronUp size={18} color={colors.muted} /> : <ChevronDown size={18} color={colors.muted} />}
-          </TouchableOpacity>
-
-          {isFeaturesExpanded && (
-            <View style={styles.featuresGridContainer}>
-              <View style={styles.featuresGrid}>
-                {ALL_FEATURES.map(feat => {
-                  const isLocked = feat.perm === 'ops' && role !== 'admin';
-                  return (
-                    <TouchableOpacity
-                      key={feat.id}
-                      style={[
-                        styles.featureTile,
-                        { backgroundColor: colors.surface, borderColor: colors.line },
-                        isLocked && { opacity: 0.65 },
-                      ]}
-                      onPress={() => handleNavigateFeature(feat)}
-                      activeOpacity={0.7}
-                    >
-                      <View
-                        style={[
-                          styles.featureIconWrap,
-                          { backgroundColor: isLocked ? colors.surface2 : colors.brandSoft },
-                        ]}
-                      >
-                        {renderFeatureIcon(feat.iconName, isLocked ? colors.muted : colors.brandDark, 16)}
-                      </View>
-                      <Text style={[styles.featureTileName, { color: colors.ink }]} numberOfLines={1}>
-                        {feat.n}
-                      </Text>
-                      {feat.perm && (
-                        <View style={[styles.tileLockBadge, { backgroundColor: colors.surface2 }]}>
-                          <Text style={[styles.tileLockText, { color: isLocked ? colors.red : colors.muted }]}>
-                            {feat.perm}
-                          </Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <TouchableOpacity
-                style={[styles.exploreBtn, { borderColor: colors.line }]}
-                onPress={() => setShowFeaturesModal(true)}
-              >
-                <Text style={[styles.exploreBtnText, { color: colors.brandDark }]}>
-                  View categorized directory ({ALL_FEATURES.length} features) →
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
 
         {/* Welcome Starter Card */}
         <View style={[styles.welcomeCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
@@ -906,7 +835,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
             ]}
           >
             <View style={styles.sheetHandle} />
-            <Text style={[styles.sheetModalTitle, { color: colors.ink }]}>All Features (23 screens)</Text>
+            <Text style={[styles.sheetModalTitle, { color: colors.ink }]}>All Features ({ALL_FEATURES.length} screens)</Text>
             <Text style={[styles.sheetModalSub, { color: colors.muted }]}>
               Tap any feature to navigate directly. Active role: <Text style={{ fontWeight: '700', color: colors.brandDark }}>{role}</Text>
             </Text>
@@ -1187,54 +1116,6 @@ const styles = StyleSheet.create({
   segment: { flex: 1, height: 4, borderRadius: 2 },
   pipelineDoneText: { fontSize: 12.5 },
 
-  // Features Grid Styles
-  featuresGridContainer: { marginTop: 12 },
-  featuresGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  featureTile: {
-    width: '31.3%',
-    borderRadius: 11,
-    borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    position: 'relative',
-    minHeight: 76,
-    justifyContent: 'center',
-  },
-  featureIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 5,
-  },
-  featureTileName: {
-    fontSize: 10.5,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  tileLockBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    paddingHorizontal: 3,
-    paddingVertical: 1,
-    borderRadius: 3,
-  },
-  tileLockText: { fontSize: 7.5, fontWeight: '800' },
-  exploreBtn: {
-    marginTop: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  exploreBtnText: { fontSize: 11.5, fontWeight: '700' },
 
   welcomeCard: { padding: 14, borderRadius: 14, borderWidth: 1, marginVertical: 4 },
   welcomeText: { fontSize: 13.5, lineHeight: 19, marginBottom: 14 },

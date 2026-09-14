@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,14 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  Keyboard,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Search as SearchIcon,
   X as XIcon,
-  Sparkles,
   FileText,
   ChevronRight,
   Clock,
@@ -45,196 +47,184 @@ interface SearchDocItem {
   tags: string[];
 }
 
-const CORPUS_DATA: SearchDocItem[] = [
-  {
-    id: 's-1',
-    claimId: 'a4f1c9e2',
-    title: 'Discharge Summary · Cardiology',
-    category: 'reports',
-    categoryLabel: 'Discharge Summary',
-    docType: 'PDF · 4 pages',
-    date: '16 Aug 2026',
-    patient: 'R. Menon (54M)',
-    snippet: 'Patient admitted with acute chest pain; underwent primary PCI with drug-eluting stent to LAD. Post-procedure recovery in CCU was uneventful.',
-    score: 0.94,
-    route: Routes.OcrParsedFields,
-    params: { claimId: 'a4f1c9e2' },
-    tags: ['angioplasty', 'stent', 'lad', 'cardiology', 'pci', 'ccu', 'chest pain'],
-  },
-  {
-    id: 's-2',
-    claimId: 'a4f1c9e2',
-    title: 'Hospital Final Bill & Breakdown',
-    category: 'bills',
-    categoryLabel: 'Hospital Bill',
-    docType: 'JPG · 2 pages',
-    date: '16 Aug 2026',
-    patient: 'R. Menon (54M)',
-    snippet: 'Itemised hospital tariff: OT charges ₹18,700, Drug-eluting stent ₹78,000, Cath-lab consumables ₹7,100, CCU room charges ₹32,000.',
-    score: 0.89,
-    route: Routes.ClaimDetail,
-    params: { claimId: 'a4f1c9e2' },
-    tags: ['charges', 'bill', 'ot', 'stent', 'consumables', 'tariff', 'angioplasty'],
-  },
-  {
-    id: 's-3',
-    claimId: 'a4f1c9e2',
-    title: 'Cardiac MRI & Angiography Report',
-    category: 'scans',
-    categoryLabel: 'Radiology Scan',
-    docType: 'PDF · 3 pages',
-    date: '14 Aug 2026',
-    patient: 'R. Menon (54M)',
-    snippet: 'Regional wall motion abnormality observed with hypokinesia of anterior and anteroseptal walls. LVEF estimated at 42%. Linked ICD-10: I21.9, I50.9.',
-    score: 0.86,
-    route: Routes.ScanAnalyzer,
-    params: { claimId: 'a4f1c9e2' },
-    tags: ['mri', 'angiography', 'hypokinesia', 'lvef', 'scan', 'i21.9', 'i50.9'],
-  },
-  {
-    id: 's-4',
-    claimId: 'a4f1c9e2',
-    title: 'AI Brain Verdict & Risk Assessment',
-    category: 'claims',
-    categoryLabel: 'AI Assessment',
-    docType: 'Analysis · 11 Rules',
-    date: '16 Aug 2026',
-    patient: 'R. Menon (54M)',
-    snippet: 'Overall rejection risk: 58% (Medium). 7 of 11 deterministic validation rules passed. R011 fraud signal cleared. Readiness score: 75%.',
-    score: 0.91,
-    route: Routes.BrainPreview,
-    params: { claimId: 'a4f1c9e2' },
-    tags: ['risk', 'brain', 'validation', 'fraud', 'readiness', 'rules', 'r011'],
-  },
-  {
-    id: 's-5',
-    claimId: '7b03d15a',
-    title: 'Orthopaedic Arthroscopy Discharge Report',
-    category: 'reports',
-    categoryLabel: 'Discharge Summary',
-    docType: 'PDF · 3 pages',
-    date: '10 Aug 2026',
-    patient: 'S. Iyer (42F)',
-    snippet: 'Elective right knee arthroscopic partial meniscectomy performed under spinal anaesthesia. Mobilised with knee brace on post-op day 1.',
-    score: 0.82,
-    route: Routes.ClaimDetail,
-    params: { claimId: '7b03d15a' },
-    tags: ['orthopaedics', 'knee', 'arthroscopy', 'meniscus', 'iyer', 'anaesthesia'],
-  },
-  {
-    id: 's-6',
-    claimId: 'a4f1c9e2',
-    title: '12-Lead ECG & Troponin-I Lab Test',
-    category: 'reports',
-    categoryLabel: 'Laboratory Report',
-    docType: 'PDF · 1 page',
-    date: '12 Aug 2026',
-    patient: 'R. Menon (54M)',
-    snippet: 'ST segment elevation in leads V1–V4. Serum Troponin-I elevated at 4.2 ng/mL indicating acute myocardial necrosis. CK-MB 48 U/L.',
-    score: 0.79,
-    route: Routes.DocumentGrid,
-    params: { claimId: 'a4f1c9e2' },
-    tags: ['ecg', 'troponin', 'lab', 'stemi', 'leads', 'ck-mb', 'necrosis'],
-  },
-  {
-    id: 's-7',
-    claimId: '3f8a1d6c',
-    title: 'Laparoscopic Appendectomy Claim',
-    category: 'claims',
-    categoryLabel: 'Surgical Claim',
-    docType: 'Active · Validated',
-    date: '18 Aug 2026',
-    patient: 'P. Nair (29M)',
-    snippet: 'Acute appendicitis; laparoscopic surgical excision completed without intra-operative complication. Hospitalised for 2 days at Sunrise Multispecialty.',
-    score: 0.74,
-    route: Routes.ClaimDetail,
-    params: { claimId: '3f8a1d6c' },
-    tags: ['appendix', 'appendectomy', 'surgery', 'laparoscopy', 'nair', 'sunrise'],
-  },
-  {
-    id: 's-8',
-    claimId: 'a4f1c9e2',
-    title: 'Pre-authorisation Approval Certificate',
-    category: 'notes',
-    categoryLabel: 'Insurance Document',
-    docType: 'PDF · 2 pages',
-    date: '12 Aug 2026',
-    patient: 'R. Menon (54M)',
-    snippet: 'Sample Health TPA initial cashless approval for ₹1,50,000 under policy SAMPLE-PH-77421. Final claim filed as reimbursement for balance ₹34,500.',
-    score: 0.77,
-    route: Routes.DocumentGrid,
-    params: { claimId: 'a4f1c9e2' },
-    tags: ['preauth', 'tpa', 'policy', 'cashless', 'approval', 'menon'],
-  },
-];
-
-const SUGGESTED_QUERIES = [
-  'angioplasty',
-  'stent',
-  'cardiology',
-  'MRI scan',
-  'R. Menon',
-  'Discharge summary',
-  'ICD I21.9',
-  'Sunrise Multispecialty',
-];
-
 export const SearchScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const { claims } = useClaimsStore();
+  const { claims, loadClaims, loading, refreshing, claimPreviews, fetchClaimPreview } = useClaimsStore();
 
-  const [query, setQuery] = useState('angioplasty');
-  const [mode, setMode] = useState<'text' | 'vector'>('text');
+  const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<'all' | 'claims' | 'reports' | 'bills' | 'scans'>('all');
-  const [recentSearches, setRecentSearches] = useState<string[]>([
-    'angioplasty',
-    'R. Menon',
-    'hospital bill',
-  ]);
 
-  const handleSelectSuggestion = (text: string) => {
-    setQuery(text);
-    if (!recentSearches.includes(text)) {
-      setRecentSearches(prev => [text, ...prev.slice(0, 4)]);
+  useEffect(() => {
+    loadClaims();
+  }, []);
+
+  useEffect(() => {
+    if (claims.length > 0) {
+      claims.forEach(c => {
+        if (!claimPreviews[c.id]) {
+          fetchClaimPreview(c.id).catch(() => {});
+        }
+      });
     }
+  }, [claims, claimPreviews]);
+
+  const handleSearch = () => {
+    Keyboard.dismiss();
   };
 
   const handleClearQuery = () => {
     setQuery('');
   };
 
-  // Combine static corpus with real-time claims store
+  // Generate real search corpus from live backend claims and fetched documents
   const fullCorpus = useMemo(() => {
-    const claimsItems: SearchDocItem[] = claims.map(c => ({
-      id: `claim-${c.id}`,
-      claimId: c.id,
-      title: `Claim: ${c.who} · ${c.dept}`,
-      category: 'claims',
-      categoryLabel: 'Active Claim',
-      docType: `${c.claimType || 'Reimbursement'} · ${c.status}`,
-      date: c.admissionDate || 'Aug 2026',
-      patient: `${c.who} (${c.age || 50}${c.gender ? c.gender[0] : 'M'})`,
-      snippet: `${c.diagnosis || 'Diagnosis recorded'} at ${c.hospital || 'Hospital'}. Treating doctor: ${c.doctor || 'Attending physician'}. Total claimed: ${formatINR(c.amt)}. Policy: ${c.policyNo || 'PH-77421'}.`,
-      score: 0.95,
-      route: Routes.ClaimDetail,
-      params: { claimId: c.id },
-      tags: [
-        c.who.toLowerCase(),
-        c.dept.toLowerCase(),
-        (c.diagnosis || '').toLowerCase(),
-        (c.hospital || '').toLowerCase(),
-        (c.doctor || '').toLowerCase(),
-        (c.policyNo || '').toLowerCase(),
-      ],
-    }));
+    const items: SearchDocItem[] = [];
 
-    // Merge and deduplicate by id
-    const map = new Map<string, SearchDocItem>();
-    claimsItems.forEach(item => map.set(item.id, item));
-    CORPUS_DATA.forEach(item => map.set(item.id, item));
-    return Array.from(map.values());
-  }, [claims]);
+    claims.forEach(c => {
+      const preview = claimPreviews[c.id];
+      const patientDisplay = c.who ? `${c.who}${c.age ? ` (${c.age}${c.gender ? c.gender[0] : ''})` : ''}` : 'Patient';
+
+      // 1. Primary claim record
+      items.push({
+        id: `claim-${c.id}`,
+        claimId: c.id,
+        title: `Claim: ${c.who || 'Claim'} · ${c.dept || 'Medical'}`,
+        category: 'claims',
+        categoryLabel: 'Active Claim',
+        docType: `${c.claimType || 'Reimbursement'} · ${c.status}`,
+        date: c.admissionDate || c.dischargeDate || 'Recent',
+        patient: patientDisplay,
+        snippet: `${c.diagnosis || 'Diagnosis'} at ${c.hospital || 'Hospital'}. Treating doctor: ${c.doctor || 'Attending physician'}. Amount: ${formatINR(c.amt)}. Policy: ${c.policyNo || '—'}.`,
+        score: 0.95,
+        route: Routes.ClaimDetail,
+        params: { claimId: c.id },
+        tags: [
+          c.who,
+          c.dept,
+          c.diagnosis,
+          c.hospital,
+          c.doctor,
+          c.policyNo,
+          c.id,
+          c.id.slice(0, 8),
+          c.status,
+          c.claimType,
+        ].filter(Boolean).map(s => String(s).toLowerCase()),
+      });
+
+      // 2. Real documents attached to the claim
+      if (preview?.documents && Array.isArray(preview.documents)) {
+        preview.documents.forEach((doc, idx) => {
+          const lowerName = (doc.file_name || '').toLowerCase();
+          const lowerType = (doc.doc_type || '').toLowerCase();
+          let cat: 'reports' | 'bills' | 'scans' | 'notes' = 'reports';
+          let label = 'Medical Document';
+
+          if (lowerName.includes('bill') || lowerName.includes('invoice') || lowerType.includes('bill')) {
+            cat = 'bills';
+            label = 'Hospital Bill';
+          } else if (
+            lowerName.includes('scan') ||
+            lowerName.includes('mri') ||
+            lowerName.includes('ct') ||
+            lowerName.includes('xray') ||
+            lowerName.includes('x-ray') ||
+            lowerType.includes('scan')
+          ) {
+            cat = 'scans';
+            label = 'Radiology Scan';
+          } else if (lowerName.includes('discharge') || lowerType.includes('discharge')) {
+            cat = 'reports';
+            label = 'Discharge Summary';
+          }
+
+          items.push({
+            id: `doc-${c.id}-${doc.id || idx}`,
+            claimId: c.id,
+            title: doc.display_title || doc.file_name || `Document #${idx + 1}`,
+            category: cat,
+            categoryLabel: label,
+            docType: doc.doc_type || (doc.file_name?.includes('.') ? doc.file_name.split('.').pop()?.toUpperCase() || 'FILE' : 'PDF'),
+            date: c.admissionDate || c.dischargeDate || 'Recent',
+            patient: patientDisplay,
+            snippet: doc.ocr_text
+              ? doc.ocr_text.slice(0, 160).replace(/\s+/g, ' ') + '…'
+              : `Attached file ${doc.file_name || 'document'} for claim #${c.id.slice(0, 8)}.`,
+            score: 0.9,
+            route: Routes.ClaimDetail,
+            params: { claimId: c.id },
+            tags: [
+              doc.file_name,
+              doc.display_title,
+              doc.doc_type,
+              c.who,
+              c.hospital,
+              c.doctor,
+              c.diagnosis,
+              c.id,
+            ].filter(Boolean).map(s => String(s).toLowerCase()),
+          });
+        });
+      }
+
+      // 3. Real ICD codes if available
+      if (preview?.icd_codes && Array.isArray(preview.icd_codes)) {
+        preview.icd_codes.forEach((code, idx) => {
+          items.push({
+            id: `icd-${c.id}-${code.code}-${idx}`,
+            claimId: c.id,
+            title: `ICD-10: ${code.code} · ${code.description}`,
+            category: 'reports',
+            categoryLabel: 'Diagnostic Code',
+            docType: 'ICD-10',
+            date: c.admissionDate || 'Recent',
+            patient: patientDisplay,
+            snippet: `Medical diagnosis code ${code.code}: ${code.description}. Associated with ${c.who}'s claim #${c.id.slice(0, 8)}.`,
+            score: 0.88,
+            route: Routes.ClaimDetail,
+            params: { claimId: c.id },
+            tags: [
+              code.code,
+              code.description,
+              c.who,
+              c.hospital,
+              c.id,
+            ].filter(Boolean).map(s => String(s).toLowerCase()),
+          });
+        });
+      }
+
+      // 4. Real Expenses if available
+      if (preview?.expenses && Array.isArray(preview.expenses)) {
+        preview.expenses.forEach((exp, idx) => {
+          items.push({
+            id: `exp-${c.id}-${idx}`,
+            claimId: c.id,
+            title: `Expense: ${exp.category} (${formatINR(exp.amount)})`,
+            category: 'bills',
+            categoryLabel: 'Itemised Tariff',
+            docType: 'Expense Breakdown',
+            date: c.admissionDate || 'Recent',
+            patient: patientDisplay,
+            snippet: `${exp.description || exp.category}: ${formatINR(exp.amount)} charged at ${c.hospital || 'Hospital'}. Claim #${c.id.slice(0, 8)}.`,
+            score: 0.85,
+            route: Routes.ClaimDetail,
+            params: { claimId: c.id },
+            tags: [
+              exp.category,
+              exp.description,
+              c.who,
+              c.hospital,
+              c.id,
+            ].filter(Boolean).map(s => String(s).toLowerCase()),
+          });
+        });
+      }
+    });
+
+    return items;
+  }, [claims, claimPreviews]);
 
   // Filter and rank results
   const filteredResults = useMemo(() => {
@@ -259,16 +249,12 @@ export const SearchScreen = ({ navigation }: any) => {
         return matchTitle || matchSnippet || matchPatient || matchTags || matchClaimId;
       })
       .sort((a, b) => {
-        if (mode === 'vector') {
-          // Sort by similarity score in vector mode
-          return b.score - a.score;
-        }
-        // In full-text mode: prioritize exact title matches first
+        if (!q) return 0;
         const aTitleMatch = a.title.toLowerCase().includes(q) ? 1 : 0;
         const bTitleMatch = b.title.toLowerCase().includes(q) ? 1 : 0;
         return bTitleMatch - aTitleMatch;
       });
-  }, [fullCorpus, query, activeCategory, mode]);
+  }, [fullCorpus, query, activeCategory]);
 
   const renderCategoryIcon = (category: string) => {
     switch (category) {
@@ -293,71 +279,39 @@ export const SearchScreen = ({ navigation }: any) => {
           <Text style={[styles.title, { color: colors.ink }]}>Search</Text>
           <View style={[styles.countBadge, { backgroundColor: colors.brandSoft }]}>
             <Text style={[styles.countBadgeText, { color: colors.brandDark }]}>
-              {filteredResults.length} matches
+              {filteredResults.length} {filteredResults.length === 1 ? 'record' : 'records'}
             </Text>
           </View>
         </View>
 
-        {/* Search Mode Toggle */}
-        <View style={[styles.modeToggleBar, { backgroundColor: colors.surface2 }]}>
+        {/* Search Input Row with 1 Text Field & Search Button */}
+        <View style={styles.searchBarRow}>
+          <View style={[styles.inputWrapper, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
+            <SearchIcon size={18} color={colors.muted} style={styles.searchIcon} />
+            <TextInput
+              style={[styles.input, { color: colors.ink }]}
+              placeholder="Search claims, OCR text, ICD-10, doctor…"
+              placeholderTextColor={colors.muted}
+              value={query}
+              onChangeText={setQuery}
+              onSubmitEditing={handleSearch}
+              returnKeyType="search"
+              autoCapitalize="none"
+              clearButtonMode="never"
+            />
+            {query.length > 0 && (
+              <TouchableOpacity onPress={handleClearQuery} style={styles.clearBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <XIcon size={16} color={colors.muted} />
+              </TouchableOpacity>
+            )}
+          </View>
           <TouchableOpacity
-            style={[
-              styles.modeBtn,
-              mode === 'text' && [styles.modeBtnActive, { backgroundColor: colors.surface }],
-            ]}
-            onPress={() => setMode('text')}
-            activeOpacity={0.7}
+            style={[styles.searchBtn, { backgroundColor: colors.brand }]}
+            onPress={handleSearch}
+            activeOpacity={0.8}
           >
-            <Text
-              style={[
-                styles.modeBtnText,
-                { color: mode === 'text' ? colors.brandDark : colors.muted },
-              ]}
-            >
-              Full-text Search
-            </Text>
+            <Text style={styles.searchBtnText}>Search</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.modeBtn,
-              mode === 'vector' && [styles.modeBtnActive, { backgroundColor: colors.surface }],
-            ]}
-            onPress={() => setMode('vector')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.vectorBtnContent}>
-              <Sparkles size={13} color={mode === 'vector' ? colors.brandDark : colors.muted} />
-              <Text
-                style={[
-                  styles.modeBtnText,
-                  { color: mode === 'vector' ? colors.brandDark : colors.muted },
-                ]}
-              >
-                Semantic Vector
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* Search Input Box */}
-        <View style={[styles.inputWrapper, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
-          <SearchIcon size={18} color={colors.muted} style={styles.searchIcon} />
-          <TextInput
-            style={[styles.input, { color: colors.ink }]}
-            placeholder="Search claims, OCR text, ICD-10, doctor…"
-            placeholderTextColor={colors.muted}
-            value={query}
-            onChangeText={setQuery}
-            returnKeyType="search"
-            autoCapitalize="none"
-            clearButtonMode="never"
-          />
-          {query.length > 0 && (
-            <TouchableOpacity onPress={handleClearQuery} style={styles.clearBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <XIcon size={16} color={colors.muted} />
-            </TouchableOpacity>
-          )}
         </View>
 
         {/* Category Horizontal Filter Chips */}
@@ -408,68 +362,56 @@ export const SearchScreen = ({ navigation }: any) => {
 
       {/* Main Content Area */}
       <View style={[styles.container, { backgroundColor: colors.bg }]}>
-        {/* Quick Query Suggestions (when query is short) */}
-        {query.length < 2 && (
-          <View style={[styles.suggestionsBox, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-            <View style={styles.suggestionsHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.ink }]}>Suggested Queries</Text>
-              {recentSearches.length > 0 && (
-                <TouchableOpacity onPress={() => setRecentSearches([])}>
-                  <Text style={[styles.clearHistoryText, { color: colors.muted }]}>Clear history</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={styles.chipsWrap}>
-              {SUGGESTED_QUERIES.map(sug => (
-                <TouchableOpacity
-                  key={sug}
-                  style={[styles.sugChip, { backgroundColor: colors.surface2, borderColor: colors.line }]}
-                  onPress={() => handleSelectSuggestion(sug)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.sugChipText, { color: colors.ink }]}>{sug}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
-
         {/* Search Results List */}
         <FlatList
           data={filteredResults}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => loadClaims(true)}
+              tintColor={colors.brand}
+              colors={[colors.brand]}
+            />
+          }
           ListHeaderComponent={
             query.length >= 2 ? (
               <View style={styles.resultsInfoRow}>
                 <Text style={[styles.resultsInfoText, { color: colors.muted }]}>
-                  {mode === 'vector' ? 'Vector similarity ranking' : 'Full-text matches'} for{' '}
+                  Results for{' '}
                   <Text style={{ fontWeight: '700', color: colors.ink }}>"{query}"</Text>
                 </Text>
-                <Text style={[styles.timingText, { color: colors.muted }]}>18 ms</Text>
+                <Text style={[styles.timingText, { color: colors.muted }]}>
+                  {filteredResults.length} found
+                </Text>
               </View>
             ) : null
           }
           ListEmptyComponent={
             <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-              <SearchIcon size={36} color={colors.muted} style={{ opacity: 0.6, marginBottom: 8 }} />
-              <Text style={[styles.emptyTitle, { color: colors.ink }]}>No matching records found</Text>
-              <Text style={[styles.emptySub, { color: colors.muted }]}>
-                Try adjusting your search term or switch to Semantic Vector search mode for broader clinical matching.
-              </Text>
-              <View style={styles.emptySuggestionsRow}>
-                {['angioplasty', 'cardiology', 'MRI'].map(item => (
-                  <TouchableOpacity
-                    key={item}
-                    style={[styles.miniSugChip, { backgroundColor: colors.surface2 }]}
-                    onPress={() => handleSelectSuggestion(item)}
-                  >
-                    <Text style={[styles.miniSugText, { color: colors.brandDark }]}>{item}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              {loading && claims.length === 0 ? (
+                <>
+                  <ActivityIndicator size="large" color={colors.brand} style={{ marginBottom: 12 }} />
+                  <Text style={[styles.emptyTitle, { color: colors.ink }]}>Loading claims…</Text>
+                  <Text style={[styles.emptySub, { color: colors.muted }]}>
+                    Fetching real claims from ClaimsGuru backend
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <SearchIcon size={36} color={colors.muted} style={{ opacity: 0.6, marginBottom: 8 }} />
+                  <Text style={[styles.emptyTitle, { color: colors.ink }]}>
+                    {query.trim() ? 'No matching records found' : 'No claims available'}
+                  </Text>
+                  <Text style={[styles.emptySub, { color: colors.muted }]}>
+                    {query.trim()
+                      ? `No claims or documents match "${query.trim()}". Try another keyword or clear search.`
+                      : 'No claims found in your account. Upload claim documents in the Chat tab or pull down to refresh.'}
+                  </Text>
+                </>
+              )}
             </View>
           }
           renderItem={({ item }) => (
@@ -500,20 +442,11 @@ export const SearchScreen = ({ navigation }: any) => {
                   </View>
                 </View>
 
-                {mode === 'vector' ? (
-                  <View style={[styles.scoreBadge, { backgroundColor: colors.brandSoft }]}>
-                    <Sparkles size={11} color={colors.brandDark} />
-                    <Text style={[styles.scoreBadgeText, { color: colors.brandDark }]}>
-                      {Math.round(item.score * 100)}% match
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={[styles.categoryPill, { backgroundColor: colors.surface2 }]}>
-                    <Text style={[styles.categoryPillText, { color: colors.muted }]}>
-                      {item.categoryLabel}
-                    </Text>
-                  </View>
-                )}
+                <View style={[styles.categoryPill, { backgroundColor: colors.surface2 }]}>
+                  <Text style={[styles.categoryPillText, { color: colors.muted }]}>
+                    {item.categoryLabel}
+                  </Text>
+                </View>
               </View>
 
               {/* Matched Snippet */}
@@ -575,44 +508,32 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  modeToggleBar: {
+  searchBarRow: {
     flexDirection: 'row',
-    padding: 3,
-    borderRadius: 10,
+    alignItems: 'center',
+    gap: 8,
     marginBottom: 10,
-    gap: 3,
   },
-  modeBtn: {
-    flex: 1,
-    paddingVertical: 7,
-    alignItems: 'center',
+  searchBtn: {
+    height: 42,
+    paddingHorizontal: 16,
+    borderRadius: 11,
     justifyContent: 'center',
-    borderRadius: 8,
-  },
-  modeBtnActive: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  vectorBtnContent: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
   },
-  modeBtnText: {
-    fontSize: 12,
+  searchBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
     fontWeight: '700',
   },
   inputWrapper: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     height: 42,
     borderRadius: 11,
     borderWidth: 1,
     paddingHorizontal: 10,
-    marginBottom: 10,
   },
   searchIcon: {
     marginRight: 8,
@@ -638,41 +559,7 @@ const styles = StyleSheet.create({
   catChipText: {
     fontSize: 11.5,
   },
-  suggestionsBox: {
-    margin: 12,
-    marginBottom: 4,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  suggestionsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  sectionTitle: {
-    fontSize: 12.5,
-    fontWeight: '700',
-  },
-  clearHistoryText: {
-    fontSize: 11,
-  },
-  chipsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  sugChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  sugChipText: {
-    fontSize: 11.5,
-    fontWeight: '500',
-  },
+
   listContent: {
     padding: 12,
     paddingBottom: 28,
@@ -725,18 +612,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 1,
   },
-  scoreBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  scoreBadgeText: {
-    fontSize: 10.5,
-    fontWeight: '700',
-  },
+
   categoryPill: {
     paddingHorizontal: 7,
     paddingVertical: 3,
@@ -794,17 +670,5 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 14,
   },
-  emptySuggestionsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  miniSugChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  miniSugText: {
-    fontSize: 11.5,
-    fontWeight: '700',
-  },
+
 });

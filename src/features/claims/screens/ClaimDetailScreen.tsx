@@ -401,16 +401,6 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
                   ep: '/ingress/claims/{id}/documents',
                 },
                 {
-                  title: 'OCR & parsed fields',
-                  route: Routes.OcrParsedFields,
-                  ep: '/ocr · /parser',
-                },
-                {
-                  title: 'Scan analysis',
-                  route: Routes.ScanAnalyzer,
-                  ep: 'scan_analyses',
-                },
-                {
                   title: 'Medical coding',
                   route: Routes.MedicalCoding,
                   ep: '/coding/code-suggest/{id}',

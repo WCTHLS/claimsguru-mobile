@@ -16,8 +16,6 @@ import { WorkflowPipelineScreen } from '../../features/workflow/screens/Workflow
 import { ProfileSettingsScreen } from '../../features/profile/screens/ProfileSettingsScreen';
 import { UploadPanelScreen } from '../../features/claims/screens/UploadPanelScreen';
 import { ClaimDetailScreen } from '../../features/claims/screens/ClaimDetailScreen';
-import { OcrParsedFieldsScreen } from '../../features/claims/screens/OcrParsedFieldsScreen';
-import { ScanAnalyzerScreen } from '../../features/claims/screens/ScanAnalyzerScreen';
 import { DocumentGridScreen } from '../../features/claims/screens/DocumentGridScreen';
 import { PatientProfileScreen } from '../../features/claims/screens/PatientProfileScreen';
 import { PatientActivityScreen } from '../../features/claims/screens/PatientActivityScreen';
@@ -76,14 +74,6 @@ export const RootNavigator = () => {
         <Stack.Screen
           name={Routes.MedicalCoding}
           component={MedicalCodingScreen}
-        />
-        <Stack.Screen
-          name={Routes.OcrParsedFields}
-          component={OcrParsedFieldsScreen}
-        />
-        <Stack.Screen
-          name={Routes.ScanAnalyzer}
-          component={ScanAnalyzerScreen}
         />
         <Stack.Screen
           name={Routes.DocumentGrid}

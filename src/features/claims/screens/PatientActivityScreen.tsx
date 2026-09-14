@@ -23,6 +23,7 @@ interface TimelineEvent {
   dot: 'ok' | 'warn' | 'bad' | 'info' | 'vio';
   diff?: [string, string];
   nav?: string;
+  docKey?: string;
 }
 
 interface TimelineDay {
@@ -129,7 +130,8 @@ export const PatientActivityScreen = ({ navigation }: any) => {
           who: 'system',
           d: 'MRI detected · findings MODERATE',
           dot: 'info',
-          nav: Routes.ScanAnalyzer,
+          nav: Routes.DocumentGrid,
+          docKey: 'scan_report',
         },
         {
           t: '13:57',
@@ -138,7 +140,7 @@ export const PatientActivityScreen = ({ navigation }: any) => {
           who: 'system',
           d: '23 of 27 fields · doc_type set on 3 documents',
           dot: 'info',
-          nav: Routes.OcrParsedFields,
+          nav: Routes.DocumentGrid,
         },
         {
           t: '13:54',
