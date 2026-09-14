@@ -886,10 +886,10 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                 style={[styles.successOutlineBtn, { borderColor: colors.line }]}
                 onPress={() => {
                   setShowSuccessModal(false);
-                  navigation.navigate(Routes.AuditTrail, { claimId: claim.id });
+                  navigation.navigate(Routes.PatientActivity, { claimId: claim.id });
                 }}
               >
-                <Text style={[styles.successOutlineText, { color: colors.ink }]}>View Audit Log</Text>
+                <Text style={[styles.successOutlineText, { color: colors.ink }]}>View Activity</Text>
               </TouchableOpacity>
 
               <TouchableOpacity

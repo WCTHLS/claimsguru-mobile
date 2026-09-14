@@ -23,7 +23,6 @@ export const Routes = {
   PatientProfile: 'PatientProfile',
   PatientActivity: 'PatientActivity',
   Submission: 'Submission',
-  AuditTrail: 'AuditTrail',
   ProfileSettings: 'ProfileSettings',
   OpsConsole: 'OpsConsole',
 } as const;

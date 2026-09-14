@@ -45,6 +45,7 @@ export const API_ENDPOINTS = {
 
   // Submission & Preview Service
   claimPreview: (claimId: string) => `${API_BASE_URL}/submission/claims/${claimId}/preview`,
+  claimAudit: (claimId: string) => `${API_BASE_URL}/submission/claims/${claimId}/audit`,
 
   // Validation & Prediction Services
   claimValidation: (claimId: string) => `${API_BASE_URL}/validator/validate/${claimId}`,

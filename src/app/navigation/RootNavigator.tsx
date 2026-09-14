@@ -20,7 +20,6 @@ import { DocumentGridScreen } from '../../features/claims/screens/DocumentGridSc
 import { PatientProfileScreen } from '../../features/claims/screens/PatientProfileScreen';
 import { PatientActivityScreen } from '../../features/claims/screens/PatientActivityScreen';
 import { SubmissionScreen } from '../../features/claims/screens/SubmissionScreen';
-import { AuditTrailScreen } from '../../features/claims/screens/AuditTrailScreen';
 import { OpsConsoleScreen } from '../../features/profile/screens/OpsConsoleScreen';
 import { SignInScreen } from '../../features/auth/screens/SignInScreen';
 import { SignUpScreen } from '../../features/auth/screens/SignUpScreen';
@@ -90,10 +89,6 @@ export const RootNavigator = () => {
         <Stack.Screen
           name={Routes.Submission}
           component={SubmissionScreen}
-        />
-        <Stack.Screen
-          name={Routes.AuditTrail}
-          component={AuditTrailScreen}
         />
         <Stack.Screen
           name={Routes.ProfileSettings}

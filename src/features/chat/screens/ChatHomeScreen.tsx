@@ -100,7 +100,6 @@ export const ALL_FEATURES: FeatureDef[] = [
   { id: 'activity', g: 'Patient', nav: Routes.PatientActivity, n: 'Activity', d: 'Audit history & state change diffs', iconName: 'clock' },
   { id: 'search', g: 'Other', nav: Routes.SearchTab, n: 'Search', d: 'Full-text & semantic vector search', iconName: 'search' },
   { id: 'submit', g: 'Other', nav: Routes.Submission, n: 'Submission', d: 'Payer submission & IRDAI claim forms', iconName: 'send', params: { claimId: 'a4f1c9e2' } },
-  { id: 'audit', g: 'Other', nav: Routes.AuditTrail, n: 'Audit trail', d: 'User action logs & state snapshots', iconName: 'list-filter', params: { claimId: 'a4f1c9e2' } },
   { id: 'profile', g: 'Other', nav: Routes.ProfileSettings, n: 'Profile', d: 'User roles, preferences & settings', iconName: 'settings' },
   { id: 'ops', g: 'Other', nav: Routes.OpsConsole, n: 'Ops console', d: 'Service health & queue performance', iconName: 'terminal', perm: 'ops' },
 ];
