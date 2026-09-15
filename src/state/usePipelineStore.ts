@@ -168,10 +168,14 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       claimAmt: 184500,
     });
 
-    // 1. Kick off backend workflow pipeline
-    workflowApi.startWorkflow(targetClaimId).catch(err => {
-      console.log('[usePipelineStore] Workflow start triggered or queued:', err?.message || err);
-    });
+    // Note: When documents are uploaded via POST /ingress/claims, the backend automatically
+    // enqueues the distributed Celery pipeline to worker-ocr and worker-default containers.
+    // We only trigger workflowApi.startWorkflow if running in standalone/demo retrigger mode.
+    if (!claimIdOverride) {
+      workflowApi.startWorkflow(targetClaimId).catch(err => {
+        console.log('[usePipelineStore] Standalone workflow triggered:', err?.message || err);
+      });
+    }
 
     const docCount = docs.length;
     const startTime = Date.now();
@@ -195,13 +199,14 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
 
     activePollInterval = setInterval(async () => {
       try {
+        const shouldFetchValidation = (get().progressPercentage >= 50 || get().currentStepIndex >= 3);
         const [progress, statusRes, detail, preview, val, pred] = await Promise.all([
           workflowApi.getProgress(targetClaimId).catch(() => null),
           workflowApi.getStatus(targetClaimId).catch(() => null),
           claimsApi.getClaimDetail(targetClaimId).catch(() => null),
           claimsApi.getClaimPreview(targetClaimId).catch(() => null),
-          claimsApi.getClaimValidation(targetClaimId).catch(() => null),
-          claimsApi.getClaimPrediction(targetClaimId).catch(() => null),
+          shouldFetchValidation ? claimsApi.getClaimValidation(targetClaimId).catch(() => null) : Promise.resolve(null),
+          shouldFetchValidation ? claimsApi.getClaimPrediction(targetClaimId).catch(() => null) : Promise.resolve(null),
         ]);
 
         const pct = Math.max(progress?.percentage || 0, statusRes?.percentage || 0);
@@ -209,8 +214,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
           set({ progressPercentage: Math.max(get().progressPercentage, pct) });
         }
 
-        const patientName = preview?.parsed_fields?.patient_name || detail?.patient_name || '';
-        const diagnosis = preview?.parsed_fields?.diagnosis || detail?.diagnosis || 'General Medicine';
+        const rawName = preview?.parsed_fields?.patient_name || (preview as any)?.summary?.patient_name || detail?.patient_name || '';
+        const patientName = rawName.replace(/\s+Blood Group.*$/i, '').trim();
+        const diagnosis = (preview as any)?.summary?.diagnosis || preview?.parsed_fields?.diagnosis || detail?.diagnosis || 'Hypothyroidism COPD Exacerbation';
         const hospital = preview?.parsed_fields?.hospital_name || detail?.hospital_name || 'Hospital';
         const docType = preview?.documents?.[0]?.doc_type || docs[0]?.docType || 'discharge_summary';
         const fieldCount = preview?.parsed_fields ? Object.keys(preview.parsed_fields).length : 0;
@@ -241,8 +247,62 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
           } catch {}
         }
 
-        // Live step progression based on real backend progress
-        if (pct >= 100 || progress?.is_complete || detail?.status === 'COMPLETED' || detail?.status === 'WORKFLOW_FAILED') {
+        const hasValidations = Boolean(val?.passed !== undefined || (val?.results && val.results.length > 0));
+        const hasPredictions = Boolean(pred?.prediction || (preview?.predictions && preview.predictions.length > 0));
+        const hasCodes = Boolean(icdCount > 0 || (preview?.icd_codes && preview.icd_codes.length > 0));
+        const hasFields = Boolean(fieldCount > 0);
+
+        // If backend pipeline failed, mark failed state accurately
+        if (detail?.status === 'WORKFLOW_FAILED' || detail?.status === 'FAILED') {
+          backendCompleted = true;
+          if (activePollInterval) {
+            clearInterval(activePollInterval);
+            activePollInterval = null;
+          }
+          if (activeTimerInterval) {
+            clearInterval(activeTimerInterval);
+            activeTimerInterval = null;
+          }
+          const elapsed = Math.max(Number(((Date.now() - startTime) / 1000).toFixed(1)), 1.0).toFixed(1);
+          set({
+            progressPercentage: Math.max(get().progressPercentage, 20),
+            currentStepIndex: 1,
+            stepStates: ['d', 'f', 'q', 'q', 'q'],
+            running: false,
+            failed: true,
+            complete: false,
+            totalSeconds: elapsed,
+            claimWho: patientName || 'Workflow Error',
+            stepMessages: [
+              `Text extracted from ${docs.length || 1} document(s)`,
+              `Parsing failed in backend worker`,
+              'Queued in default',
+              'Queued in default',
+              'Queued in default',
+            ],
+          });
+          return;
+        }
+
+        // Check if the backend pipeline is genuinely completed
+        const isCompletedStatus = [
+          'FINISHED',
+          'COMPLETED',
+          'SUBMITTED',
+          'APPROVED',
+          'REJECTED',
+        ].includes(String(detail?.status || '').toUpperCase());
+
+        const isWorkflowComplete = Boolean(
+          pct >= 100 ||
+          progress?.is_complete ||
+          statusRes?.status === 'FINISHED' ||
+          statusRes?.current_step === 'FINISHED' ||
+          (statusRes?.step_index !== undefined && statusRes.step_index >= 5) ||
+          (isCompletedStatus && pct >= 85)
+        );
+
+        if (isWorkflowComplete) {
           backendCompleted = true;
           if (activePollInterval) {
             clearInterval(activePollInterval);
@@ -253,14 +313,12 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             activeTimerInterval = null;
           }
 
-          let elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-          if (detail?.created_at && detail?.updated_at) {
-            const t1 = new Date(detail.created_at).getTime();
-            const t2 = new Date(detail.updated_at).getTime();
-            const diff = (t2 - t1) / 1000;
-            if (diff > 0 && diff < 3600) {
-              elapsed = diff.toFixed(1);
-            }
+          const elapsed = Math.max(Number(((Date.now() - startTime) / 1000).toFixed(1)), 1.5).toFixed(1);
+
+          if (detail) {
+            try {
+              useClaimsStore.getState().addOrUpdateClaim(transformBackendClaim(detail, preview));
+            } catch {}
           }
 
           set({
@@ -269,6 +327,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             stepStates: ['d', 'd', 'd', 'd', 'd'],
             running: false,
             complete: true,
+            failed: false,
             totalSeconds: elapsed,
             claimWho: patientName || 'Complete',
             claimDept: diagnosis,
@@ -284,7 +343,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
           return;
         }
 
-        if (pct >= 75) {
+        // Intermediate progression: Steps 4, 3, 2, 1, 0
+        const currentStepStr = String(statusRes?.current_step || '').toUpperCase();
+        if (pct >= 85 || currentStepStr.includes('VALIDAT') || currentStepStr === 'FINALIZING' || (hasValidations && hasPredictions)) {
           set(state => ({
             progressPercentage: Math.max(state.progressPercentage, 85),
             currentStepIndex: 4,
@@ -298,9 +359,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             ],
             docs: state.docs.map(d => ({ ...d, ocr: 'd', parse: 'd' })),
           }));
-        } else if (pct >= 50) {
+        } else if (pct >= 70 || currentStepStr.includes('RISK') || hasPredictions) {
           set(state => ({
-            progressPercentage: Math.max(state.progressPercentage, 65),
+            progressPercentage: Math.max(state.progressPercentage, 70),
             currentStepIndex: 3,
             stepStates: ['d', 'd', 'd', 'r', 'q'],
             stepMessages: [
@@ -312,7 +373,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             ],
             docs: state.docs.map(d => ({ ...d, ocr: 'd', parse: 'd' })),
           }));
-        } else if (pct >= 25 || fieldCount > 0) {
+        } else if (pct >= 45 || currentStepStr.includes('CODING') || hasCodes) {
           set(state => ({
             progressPercentage: Math.max(state.progressPercentage, 45),
             currentStepIndex: 2,
@@ -326,9 +387,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             ],
             docs: state.docs.map(d => ({ ...d, ocr: 'd', parse: 'd' })),
           }));
-        } else if (pct >= 10) {
+        } else if (pct >= 20 || currentStepStr.includes('PARS') || hasFields) {
           set(state => ({
-            progressPercentage: Math.max(state.progressPercentage, 20),
+            progressPercentage: Math.max(state.progressPercentage, 25),
             currentStepIndex: 1,
             stepStates: ['d', 'r', 'q', 'q', 'q'],
             stepMessages: [
@@ -340,7 +401,22 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             ],
             docs: state.docs.map(d => ({ ...d, ocr: 'd', parse: 'r' })),
           }));
+        } else if (pct >= 5 || currentStepStr.includes('OCR')) {
+          set(state => ({
+            progressPercentage: Math.max(state.progressPercentage, 10),
+            currentStepIndex: 0,
+            stepStates: ['r', 'q', 'q', 'q', 'q'],
+            stepMessages: [
+              `Extracting text from ${docs.length || 1} document(s)...`,
+              'Queued in gpu_queue',
+              'Queued in default',
+              'Queued in default',
+              'Queued in default',
+            ],
+            docs: state.docs.map(d => ({ ...d, ocr: 'r', parse: 'q' })),
+          }));
         }
+
       } catch (err) {
         console.log('[usePipelineStore] Polling error:', err);
       }

@@ -12,8 +12,11 @@ import {
   Modal,
   Switch,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import {
   Camera,
   Image as ImageIcon,
@@ -62,8 +65,10 @@ import { fetchUserProfile } from '../../../core/api/authApi';
 import { Routes } from '../../../app/navigation/routes';
 import { UserAvatar } from '../../../core/components/UserAvatar';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(global as any).nativeFabricUIManager) {
+  try {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  } catch {}
 }
 
 export interface FeatureDef {
@@ -92,13 +97,10 @@ export const ALL_FEATURES: FeatureDef[] = [
   { id: 'validation', g: 'AI Brain', nav: Routes.ValidationRules, n: 'Validation', d: 'R001–R011 deterministic rules checklist', iconName: 'check-square', params: { claimId: 'a4f1c9e2' } },
   { id: 'coding', g: 'AI Brain', nav: Routes.MedicalCoding, n: 'Coding', d: 'ICD-10 & CPT procedure code review', iconName: 'code', params: { claimId: 'a4f1c9e2' } },
   { id: 'docs', g: 'Documents', nav: Routes.DocumentGrid, n: 'Documents', d: 'Manage & inspect attached files', iconName: 'folder', params: { claimId: 'a4f1c9e2' } },
-  { id: 'ocr', g: 'Documents', nav: Routes.OcrParsedFields, n: 'OCR & fields', d: 'Visual document reader & field editor', iconName: 'scan', params: { claimId: 'a4f1c9e2' } },
-  { id: 'scan', g: 'Documents', nav: Routes.ScanAnalyzer, n: 'Scan analyzer', d: 'MRI, CT, X-Ray radiology analyzer', iconName: 'file-search', params: { claimId: 'a4f1c9e2' } },
   { id: 'patient', g: 'Patient', nav: Routes.PatientProfile, n: 'Patient', d: 'Demographics, policy & KYC details', iconName: 'user' },
   { id: 'activity', g: 'Patient', nav: Routes.PatientActivity, n: 'Activity', d: 'Audit history & state change diffs', iconName: 'clock' },
   { id: 'search', g: 'Other', nav: Routes.SearchTab, n: 'Search', d: 'Full-text & semantic vector search', iconName: 'search' },
   { id: 'submit', g: 'Other', nav: Routes.Submission, n: 'Submission', d: 'Payer submission & IRDAI claim forms', iconName: 'send', params: { claimId: 'a4f1c9e2' } },
-  { id: 'audit', g: 'Other', nav: Routes.AuditTrail, n: 'Audit trail', d: 'User action logs & state snapshots', iconName: 'list-filter', params: { claimId: 'a4f1c9e2' } },
   { id: 'profile', g: 'Other', nav: Routes.ProfileSettings, n: 'Profile', d: 'User roles, preferences & settings', iconName: 'settings' },
   { id: 'ops', g: 'Other', nav: Routes.OpsConsole, n: 'Ops console', d: 'Service health & queue performance', iconName: 'terminal', perm: 'ops' },
 ];
@@ -148,7 +150,6 @@ export const ChatHomeScreen = ({ navigation }: any) => {
 
   const [input, setInput] = useState('');
   const [isCardExpanded, setIsCardExpanded] = useState(true);
-  const [isFeaturesExpanded, setIsFeaturesExpanded] = useState(true);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showFeaturesModal, setShowFeaturesModal] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -161,7 +162,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
     }, 2800);
   };
 
-  const handlePickFiles = (accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx') => {
+  const handlePickFiles = async (accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx') => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const input = document.createElement('input');
       input.type = 'file';
@@ -184,12 +185,60 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       };
       input.click();
     } else {
-      addFile('Policy_Card.pdf|scanned|policy_card|0.90');
-      showToast('Document attached');
+      try {
+        const result = await DocumentPicker.getDocumentAsync({
+          type: accept === 'image/*' ? ['image/*'] : ['*/*'],
+          multiple: true,
+          copyToCacheDirectory: true,
+        });
+
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          for (const asset of result.assets) {
+            addRealFile({
+              name: asset.name,
+              size: asset.size,
+              type: asset.mimeType || 'application/pdf',
+              uri: asset.uri,
+            });
+          }
+          showToast(`Attached ${result.assets.length} file${result.assets.length > 1 ? 's' : ''}`);
+        }
+      } catch (err) {
+        console.warn('[ChatHomeScreen] Document picker error:', err);
+      }
     }
   };
 
-  const handleCameraPick = () => {
+  const handlePickGallery = async () => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      handlePickFiles('image/*');
+      return;
+    }
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        for (const asset of result.assets) {
+          const name = asset.fileName || `Photo_${Date.now()}.jpg`;
+          addRealFile({
+            name,
+            size: asset.fileSize || 1024 * 1024,
+            type: asset.mimeType || 'image/jpeg',
+            uri: asset.uri,
+          });
+        }
+        showToast(`Attached ${result.assets.length} photo${result.assets.length > 1 ? 's' : ''}`);
+      }
+    } catch (err) {
+      console.warn('[ChatHomeScreen] Gallery picker error:', err);
+    }
+  };
+
+  const handleCameraPick = async () => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const input = document.createElement('input');
       input.type = 'file';
@@ -212,19 +261,38 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       };
       input.click();
     } else {
-      addFile('Discharge_Summary.pdf|digital|discharge_summary|0.96');
-      showToast('Document attached');
+      try {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          showToast('Camera permission required');
+          return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          const asset = result.assets[0];
+          const name = asset.fileName || `Camera_Scan_${Date.now()}.jpg`;
+          addRealFile({
+            name,
+            size: asset.fileSize || 1024 * 1024,
+            type: asset.mimeType || 'image/jpeg',
+            uri: asset.uri,
+          });
+          showToast('Attached photo from camera');
+        }
+      } catch (err) {
+        console.warn('[ChatHomeScreen] Camera picker error:', err);
+      }
     }
   };
 
   const toggleCard = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setIsCardExpanded(!isCardExpanded);
-  };
-
-  const toggleFeaturesCard = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIsFeaturesExpanded(!isFeaturesExpanded);
   };
 
   const handleSend = () => {
@@ -257,7 +325,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
         })),
         {
           policyId: auth.policyNumber || 'P-0007401',
-          patientId: auth.userId || 'ec78998a-0228-434a-84f4-e08b4b7417e2',
+          patientId: auth.userId || '181c3248-94a5-426f-8aca-92adcf0ff765',
           email: auth.userEmail || 'sample@gmail.com',
           force: true,
         }
@@ -268,7 +336,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       // 2. Add or update claim in Claims store
       useClaimsStore.getState().addOrUpdateClaim({
         id: targetClaimId,
-        who: auth.userName || 'Processing claim...',
+        who: 'Processing claim...',
         dept: 'General Medicine',
         amt: 184500,
         status: 'running',
@@ -292,22 +360,11 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       setPipelineStarting(false);
       navigation.navigate(Routes.WorkflowPipeline);
     } catch (err: any) {
-      console.warn('[ChatHomeScreen] Pipeline start fallback:', err);
-      const existingClaims = useClaimsStore.getState().claims;
-      const realExistingClaim = existingClaims.find(c => c.id && c.id.length > 20);
-      const fallbackClaimId = realExistingClaim?.id || '73cae928-5f39-4129-a4f2-f667e94f3f6a';
-
-      startPipeline(
-        files.length > 0 ? files : [
-          { name: 'Discharge_Summary.pdf', docType: 'discharge_summary', kind: 'digital' },
-          { name: 'Hospital_Bill.jpg', docType: 'hospital_bill', kind: 'jpg' },
-          { name: 'Policy_Card.pdf', docType: 'policy_card', kind: 'scanned' },
-        ],
-        fallbackClaimId
-      );
-      sendMessage(`Started backend pipeline for claim ${fallbackClaimId.slice(0, 8)}`);
+      console.warn('[ChatHomeScreen] Pipeline upload failed:', err);
       setPipelineStarting(false);
-      navigation.navigate(Routes.WorkflowPipeline);
+      const errMsg = err?.message || 'Could not upload claim documents to backend.';
+      Alert.alert('Upload Error', `${errMsg}\n\nPlease check connection or credentials and try again.`);
+      sendMessage(`Upload failed: ${errMsg}`);
     }
   };
 
@@ -470,7 +527,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
 
                 <TouchableOpacity
                   style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                  onPress={() => handlePickFiles('image/*')}
+                  onPress={handlePickGallery}
                   activeOpacity={0.75}
                 >
                   <ImageIcon size={18} color={colors.muted} style={{ marginBottom: 4 }} />
@@ -488,7 +545,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
 
                 <TouchableOpacity
                   style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                  onPress={() => handlePickFiles('image/*')}
+                  onPress={handlePickGallery}
                   activeOpacity={0.75}
                 >
                   <Smartphone size={18} color={colors.muted} style={{ marginBottom: 4 }} />
@@ -627,69 +684,6 @@ export const ChatHomeScreen = ({ navigation }: any) => {
           </TouchableOpacity>
         )}
 
-        {/* ALL FEATURES CARD - COLLAPSIBLE 3-COLUMN GRID */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <TouchableOpacity style={styles.cardHeader} onPress={toggleFeaturesCard} activeOpacity={0.7}>
-            <View style={styles.cardHeaderLeft}>
-              <LayoutGrid size={18} color={colors.brand} style={{ marginRight: 8 }} />
-              <Text style={[styles.cardTitle, { color: colors.ink }]}>All features</Text>
-              <View style={[styles.fileBadge, { backgroundColor: colors.surface2 }]}>
-                <Text style={[styles.fileBadgeText, { color: colors.muted }]}>23 screens</Text>
-              </View>
-            </View>
-            {isFeaturesExpanded ? <ChevronUp size={18} color={colors.muted} /> : <ChevronDown size={18} color={colors.muted} />}
-          </TouchableOpacity>
-
-          {isFeaturesExpanded && (
-            <View style={styles.featuresGridContainer}>
-              <View style={styles.featuresGrid}>
-                {ALL_FEATURES.map(feat => {
-                  const isLocked = feat.perm === 'ops' && role !== 'admin';
-                  return (
-                    <TouchableOpacity
-                      key={feat.id}
-                      style={[
-                        styles.featureTile,
-                        { backgroundColor: colors.surface, borderColor: colors.line },
-                        isLocked && { opacity: 0.65 },
-                      ]}
-                      onPress={() => handleNavigateFeature(feat)}
-                      activeOpacity={0.7}
-                    >
-                      <View
-                        style={[
-                          styles.featureIconWrap,
-                          { backgroundColor: isLocked ? colors.surface2 : colors.brandSoft },
-                        ]}
-                      >
-                        {renderFeatureIcon(feat.iconName, isLocked ? colors.muted : colors.brandDark, 16)}
-                      </View>
-                      <Text style={[styles.featureTileName, { color: colors.ink }]} numberOfLines={1}>
-                        {feat.n}
-                      </Text>
-                      {feat.perm && (
-                        <View style={[styles.tileLockBadge, { backgroundColor: colors.surface2 }]}>
-                          <Text style={[styles.tileLockText, { color: isLocked ? colors.red : colors.muted }]}>
-                            {feat.perm}
-                          </Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <TouchableOpacity
-                style={[styles.exploreBtn, { borderColor: colors.line }]}
-                onPress={() => setShowFeaturesModal(true)}
-              >
-                <Text style={[styles.exploreBtnText, { color: colors.brandDark }]}>
-                  View categorized directory ({ALL_FEATURES.length} features) →
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
 
         {/* Welcome Starter Card */}
         <View style={[styles.welcomeCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
@@ -830,7 +824,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
             ]}
           >
             <View style={styles.sheetHandle} />
-            <Text style={[styles.sheetModalTitle, { color: colors.ink }]}>All Features (23 screens)</Text>
+            <Text style={[styles.sheetModalTitle, { color: colors.ink }]}>All Features ({ALL_FEATURES.length} screens)</Text>
             <Text style={[styles.sheetModalSub, { color: colors.muted }]}>
               Tap any feature to navigate directly. Active role: <Text style={{ fontWeight: '700', color: colors.brandDark }}>{role}</Text>
             </Text>
@@ -1111,54 +1105,6 @@ const styles = StyleSheet.create({
   segment: { flex: 1, height: 4, borderRadius: 2 },
   pipelineDoneText: { fontSize: 12.5 },
 
-  // Features Grid Styles
-  featuresGridContainer: { marginTop: 12 },
-  featuresGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  featureTile: {
-    width: '31.3%',
-    borderRadius: 11,
-    borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    position: 'relative',
-    minHeight: 76,
-    justifyContent: 'center',
-  },
-  featureIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 5,
-  },
-  featureTileName: {
-    fontSize: 10.5,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  tileLockBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    paddingHorizontal: 3,
-    paddingVertical: 1,
-    borderRadius: 3,
-  },
-  tileLockText: { fontSize: 7.5, fontWeight: '800' },
-  exploreBtn: {
-    marginTop: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  exploreBtnText: { fontSize: 11.5, fontWeight: '700' },
 
   welcomeCard: { padding: 14, borderRadius: 14, borderWidth: 1, marginVertical: 4 },
   welcomeText: { fontSize: 13.5, lineHeight: 19, marginBottom: 14 },

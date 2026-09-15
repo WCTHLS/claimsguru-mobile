@@ -106,6 +106,27 @@ async function requestWithTimeout<T>(
   }
 }
 
+import { useAuthStore } from '../../state/useAuthStore';
+
+function getAuthHeaders(): Record<string, string> {
+  try {
+    const auth = useAuthStore.getState();
+    const headers: Record<string, string> = {};
+    if (auth.token) {
+      headers['Authorization'] = `Bearer ${auth.token}`;
+    }
+    if (auth.userId) {
+      headers['X-User-Id'] = auth.userId;
+      headers['X-Patient-Id'] = auth.userId;
+    } else if (auth.userEmail) {
+      headers['X-Patient-Id'] = auth.userEmail;
+    }
+    return headers;
+  } catch {
+    return {};
+  }
+}
+
 export const apiClient = {
   get: <T>(url: string, options?: RequestOptions): Promise<T> => {
     return requestWithTimeout<T>(
@@ -114,6 +135,7 @@ export const apiClient = {
         method: 'GET',
         headers: {
           Accept: 'application/json',
+          ...getAuthHeaders(),
           ...options?.headers,
         },
       },
@@ -129,6 +151,7 @@ export const apiClient = {
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
+          ...getAuthHeaders(),
           ...options?.headers,
         },
         body: body ? JSON.stringify(body) : undefined,
@@ -144,6 +167,7 @@ export const apiClient = {
         method: 'DELETE',
         headers: {
           Accept: 'application/json',
+          ...getAuthHeaders(),
           ...options?.headers,
         },
       },
@@ -158,6 +182,7 @@ export const apiClient = {
         method: 'POST',
         headers: {
           Accept: 'application/json',
+          ...getAuthHeaders(),
           ...options?.headers,
         },
         body: formData,

@@ -24,6 +24,26 @@ export interface ParsedField {
   note?: string;
 }
 
+export interface ScanFinding {
+  severity: 'ok' | 'warn' | 'bad';
+  title: string;
+  badge: string;
+}
+
+export interface ScanLinkedCode {
+  code: string;
+  description: string;
+  status: 'ok' | 'warn';
+  badge: string;
+}
+
+export interface ScanData {
+  type: string;
+  severity: 'LOW' | 'MODERATE' | 'SEVERE';
+  findings: ScanFinding[];
+  codes: ScanLinkedCode[];
+}
+
 export interface OcrDocument {
   key: string;
   name: string;
@@ -36,6 +56,11 @@ export interface OcrDocument {
   scan?: boolean;
   flag?: string;
   tags: string[];
+  size?: string;
+  badge?: string;
+  cls?: number;
+  rerun?: boolean;
+  scanData?: ScanData;
   pages: PageContent[][];
   fields: ParsedField[];
 }
@@ -50,6 +75,9 @@ export const INITIAL_OCR_DOCS: OcrDocument[] = [
     dpi: '—',
     conf: 0.99,
     secs: 3.2,
+    size: '1.4 MB',
+    badge: 'PDF',
+    cls: 0.96,
     tags: [
       'doc_type: discharge_summary · 0.96',
       'LayoutLMv3 + regex',
@@ -194,6 +222,9 @@ export const INITIAL_OCR_DOCS: OcrDocument[] = [
     dpi: '—',
     conf: 0.89,
     secs: 9.4,
+    size: '820 KB',
+    badge: 'JPG',
+    cls: 0.93,
     tags: ['doc_type: hospital_bill · 0.93', '8 expense categories'],
     pages: [
       [
@@ -269,6 +300,9 @@ export const INITIAL_OCR_DOCS: OcrDocument[] = [
     dpi: '200',
     conf: 0.86,
     secs: 22.7,
+    size: '2.1 MB',
+    badge: 'PDF',
+    cls: 0.90,
     tags: ['doc_type: policy_card · 0.90', 'OCR_ENABLE_PADDLE_OCR'],
     pages: [
       [
@@ -299,7 +333,24 @@ export const INITIAL_OCR_DOCS: OcrDocument[] = [
     dpi: '—',
     conf: 0.98,
     secs: 4.1,
+    size: '640 KB',
+    badge: 'PDF',
+    cls: 0.74,
     scan: true,
+    scanData: {
+      type: 'MRI',
+      severity: 'MODERATE',
+      findings: [
+        { severity: 'warn', title: 'Mild left ventricular hypertrophy', badge: 'Moderate' },
+        { severity: 'ok', title: 'No pericardial effusion', badge: 'Normal' },
+        { severity: 'bad', title: 'Regional wall motion abnormality — anterior', badge: 'Severe' },
+        { severity: 'ok', title: 'Valve morphology unremarkable', badge: 'Normal' },
+      ],
+      codes: [
+        { code: 'I21.9', description: 'supported by this scan', status: 'ok', badge: 'Strong' },
+        { code: 'I50.9', description: 'suggested addition', status: 'warn', badge: 'Review' },
+      ],
+    },
     tags: ['doc_type: scan_report · 0.74', 'scan_analyses: MRI · MODERATE'],
     pages: [
       [
@@ -335,6 +386,9 @@ export const INITIAL_OCR_DOCS: OcrDocument[] = [
     dpi: '—',
     conf: 1.0,
     secs: 1.1,
+    size: '38 KB',
+    badge: 'XLS',
+    cls: 0.81,
     flag: 'R004',
     tags: ['doc_type: pharmacy_bill · 0.81', 'R004 failed · bill date before admission'],
     pages: [
@@ -392,6 +446,9 @@ export const INITIAL_OCR_DOCS: OcrDocument[] = [
     dpi: '—',
     conf: 0.91,
     secs: 6.8,
+    size: '510 KB',
+    badge: 'JPG',
+    cls: 0.95,
     tags: ['doc_type: id_proof · 0.95', 'KYC matched'],
     pages: [
       [

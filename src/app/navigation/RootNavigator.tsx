@@ -16,13 +16,10 @@ import { WorkflowPipelineScreen } from '../../features/workflow/screens/Workflow
 import { ProfileSettingsScreen } from '../../features/profile/screens/ProfileSettingsScreen';
 import { UploadPanelScreen } from '../../features/claims/screens/UploadPanelScreen';
 import { ClaimDetailScreen } from '../../features/claims/screens/ClaimDetailScreen';
-import { OcrParsedFieldsScreen } from '../../features/claims/screens/OcrParsedFieldsScreen';
-import { ScanAnalyzerScreen } from '../../features/claims/screens/ScanAnalyzerScreen';
 import { DocumentGridScreen } from '../../features/claims/screens/DocumentGridScreen';
 import { PatientProfileScreen } from '../../features/claims/screens/PatientProfileScreen';
 import { PatientActivityScreen } from '../../features/claims/screens/PatientActivityScreen';
 import { SubmissionScreen } from '../../features/claims/screens/SubmissionScreen';
-import { AuditTrailScreen } from '../../features/claims/screens/AuditTrailScreen';
 import { OpsConsoleScreen } from '../../features/profile/screens/OpsConsoleScreen';
 import { SignInScreen } from '../../features/auth/screens/SignInScreen';
 import { SignUpScreen } from '../../features/auth/screens/SignUpScreen';
@@ -78,14 +75,6 @@ export const RootNavigator = () => {
           component={MedicalCodingScreen}
         />
         <Stack.Screen
-          name={Routes.OcrParsedFields}
-          component={OcrParsedFieldsScreen}
-        />
-        <Stack.Screen
-          name={Routes.ScanAnalyzer}
-          component={ScanAnalyzerScreen}
-        />
-        <Stack.Screen
           name={Routes.DocumentGrid}
           component={DocumentGridScreen}
         />
@@ -100,10 +89,6 @@ export const RootNavigator = () => {
         <Stack.Screen
           name={Routes.Submission}
           component={SubmissionScreen}
-        />
-        <Stack.Screen
-          name={Routes.AuditTrail}
-          component={AuditTrailScreen}
         />
         <Stack.Screen
           name={Routes.ProfileSettings}

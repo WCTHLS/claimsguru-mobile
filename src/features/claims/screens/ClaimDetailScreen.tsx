@@ -37,37 +37,92 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const claim = claims.find(c => c.id === claimId || c.id.startsWith(claimId)) || claims[0] || {
+  const existingClaim = claims.find(c => c.id === claimId || c.id.startsWith(claimId));
+  const fallbackClaim: any = {
     id: claimId,
-    who: 'R. Menon',
-    dept: 'Cardiology',
-    amt: 184500,
+    who: 'Sarita Tiwari',
+    dept: 'Hypothyroidism COPD Exacerbation',
+    amt: 37595,
     status: 'complete',
     step: 'validate',
     indexed: false,
-    policyNo: 'SAMPLE-PH-77421',
-    hospital: 'Sunrise Multispecialty',
-    doctor: 'Dr. P. Rangan',
-    diagnosis: 'Acute coronary syndrome',
-    age: 54,
-    gender: 'Male',
-    admissionDate: '12 Aug 2026',
-    dischargeDate: '16 Aug 2026',
-    days: 4,
+    policyNo: 'P-0007401',
+    hospital: 'Government Health City',
+    doctor: 'Dr. Attending Physician',
+    diagnosis: 'Hypothyroidism COPD Exacerbation',
+    age: 42,
+    gender: 'Female',
+    admissionDate: '12 Feb 2024',
+    dischargeDate: '15 Feb 2024',
+    days: 3,
     claimType: 'Reimbursement',
-    fieldsParsed: '23 of 27',
+    fieldsParsed: '36 fields',
   };
 
+  const claim = existingClaim
+    ? {
+        ...fallbackClaim,
+        ...existingClaim,
+        who:
+          existingClaim.who && !existingClaim.who.startsWith('Processing')
+            ? existingClaim.who
+            : fallbackClaim.who,
+        hospital:
+          existingClaim.hospital && existingClaim.hospital !== 'Sunrise Multispecialty'
+            ? existingClaim.hospital
+            : fallbackClaim.hospital,
+        doctor:
+          existingClaim.doctor && existingClaim.doctor !== 'Dr. P. Rangan'
+            ? existingClaim.doctor
+            : fallbackClaim.doctor,
+        diagnosis:
+          existingClaim.diagnosis && existingClaim.diagnosis !== 'Acute coronary syndrome'
+            ? existingClaim.diagnosis
+            : fallbackClaim.diagnosis,
+        amt: existingClaim.amt && existingClaim.amt !== 184500 ? existingClaim.amt : fallbackClaim.amt,
+        policyNo:
+          existingClaim.policyNo && !existingClaim.policyNo.includes('SAMPLE')
+            ? existingClaim.policyNo
+            : fallbackClaim.policyNo,
+      }
+    : fallbackClaim;
+
   useEffect(() => {
-    if (claimId && claimId.length > 20) {
-      Promise.all([
-        claimsApi.getClaimDetail(claimId).catch(() => null),
-        claimsApi.getClaimPreview(claimId).catch(() => null),
-      ]).then(([backendData, previewData]) => {
+    if (!claimId || claimId.length < 10) return;
+
+    let isMounted = true;
+    let pollTimer: any = null;
+
+    const fetchClaimData = async () => {
+      try {
+        const [backendData, previewData] = await Promise.all([
+          claimsApi.getClaimDetail(claimId).catch(() => null),
+          claimsApi.getClaimPreview(claimId).catch(() => null),
+        ]);
+
+        if (!isMounted) return;
+
         if (backendData && backendData.id) {
           const transformed = transformBackendClaim(backendData, previewData);
           addOrUpdateClaim(transformed);
+
+          const isFinished = [
+            'COMPLETED',
+            'FINISHED',
+            'SUBMITTED',
+            'APPROVED',
+            'REJECTED',
+            'FAILED',
+          ].includes(String(backendData.status || '').toUpperCase());
+
+          if (isFinished && previewData) {
+            if (pollTimer) {
+              clearInterval(pollTimer);
+              pollTimer = null;
+            }
+          }
         }
+
         if (previewData && previewData.expenses && previewData.expenses.length > 0) {
           const formatted = previewData.expenses.map((e: any) => ({
             category: e.category || 'Medical expense',
@@ -75,10 +130,18 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
           }));
           setLiveExpenses(formatted);
         }
-      }).catch(err => {
-        console.log('[ClaimDetailScreen] Backend claim detail unavailable:', err?.message || err);
-      });
-    }
+      } catch (err: any) {
+        console.log('[ClaimDetailScreen] Backend fetch error:', err?.message || err);
+      }
+    };
+
+    fetchClaimData();
+    pollTimer = setInterval(fetchClaimData, 1500);
+
+    return () => {
+      isMounted = false;
+      if (pollTimer) clearInterval(pollTimer);
+    };
   }, [claimId]);
 
   const showToast = (msg: string) => {
@@ -115,18 +178,18 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
   };
 
   const isFailed = claim.status === 'FAILED';
-  const statusBg = isFailed ? colors.redSoft : colors.amberSoft;
-  const statusColor = isFailed ? colors.red : colors.amber;
+  const isRunning = claim.status === 'running';
+  const statusBg = isFailed ? colors.redSoft : isRunning ? colors.amberSoft : colors.greenSoft;
+  const statusColor = isFailed ? colors.red : isRunning ? colors.amber : colors.green;
+  const statusLabel = isFailed ? 'FAILED' : isRunning ? 'PROCESSING' : 'COMPLETE';
 
   const defaultExpenses = [
-    { category: 'Room', amount: 32000 },
-    { category: 'Consultation', amount: 14500 },
-    { category: 'Pharmacy', amount: 21300 },
-    { category: 'Surgery', amount: 78000 },
-    { category: 'OT', amount: 18700 },
-    { category: 'Anaesthesia', amount: 9400 },
-    { category: 'Consumables', amount: 7100 },
-    { category: 'Nursing', amount: 3500 },
+    { category: 'Room', amount: 3200 },
+    { category: 'Consultation', amount: 1500 },
+    { category: 'Pharmacy', amount: 12300 },
+    { category: 'Lab & Diagnostics', amount: 7800 },
+    { category: 'OT & Nursing', amount: 5700 },
+    { category: 'Consumables', amount: 7095 },
   ];
 
   const expenses = liveExpenses || defaultExpenses;
@@ -174,12 +237,13 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
           showsVerticalScrollIndicator={false}
         >
           {/* Main Claim Header Card */}
+          {/* Main Claim Header Card */}
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
             {/* Status Pills */}
             <View style={styles.pillsRow}>
               <View style={[styles.pill, { backgroundColor: statusBg }]}>
                 <Text style={[styles.pillText, { color: statusColor }]}>
-                  COMPLETE · step {claim.step || 'validate'}
+                  {statusLabel} · step {claim.step || (isRunning ? 'ocr' : 'validate')}
                 </Text>
               </View>
 
@@ -203,7 +267,7 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
               activeOpacity={0.7}
             >
               <Text style={[styles.patientName, { color: colors.ink }]}>
-                {claim.who || 'R. Menon'} · {claim.age || 54} · {claim.gender || 'Male'}
+                {claim.who || 'Sarita Tiwari'} · {claim.age || 42} · {claim.gender || 'Female'}
               </Text>
               <View style={[styles.patientBadge, { backgroundColor: colors.brandSoft }]}>
                 <Text style={[styles.patientBadgeText, { color: colors.brandDark }]}>
@@ -213,7 +277,7 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
             </TouchableOpacity>
 
             <Text style={[styles.subMeta, { color: colors.muted }]}>
-              {claim.hospital || 'Sunrise Multispecialty'} · admitted {claim.admissionDate || '12 Aug 2026'} · {claim.days || 4} days
+              {claim.hospital || 'Government Health City'} · admitted {claim.admissionDate || '12 Feb 2024'} · {claim.days || 3} days
             </Text>
 
             <Text style={[styles.claimIdText, styles.mono, { color: colors.muted }]}>
@@ -224,12 +288,35 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
             <View style={styles.horizontalTrack}>
               {['OCR', 'Parse', 'Code', 'Predict', 'Validate'].map((step, idx) => {
                 const isLast = idx === 4;
+                const stepIndices: Record<string, number> = { ocr: 0, parse: 1, code: 2, predict: 3, validate: 4 };
+                const curIdx = isRunning ? (stepIndices[claim.step?.toLowerCase() || 'ocr'] ?? 0) : 4;
+                const isDone = !isRunning || idx < curIdx;
+                const isCurrent = isRunning && idx === curIdx;
                 return (
                   <React.Fragment key={step}>
-                    <View style={[styles.hStep, { backgroundColor: colors.brand, borderColor: colors.brand }]}>
-                      <Check size={11} color="#ffffff" strokeWidth={3.2} />
+                    <View
+                      style={[
+                        styles.hStep,
+                        {
+                          backgroundColor: isDone ? colors.brand : isCurrent ? colors.brandSoft : colors.surface2,
+                          borderColor: (isDone || isCurrent) ? colors.brand : colors.line,
+                        },
+                      ]}
+                    >
+                      {isDone ? (
+                        <Check size={11} color="#ffffff" strokeWidth={3.2} />
+                      ) : isCurrent ? (
+                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.brand }} />
+                      ) : null}
                     </View>
-                    {!isLast && <View style={[styles.hBar, { backgroundColor: colors.brand }]} />}
+                    {!isLast && (
+                      <View
+                        style={[
+                          styles.hBar,
+                          { backgroundColor: isDone ? colors.brand : colors.line },
+                        ]}
+                      />
+                    )}
                   </React.Fragment>
                 );
               })}
@@ -303,56 +390,56 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
               <View style={styles.kvRow}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Policy number</Text>
                 <Text style={[styles.kvVal, styles.mono, { color: colors.ink }]}>
-                  {claim.policyNo || 'SAMPLE-PH-77421'}
+                  {claim.policyNo || 'P-0007401'}
                 </Text>
               </View>
 
               <View style={styles.kvRow}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Insurer / TPA</Text>
                 <Text style={[styles.kvVal, { color: colors.ink }]}>
-                  Sample Health TPA
+                  {claim.hospital?.includes('Government') ? 'PMJAY / State TPA' : 'ClaimsGuru Health TPA'}
                 </Text>
               </View>
 
               <View style={styles.kvRow}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Admission</Text>
                 <Text style={[styles.kvVal, { color: colors.ink }]}>
-                  {claim.admissionDate || '12 Aug 2026'}
+                  {claim.admissionDate || '12 Feb 2024'}
                 </Text>
               </View>
 
               <View style={styles.kvRow}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Discharge</Text>
                 <Text style={[styles.kvVal, { color: colors.ink }]}>
-                  {claim.dischargeDate || '16 Aug 2026'}
+                  {claim.dischargeDate || '15 Feb 2024'}
                 </Text>
               </View>
 
               <View style={styles.kvRow}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Primary diagnosis</Text>
                 <Text style={[styles.kvVal, { color: colors.ink }]}>
-                  {claim.diagnosis || 'Acute coronary syndrome'}
+                  {claim.diagnosis || 'Hypothyroidism COPD Exacerbation'}
                 </Text>
               </View>
 
               <View style={styles.kvRow}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Treating doctor</Text>
                 <Text style={[styles.kvVal, { color: colors.ink }]}>
-                  {claim.doctor || 'Dr. P. Rangan'}
+                  {claim.doctor || 'Dr. Attending Physician'}
                 </Text>
               </View>
 
               <View style={styles.kvRow}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Amount claimed</Text>
                 <Text style={[styles.kvVal, { color: colors.ink }]}>
-                  {formatINR(claim.amt || 184500)}
+                  {formatINR(claim.amt || 37595)}
                 </Text>
               </View>
 
               <View style={[styles.kvRow, { borderBottomWidth: 0 }]}>
                 <Text style={[styles.kvKey, { color: colors.muted }]}>Fields parsed</Text>
                 <Text style={[styles.kvVal, { color: colors.ink }]}>
-                  {claim.fieldsParsed || '23 of 27'}
+                  {claim.fieldsParsed || '36 fields'}
                 </Text>
               </View>
             </View>
@@ -401,24 +488,14 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
                   ep: '/ingress/claims/{id}/documents',
                 },
                 {
-                  title: 'OCR & parsed fields',
-                  route: Routes.OcrParsedFields,
-                  ep: '/ocr · /parser',
-                },
-                {
-                  title: 'Scan analysis',
-                  route: Routes.ScanAnalyzer,
-                  ep: 'scan_analyses',
-                },
-                {
                   title: 'Medical coding',
                   route: Routes.MedicalCoding,
                   ep: '/coding/code-suggest/{id}',
                 },
                 {
-                  title: 'Audit trail',
-                  route: Routes.AuditTrail,
-                  ep: '/ingress/claims/{id}/audit',
+                  title: 'Patient activity',
+                  route: Routes.PatientActivity,
+                  ep: '/submission/claims/{id}/audit',
                 },
               ].map((svc, idx, arr) => (
                 <TouchableOpacity

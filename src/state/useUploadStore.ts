@@ -35,7 +35,7 @@ interface UploadState {
   setDocType: (id: string, docType: string) => void;
   setClaimType: (type: 'Reimbursement' | 'Cashless' | 'Pre-authorisation') => void;
   logEvent: (event: string, detail: string, isError?: boolean) => void;
-  uploadToBackend: (options?: { policyId?: string; patientId?: string }) => Promise<{ claimId: string; taskId?: string }>;
+  uploadToBackend: (options?: { policyId?: string; patientId?: string; email?: string }) => Promise<{ claimId: string; taskId?: string }>;
 }
 
 export const useUploadStore = create<UploadState>((set, get) => ({
@@ -187,20 +187,29 @@ export const useUploadStore = create<UploadState>((set, get) => ({
     set({ uploading: true });
     get().logEvent('UPLOAD_START', `Initiating claim with ${files.length} documents...`);
 
-    const filePayloads = files.map(f => ({
-      name: f.name,
-      type: f.fileBlob?.type || (f.kind === 'jpg' ? 'image/jpeg' : 'application/pdf'),
-      blob: f.fileBlob,
-      uri: f.uri,
-    }));
+    const filePayloads = files.map(f => {
+      let resolvedType = f.fileBlob?.type;
+      if (!resolvedType) {
+        const lower = f.name.toLowerCase();
+        if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) resolvedType = 'image/jpeg';
+        else if (lower.endsWith('.png')) resolvedType = 'image/png';
+        else resolvedType = 'application/pdf';
+      }
+      return {
+        name: f.name,
+        type: resolvedType,
+        blob: f.fileBlob,
+        uri: f.uri,
+      };
+    });
 
     try {
       const auth = useAuthStore.getState();
       const res = await claimsApi.uploadClaim(filePayloads, {
         policyId: options?.policyId || auth.policyNumber || 'P-0007401',
-        patientId: options?.patientId || auth.userId || 'ec78998a-0228-434a-84f4-e08b4b7417e2',
-        email: auth.userEmail || 'sample@gmail.com',
-        force: false,
+        patientId: options?.patientId || auth.userId || '568aab18-9f71-48dd-bccb-8d262ea0fa63',
+        email: options?.email || auth.userEmail || 'patient@claimsguru.com',
+        force: true,
       });
 
       const claimId = res.claim_id || res.id;
@@ -208,11 +217,10 @@ export const useUploadStore = create<UploadState>((set, get) => ({
       set({ uploading: false });
       return { claimId, taskId: res.task_id || undefined };
     } catch (err: any) {
-      console.warn('[useUploadStore] Backend upload failed, using fallback claim:', err);
-      const fallbackId = 'a4f1c9e2-7d30-4b8e-91cf-' + Math.random().toString(36).substring(2, 14);
-      get().logEvent('UPLOAD_FAILURE', `Backend offline: ${err?.message || 'Error'} (running locally)`, true);
+      console.warn('[useUploadStore] Backend upload failed:', err);
+      get().logEvent('UPLOAD_FAILURE', `Upload error: ${err?.message || 'Error'}`, true);
       set({ uploading: false });
-      return { claimId: fallbackId };
+      throw err;
     }
   },
 }));

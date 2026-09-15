@@ -13,13 +13,10 @@ export type RootStackParamList = {
   [Routes.FraudDetail]: { claimId: string };
   [Routes.ValidationRules]: { claimId: string };
   [Routes.MedicalCoding]: { claimId: string };
-  [Routes.OcrParsedFields]: { claimId: string; docKey?: string };
-  [Routes.ScanAnalyzer]: { claimId: string };
-  [Routes.DocumentGrid]: { claimId: string };
+  [Routes.DocumentGrid]: { claimId: string; docKey?: string };
   [Routes.PatientProfile]: { claimId?: string; patientId?: string };
-  [Routes.PatientActivity]: { patientId?: string };
+  [Routes.PatientActivity]?: { patientId?: string; claimId?: string };
   [Routes.Submission]: { claimId: string };
-  [Routes.AuditTrail]: { claimId: string };
   [Routes.ProfileSettings]: undefined;
   [Routes.OpsConsole]: undefined;
 };

@@ -26,6 +26,9 @@ export interface ClaimItem {
   claimType?: string;
   fieldsParsed?: string;
   expenses?: ExpenseItem[];
+  documents?: any[];
+  createdAt?: string;
+  patientId?: string;
 }
 
 export const INITIAL_CLAIMS: ClaimItem[] = [

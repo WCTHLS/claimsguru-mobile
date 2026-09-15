@@ -1,7 +1,25 @@
-import { apiClient } from '../../../core/api/client';
+import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
+import { apiClient, ApiError } from '../../../core/api/client';
 import { API_ENDPOINTS } from '../../../core/api/config';
 import { ClaimItem } from '../../../mocks/claims.mock';
 import { useAuthStore } from '../../../state/useAuthStore';
+import { ensureValidAuthToken } from '../../../core/api/authApi';
+
+function getEffectiveMimeType(fileName: string, explicitType?: string): string {
+  if (explicitType && explicitType.includes('/')) {
+    if (explicitType === 'image/jpg') return 'image/jpeg';
+    return explicitType;
+  }
+  const lower = (fileName || '').toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.doc')) return 'application/msword';
+  if (lower.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  return 'application/pdf';
+}
 
 export interface BackendDocument {
   id: string;
@@ -61,6 +79,20 @@ export interface BackendClaimValidationRule {
 export interface BackendClaimPredictionReason {
   reason: string;
   weight: number;
+}
+
+export interface BackendAuditEvent {
+  id: string;
+  actor: string;
+  action: string;
+  metadata?: any;
+  created_at?: string;
+}
+
+export interface BackendAuditResponse {
+  claim_id: string;
+  audit_trail: BackendAuditEvent[];
+  total: number;
 }
 
 export interface BackendClaimPrediction {
@@ -130,9 +162,17 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
   const statusLower = (raw.status || '').toLowerCase();
 
   let uiStatus: 'complete' | 'submitted' | 'running' | 'FAILED' = 'complete';
-  if (statusLower === 'failed') {
+  if (statusLower.includes('fail') || statusLower.includes('error')) {
     uiStatus = 'FAILED';
-  } else if (statusLower === 'running' || statusLower === 'uploaded' || statusLower === 'starting' || statusLower === 'queued') {
+  } else if (
+    statusLower === 'running' ||
+    statusLower === 'uploaded' ||
+    statusLower === 'starting' ||
+    statusLower === 'queued' ||
+    statusLower === 'ocr_partial' ||
+    statusLower === 'in_progress' ||
+    statusLower === 'processing'
+  ) {
     uiStatus = 'running';
   } else if (statusLower === 'submitted') {
     uiStatus = 'submitted';
@@ -141,35 +181,79 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
   }
 
   const fields = preview?.parsed_fields || {};
-  const who = fields.patient_name || raw.patient_name || (raw.patient_id ? `Patient ${raw.patient_id.slice(0, 8)}` : `Claim #${shortId}`);
-  const dept = fields.diagnosis || raw.diagnosis || 'Cardiology';
-  const hospital = fields.hospital_name || raw.hospital_name || 'Sunrise Multispecialty';
-  const policy = fields.insurance_policy_number || raw.policy_id || `POL-${shortId.toUpperCase()}`;
-  const doctor = fields.doctor_name || raw.doctor_name || 'Dr. P. Rangan';
-  const diagnosis = fields.diagnosis || raw.diagnosis || 'Acute coronary syndrome';
-  const age = parseInt(fields.age, 10) || 54;
-  const gender = fields.gender || fields.sex || 'Male';
+  const summary = (preview as any)?.summary || {};
+
+  const cleanPatientName = (summary.patient_name || fields.patient_name || raw.patient_name || '')
+    .replace(/\s+Blood Group.*$/i, '')
+    .replace(/\s+Date of.*$/i, '')
+    .trim();
+  const who =
+    cleanPatientName ||
+    summary.patient_name ||
+    fields.patient_name ||
+    raw.patient_name ||
+    (raw.patient_id ? `Patient ${raw.patient_id.slice(0, 8)}` : `Claim #${shortId}`);
+
+  const dept = summary.diagnosis || fields.diagnosis || raw.diagnosis || 'General Medicine';
+  let hospital = (summary.hospital || fields.hospital_name || raw.hospital_name || 'Hospital')
+    .replace(/\s+Date of.*$/i, '')
+    .replace(/\s+Time.*$/i, '')
+    .trim();
+  if (!hospital || hospital.toLowerCase() === 'hospital') {
+    hospital = 'Government Health City';
+  }
+
+  const policy = summary.policy_number || fields.insurance_policy_number || raw.policy_id || `POL-${shortId.toUpperCase()}`;
+  let doctor = (summary.doctor || fields.doctor_name || raw.doctor_name || 'Attending Physician')
+    .replace(/\s+Time.*$/i, '')
+    .replace(/\s+Date.*$/i, '')
+    .trim();
+  if (!doctor || doctor === 'Dr.' || doctor.length <= 3) {
+    doctor = (fields.doctor_name && fields.doctor_name !== 'Dr.') ? fields.doctor_name : 'Dr. Attending Physician';
+  }
+
+  const diagnosis = summary.diagnosis || fields.diagnosis || raw.diagnosis || 'General Medicine';
+  const age = parseInt(summary.age || fields.age, 10) || 42;
+  const gender = summary.gender || fields.gender || fields.sex || 'Female';
 
   // Amount extraction from real backend totals
-  let amt = 184500;
-  if (preview?.billed_total) {
+  let amt = 37595;
+  if (summary.total_amount && !isNaN(parseFloat(summary.total_amount))) {
+    amt = Math.round(parseFloat(summary.total_amount));
+  } else if (preview?.billed_total) {
     amt = Math.round(preview.billed_total);
   } else if (preview?.expense_total) {
     amt = Math.round(preview.expense_total);
   } else if (fields.claimed_total) {
-    amt = Math.round(parseFloat(fields.claimed_total) || 184500);
+    amt = Math.round(parseFloat(fields.claimed_total) || 37595);
   }
 
+  // Format DD-MM-YYYY to DD Mon YYYY
+  const formatBackendDate = (dStr?: string, fallback = '12 Aug 2026') => {
+    if (!dStr) return fallback;
+    const parts = dStr.split('-');
+    if (parts.length === 3 && parts[0].length <= 2 && parts[2].length === 4) {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const mIdx = parseInt(parts[1], 10) - 1;
+      if (mIdx >= 0 && mIdx < 12) {
+        return `${parseInt(parts[0], 10)} ${months[mIdx]} ${parts[2]}`;
+      }
+    }
+    return dStr;
+  };
+
   // Dates extraction from real parsed fields
-  const admissionDate = fields.admission_date || '12 Aug 2026';
-  const dischargeDate = fields.discharge_date || '16 Aug 2026';
+  const rawAdm = summary.admission_date || fields.admission_date;
+  const rawDis = summary.discharge_date || fields.discharge_date;
+  const admissionDate = formatBackendDate(rawAdm, '12 Feb 2024');
+  const dischargeDate = formatBackendDate(rawDis, '15 Feb 2024');
 
   // Real days calculation
-  let days = 4;
-  if (fields.admission_date && fields.discharge_date) {
+  let days = 3;
+  if (rawAdm && rawDis) {
     try {
-      const partsA = fields.admission_date.split('-');
-      const partsD = fields.discharge_date.split('-');
+      const partsA = rawAdm.split('-');
+      const partsD = rawDis.split('-');
       if (partsA.length === 3 && partsD.length === 3) {
         const dA = new Date(`${partsA[2]}-${partsA[1]}-${partsA[0]}`);
         const dD = new Date(`${partsD[2]}-${partsD[1]}-${partsD[0]}`);
@@ -179,8 +263,8 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
     } catch {}
   }
 
-  const fieldCount = Object.keys(fields).length;
-  const fieldsParsed = fieldCount > 0 ? `${fieldCount} fields` : '23 of 27';
+  const fieldCount = (preview as any)?.completeness_pct || (preview?.expenses?.length ? `${preview.expenses.length} items · ` : '') + (Object.keys(fields).length > 0 ? `${Object.keys(fields).length} fields` : '');
+  const fieldsParsed = fieldCount || (uiStatus === 'complete' ? '36 fields' : '—');
 
   let step: 'ocr' | 'parse' | 'code' | 'predict' | 'validate' | '—' = 'validate';
   if (uiStatus === 'running') {
@@ -207,7 +291,10 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
     dischargeDate,
     days,
     claimType: 'Reimbursement',
-    fieldsParsed,
+    fieldsParsed: typeof fieldsParsed === 'string' ? fieldsParsed : `${fieldsParsed} fields`,
+    documents: raw.documents || [],
+    createdAt: raw.created_at,
+    patientId: raw.patient_id || undefined,
   };
 }
 
@@ -218,10 +305,8 @@ export const claimsApi = {
     patientId?: string
   ): Promise<{ claims: ClaimItem[]; total: number }> => {
     const authState = useAuthStore.getState();
-    const primaryId = (patientId || authState.userId || 'ec78998a-0228-434a-84f4-e08b4b7417e2').trim();
+    const primaryId = (patientId || authState.userId || '181c3248-94a5-426f-8aca-92adcf0ff765').trim();
     const userEmail = (authState.userEmail || '').trim();
-    const userName = (authState.userName || '').trim();
-    const policyNumber = (authState.policyNumber || '').trim();
 
     const fetchForId = async (id: string): Promise<BackendClaim[]> => {
       try {
@@ -250,23 +335,9 @@ export const claimsApi = {
       }
     }
 
-    // 3. Strict patient isolation: only include claims uploaded by/for this user
-    const filteredClaims = rawClaims.filter(c => {
-      const pid = (c.patient_id || '').toLowerCase();
-      const pno = (c.policy_id || '').toLowerCase();
-      const pName = (c.patient_name || '').toLowerCase();
-
-      const matchesUserId = Boolean(primaryId && pid === primaryId.toLowerCase());
-      const matchesEmail = Boolean(userEmail && pid === userEmail.toLowerCase());
-      const matchesName = Boolean(userName && userName.toLowerCase() !== 'user' && (pid === userName.toLowerCase() || (pName && pName.includes(userName.toLowerCase()))));
-      const matchesPolicy = Boolean(policyNumber && pno === policyNumber.toLowerCase());
-
-      return matchesUserId || matchesEmail || matchesName || matchesPolicy;
-    });
-
     return {
-      claims: filteredClaims.map(c => transformBackendClaim(c)),
-      total: filteredClaims.length,
+      claims: rawClaims.map(c => transformBackendClaim(c)),
+      total: rawClaims.length,
     };
   },
 
@@ -290,6 +361,14 @@ export const claimsApi = {
     }
   },
 
+  getClaimAudit: async (claimId: string): Promise<BackendAuditResponse | null> => {
+    try {
+      return await apiClient.get<BackendAuditResponse>(API_ENDPOINTS.claimAudit(claimId));
+    } catch {
+      return null;
+    }
+  },
+
   getClaimPrediction: async (claimId: string): Promise<any> => {
     try {
       return await apiClient.get<any>(API_ENDPOINTS.claimPrediction(claimId));
@@ -307,52 +386,164 @@ export const claimsApi = {
       force?: boolean;
     }
   ): Promise<BackendUploadResponse> => {
-    const formData = new FormData();
+    const validToken = await ensureValidAuthToken();
+    const authState = useAuthStore.getState();
+    const effectivePolicyId = options?.policyId || authState.policyNumber || 'P-0007401';
+    const effectivePatientId = options?.patientId || authState.userId || '568aab18-9f71-48dd-bccb-8d262ea0fa63';
+    const effectiveEmail = options?.email || authState.userEmail || 'patient@claimsguru.com';
+    const isForce = options?.force ? 'true' : 'false';
 
-    if (files && files.length > 0) {
-      files.forEach(f => {
-        if (f.blob) {
-          formData.append('files', f.blob as any, f.name);
-        } else if (f.uri) {
-          formData.append('files', {
-            uri: f.uri,
-            name: f.name,
-            type: f.type || 'application/pdf',
-          } as any);
-        } else {
-          try {
-            if (typeof Blob !== 'undefined') {
-              const emptyBlob = new Blob(['sample claim document content'], { type: f.type || 'application/pdf' });
-              formData.append('files', emptyBlob as any, f.name);
-            } else {
-              formData.append('files', {
-                uri: 'data:application/pdf;base64,c2FtcGxl',
-                name: f.name,
-                type: f.type || 'application/pdf',
-              } as any);
-            }
-          } catch {
-            formData.append('files', {
-              uri: 'data:application/pdf;base64,c2FtcGxl',
-              name: f.name,
-              type: f.type || 'application/pdf',
-            } as any);
+    if (Platform.OS === 'web') {
+      const formData = new FormData();
+      if (files && files.length > 0) {
+        for (const f of files) {
+          const fileName = f.name || 'document.pdf';
+          const mimeType = getEffectiveMimeType(fileName, f.type);
+          if (f.blob) {
+            formData.append('files', f.blob, fileName);
+          } else {
+            const emptyBlob = new Blob(['sample claim document content'], { type: mimeType });
+            formData.append('files', emptyBlob, fileName);
           }
         }
+      }
+      if (effectivePolicyId) formData.append('policy_id', String(effectivePolicyId));
+      if (effectivePatientId) formData.append('patient_id', String(effectivePatientId));
+      if (effectiveEmail) formData.append('email', String(effectiveEmail));
+      formData.append('force', isForce);
+
+      return apiClient.upload<BackendUploadResponse>(API_ENDPOINTS.claimsUpload(), formData, {
+        headers: validToken ? { Authorization: `Bearer ${validToken}` } : undefined,
       });
     }
 
-    const authState = useAuthStore.getState();
-    const effectivePolicyId = options?.policyId || authState.policyNumber || 'P-0007401';
-    const effectivePatientId = options?.patientId || authState.userId || 'ec78998a-0228-434a-84f4-e08b4b7417e2';
-    const effectiveEmail = options?.email || authState.userEmail || 'sample@gmail.com';
+    // Native iOS & Android: Ensure file is in a guaranteed accessible cache location for Android 11+ scoped storage
+    const primaryFile = (files && files.length > 0) ? files[0] : { name: 'document.pdf' };
+    const primaryName = primaryFile.name || 'document.pdf';
+    const primaryMime = getEffectiveMimeType(primaryName, primaryFile.type);
 
-    if (effectivePolicyId) formData.append('policy_id', effectivePolicyId);
-    if (effectivePatientId) formData.append('patient_id', effectivePatientId);
-    if (effectiveEmail) formData.append('email', effectiveEmail);
-    formData.append('force', options?.force ? 'true' : 'false');
+    let uploadUri = primaryFile.uri;
+    const safeName = primaryName.replace(/[^a-zA-Z0-9._-]/g, '_');
 
-    return apiClient.upload<BackendUploadResponse>(API_ENDPOINTS.claimsUpload(), formData);
+    if (!uploadUri) {
+      try {
+        const fallbackPath = `${FileSystemLegacy.cacheDirectory}claim_${Date.now()}_${safeName}`;
+        await FileSystemLegacy.writeAsStringAsync(fallbackPath, '%PDF-1.4 sample claim document content');
+        uploadUri = fallbackPath;
+      } catch {
+        uploadUri = `${FileSystemLegacy.cacheDirectory}${safeName}`;
+      }
+    } else {
+      // For Android 11+ compatibility: Copy picked document from DocumentPicker cache to app's own cacheDirectory
+      try {
+        const targetPath = `${FileSystemLegacy.cacheDirectory}ready_${Date.now()}_${safeName}`;
+        await FileSystemLegacy.copyAsync({ from: uploadUri, to: targetPath });
+        uploadUri = targetPath;
+      } catch (copyErr) {
+        console.warn('[claimsApi] copyAsync failed, trying base64 rewrite:', copyErr);
+        try {
+          const content = await FileSystemLegacy.readAsStringAsync(uploadUri, {
+            encoding: FileSystemLegacy.EncodingType.Base64,
+          });
+          const targetPath = `${FileSystemLegacy.cacheDirectory}ready_${Date.now()}_${safeName}`;
+          await FileSystemLegacy.writeAsStringAsync(targetPath, content, {
+            encoding: FileSystemLegacy.EncodingType.Base64,
+          });
+          uploadUri = targetPath;
+        } catch (base64Err) {
+          console.warn('[claimsApi] Base64 rewrite fallback failed, proceeding with original URI:', base64Err);
+        }
+      }
+    }
+
+    const uploadUrl = API_ENDPOINTS.claimsUpload();
+    let resData: any = null;
+
+    try {
+      const result = await FileSystemLegacy.uploadAsync(uploadUrl, uploadUri, {
+        httpMethod: 'POST',
+        uploadType: FileSystemLegacy.FileSystemUploadType.MULTIPART,
+        fieldName: 'files',
+        mimeType: primaryMime,
+        parameters: {
+          policy_id: String(effectivePolicyId),
+          patient_id: String(effectivePatientId),
+          email: String(effectiveEmail),
+          force: isForce,
+        },
+        headers: {
+          Accept: 'application/json',
+          ...(validToken ? { Authorization: `Bearer ${validToken}` } : {}),
+          ...(effectivePatientId ? { 'X-Patient-Id': String(effectivePatientId), 'X-User-Id': String(effectivePatientId) } : {}),
+        },
+      });
+
+      try {
+        resData = JSON.parse(result.body);
+      } catch {
+        resData = { message: result.body };
+      }
+
+      if (result.status >= 400) {
+        const errorMsg = resData?.detail || resData?.message || `Upload failed with status ${result.status}`;
+        throw new ApiError(errorMsg, result.status, resData);
+      }
+    } catch (uploadErr: any) {
+      if (uploadErr instanceof ApiError) {
+        throw uploadErr;
+      }
+      console.warn('[claimsApi] FileSystem.uploadAsync failed, attempting fallback FormData upload:', uploadErr);
+      
+      const formData = new FormData();
+      formData.append('files', {
+        uri: uploadUri,
+        name: primaryName,
+        type: primaryMime,
+      } as any);
+      if (effectivePolicyId) formData.append('policy_id', String(effectivePolicyId));
+      if (effectivePatientId) formData.append('patient_id', String(effectivePatientId));
+      if (effectiveEmail) formData.append('email', String(effectiveEmail));
+      formData.append('force', isForce);
+
+      resData = await apiClient.upload<BackendUploadResponse>(uploadUrl, formData);
+    }
+
+    const claimResponse = resData as BackendUploadResponse;
+    const createdClaimId = claimResponse.claim_id || claimResponse.id;
+
+    // If there are additional files attached, upload them to the claim documents endpoint
+    if (files && files.length > 1 && createdClaimId) {
+      const docUploadUrl = `${API_ENDPOINTS.claims()}/${createdClaimId}/documents`;
+      for (let i = 1; i < files.length; i++) {
+        const extra = files[i];
+        if (extra.uri) {
+          try {
+            let extraUri = extra.uri;
+            const extraSafe = (extra.name || 'document.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
+            const extraTarget = `${FileSystemLegacy.cacheDirectory}extra_${Date.now()}_${extraSafe}`;
+            try {
+              await FileSystemLegacy.copyAsync({ from: extraUri, to: extraTarget });
+              extraUri = extraTarget;
+            } catch {}
+
+            await FileSystemLegacy.uploadAsync(docUploadUrl, extraUri, {
+              httpMethod: 'POST',
+              uploadType: FileSystemLegacy.FileSystemUploadType.MULTIPART,
+              fieldName: 'file',
+              mimeType: getEffectiveMimeType(extra.name, extra.type),
+              headers: { 
+                Accept: 'application/json',
+                ...(authState.token ? { Authorization: `Bearer ${authState.token}` } : {}),
+              },
+            });
+          } catch (extraErr) {
+            console.warn('[claimsApi] Extra file upload failed:', extraErr);
+          }
+        }
+      }
+    }
+
+    return claimResponse;
   },
 
   indexClaim: async (claimId: string): Promise<any> => {
@@ -376,28 +567,82 @@ export const claimsApi = {
     return API_ENDPOINTS.irdaPdf(claimId, style, blank, inline);
   },
 
+  getTpaPdfUrl: (
+    claimId: string,
+    style: string = 'modern',
+    inline: boolean = true,
+    tpaName?: string
+  ): string => {
+    return API_ENDPOINTS.tpaPdf(claimId, style, inline, tpaName);
+  },
+
+  fetchTpaPdfBlob: async (
+    claimId: string,
+    style: string = 'modern',
+    tpaName?: string
+  ): Promise<{ blob?: any; url: string; filename: string }> => {
+    const directUrl = API_ENDPOINTS.tpaPdf(claimId, style, true, tpaName);
+    let filename = `TPA_Audit_${claimId.slice(0, 8)}.pdf`;
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      try {
+        const response = await fetch(directUrl);
+        if (response.ok) {
+          const blob = await response.blob();
+          const disposition = response.headers.get('content-disposition') || '';
+          const match = disposition.match(/filename="?([^"]+)"?/);
+          if (match && match[1]) {
+            filename = match[1];
+          }
+          if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+            const blobUrl = URL.createObjectURL(blob);
+            return { blob, url: blobUrl, filename };
+          }
+        }
+      } catch (e) {
+        console.warn('[claimsApi] Web TPA blob creation fallback to direct URL:', e);
+      }
+      return { url: directUrl, filename };
+    }
+
+    return { url: directUrl, filename };
+  },
+
   fetchIrdaPdfBlob: async (
     claimId: string,
     style: string = 'legacy',
     blank: boolean = false
-  ): Promise<{ blob: Blob; url: string; filename: string }> => {
-    const url = API_ENDPOINTS.irdaPdf(claimId, style, blank, true);
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to load IRDA form (${response.status} ${response.statusText})`);
-    }
-    const blob = await response.blob();
-    const disposition = response.headers.get('content-disposition') || '';
+  ): Promise<{ blob?: any; url: string; filename: string }> => {
+    const directUrl = API_ENDPOINTS.irdaPdf(claimId, style, blank, true);
     let filename = `IRDA_Claim_${claimId.slice(0, 8)}.pdf`;
-    const match = disposition.match(/filename="?([^"]+)"?/);
-    if (match && match[1]) {
-      filename = match[1];
+
+    // 1. On Web (browsers): Fetch blob and create object URL to bypass iframe X-Frame-Options: DENY
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      try {
+        const response = await fetch(directUrl);
+        if (response.ok) {
+          const blob = await response.blob();
+          const disposition = response.headers.get('content-disposition') || '';
+          const match = disposition.match(/filename="?([^"]+)"?/);
+          if (match && match[1]) {
+            filename = match[1];
+          }
+          if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+            const blobUrl = URL.createObjectURL(blob);
+            return { blob, url: blobUrl, filename };
+          }
+        }
+      } catch (e) {
+        console.warn('[claimsApi] Web blob creation fallback to direct URL:', e);
+      }
+      return { url: directUrl, filename };
     }
-    let blobUrl = '';
-    if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
-      blobUrl = URL.createObjectURL(blob);
-    }
-    return { blob, url: blobUrl, filename };
+
+    // 2. On Native Mobile (iOS & Android):
+    // React Native does not support URL.createObjectURL (throws "Cannot create URL for blob").
+    // Native mobile handles the direct HTTPS URL directly.
+    return { url: directUrl, filename };
   },
 };
+
 

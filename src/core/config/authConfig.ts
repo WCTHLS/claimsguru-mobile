@@ -37,27 +37,21 @@ export function isEntraEnabled(): boolean {
   return provider === 'entra';
 }
 
+export const PREPROD_DEPLOYED_URL =
+  'https://cg-preprod-cin-ingress.purpleocean-4441f644.centralindia.azurecontainerapps.io';
+
 /**
  * Get candidate backend URLs based on environment and running platform.
- * Supports Android emulator (10.0.2.2), iOS simulator (localhost/127.0.0.1), and custom LAN IP.
+ * Supports preprod Azure deployed ingress, tunnels, and local LAN IP.
  */
 export function getBackendCandidateUrls(): string[] {
   const envUrl = process.env.EXPO_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE;
   const candidates: string[] = [];
 
-  if (envUrl) {
+  if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
     candidates.push(envUrl.replace(/\/+$/, ''));
   }
-
-  if (Platform.OS === 'android') {
-    candidates.push('http://10.0.2.2:8000');
-    candidates.push('http://10.0.2.2:8001');
-  }
-
-  candidates.push('http://localhost:8000');
-  candidates.push('http://127.0.0.1:8000');
-  candidates.push('http://localhost:8001');
-  candidates.push('http://127.0.0.1:8001');
+  candidates.push(PREPROD_DEPLOYED_URL);
 
   return Array.from(new Set(candidates));
 }
