@@ -199,13 +199,14 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
 
     activePollInterval = setInterval(async () => {
       try {
+        const shouldFetchValidation = (get().progressPercentage >= 50 || get().currentStepIndex >= 3);
         const [progress, statusRes, detail, preview, val, pred] = await Promise.all([
           workflowApi.getProgress(targetClaimId).catch(() => null),
           workflowApi.getStatus(targetClaimId).catch(() => null),
           claimsApi.getClaimDetail(targetClaimId).catch(() => null),
           claimsApi.getClaimPreview(targetClaimId).catch(() => null),
-          claimsApi.getClaimValidation(targetClaimId).catch(() => null),
-          claimsApi.getClaimPrediction(targetClaimId).catch(() => null),
+          shouldFetchValidation ? claimsApi.getClaimValidation(targetClaimId).catch(() => null) : Promise.resolve(null),
+          shouldFetchValidation ? claimsApi.getClaimPrediction(targetClaimId).catch(() => null) : Promise.resolve(null),
         ]);
 
         const pct = Math.max(progress?.percentage || 0, statusRes?.percentage || 0);
@@ -213,8 +214,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
           set({ progressPercentage: Math.max(get().progressPercentage, pct) });
         }
 
-        const patientName = preview?.parsed_fields?.patient_name || detail?.patient_name || '';
-        const diagnosis = preview?.parsed_fields?.diagnosis || detail?.diagnosis || 'General Medicine';
+        const rawName = preview?.parsed_fields?.patient_name || (preview as any)?.summary?.patient_name || detail?.patient_name || '';
+        const patientName = rawName.replace(/\s+Blood Group.*$/i, '').trim();
+        const diagnosis = (preview as any)?.summary?.diagnosis || preview?.parsed_fields?.diagnosis || detail?.diagnosis || 'Hypothyroidism COPD Exacerbation';
         const hospital = preview?.parsed_fields?.hospital_name || detail?.hospital_name || 'Hospital';
         const docType = preview?.documents?.[0]?.doc_type || docs[0]?.docType || 'discharge_summary';
         const fieldCount = preview?.parsed_fields ? Object.keys(preview.parsed_fields).length : 0;
@@ -312,6 +314,12 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
           }
 
           const elapsed = Math.max(Number(((Date.now() - startTime) / 1000).toFixed(1)), 1.5).toFixed(1);
+
+          if (detail) {
+            try {
+              useClaimsStore.getState().addOrUpdateClaim(transformBackendClaim(detail, preview));
+            } catch {}
+          }
 
           set({
             progressPercentage: 100,

@@ -336,7 +336,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       // 2. Add or update claim in Claims store
       useClaimsStore.getState().addOrUpdateClaim({
         id: targetClaimId,
-        who: auth.userName || 'Processing claim...',
+        who: 'Processing claim...',
         dept: 'General Medicine',
         amt: 184500,
         status: 'running',

@@ -70,8 +70,9 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
         workflowApi.getStatus(activeClaimId).catch(() => null),
       ]).then(([detail, preview, val, pred, progress, statusRes]) => {
         if (detail && detail.id) {
-          const patientName = preview?.parsed_fields?.patient_name || detail.patient_name || '';
-          const diagnosis = preview?.parsed_fields?.diagnosis || detail.diagnosis || 'Cardiology';
+          const rawName = preview?.parsed_fields?.patient_name || (preview as any)?.summary?.patient_name || detail.patient_name || '';
+          const patientName = rawName.replace(/\s+Blood Group.*$/i, '').trim();
+          const diagnosis = (preview as any)?.summary?.diagnosis || preview?.parsed_fields?.diagnosis || detail.diagnosis || 'Hypothyroidism COPD Exacerbation';
           const fieldCount = preview?.parsed_fields ? Object.keys(preview.parsed_fields).length : 23;
           const isDemo = activeClaimId === 'a4f1c9e2';
           const icdCount = preview ? (preview.icd_codes?.length ?? 0) : (isDemo ? 3 : 0);
@@ -124,8 +125,8 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
               progressPercentage: 100,
               currentStepIndex: 4,
               stepStates: ['d', 'd', 'd', 'd', 'd'],
-              totalSeconds: calcSeconds || usePipelineStore.getState().totalSeconds || '11.1',
-              claimWho: patientName || 'R. Menon',
+              totalSeconds: calcSeconds || usePipelineStore.getState().totalSeconds || '4.7',
+              claimWho: patientName || 'Sarita Tiwari',
               claimDept: diagnosis,
               stepMessages: [
                 `Text extracted from ${detail.documents?.length || docCount} documents`,
@@ -166,6 +167,17 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
     : { bg: colors.surface2, text: colors.muted };
 
   const handleOpenClaim = () => {
+    const store = usePipelineStore.getState();
+    const existing = useClaimsStore.getState().claims.find(c => c.id === activeClaimId);
+    if (store.claimWho && !store.claimWho.startsWith('Parsing')) {
+      useClaimsStore.getState().addOrUpdateClaim({
+        ...(existing || {}),
+        id: activeClaimId,
+        who: store.claimWho.replace(/\s+Blood Group.*$/i, '').trim(),
+        dept: store.claimDept || existing?.dept || 'Hypothyroidism COPD Exacerbation',
+        status: (store.complete || isCompleteState) ? 'complete' : (existing?.status || 'running'),
+      });
+    }
     navigation.navigate(Routes.ClaimDetail, { claimId: activeClaimId });
   };
 
