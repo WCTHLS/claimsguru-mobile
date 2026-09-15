@@ -588,9 +588,9 @@ export async function ensureValidAuthToken(): Promise<string> {
       useAuthStore.setState({
         token,
         isAuthenticated: true,
-        userEmail: current.userEmail || 'patient@claimsguru.com',
-        userName: current.userName && current.userName !== 'Parsing…' ? current.userName : 'Patient ClaimsGuru',
-        userId: current.userId || '568aab18-9f71-48dd-bccb-8d262ea0fa63',
+        userEmail: current.userEmail || regRes?.data?.email,
+        userName: current.userName && current.userName !== 'Parsing…' ? current.userName : (regRes?.data?.name || current.userName),
+        userId: current.userId || regRes?.data?.user_id,
       });
       return token;
     }

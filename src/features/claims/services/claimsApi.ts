@@ -305,10 +305,15 @@ export const claimsApi = {
     patientId?: string
   ): Promise<{ claims: ClaimItem[]; total: number }> => {
     const authState = useAuthStore.getState();
-    const primaryId = (patientId || authState.userId || '181c3248-94a5-426f-8aca-92adcf0ff765').trim();
+    const primaryId = (patientId || authState.userId || '').trim();
     const userEmail = (authState.userEmail || '').trim();
 
+    if (!primaryId && !userEmail) {
+      return { claims: [], total: 0 };
+    }
+
     const fetchForId = async (id: string): Promise<BackendClaim[]> => {
+      if (!id) return [];
       try {
         const url = `${API_ENDPOINTS.claims()}?offset=${offset}&limit=${limit}&patient_id=${encodeURIComponent(id)}`;
         const res = await apiClient.get<BackendClaimListResponse>(url);
@@ -319,7 +324,10 @@ export const claimsApi = {
     };
 
     // 1. Fetch claims matching user ID
-    let rawClaims: BackendClaim[] = await fetchForId(primaryId);
+    let rawClaims: BackendClaim[] = [];
+    if (primaryId) {
+      rawClaims = await fetchForId(primaryId);
+    }
 
     // 2. If user email is present and different from primaryId, also query by email to catch web app uploads
     if (userEmail && userEmail.toLowerCase() !== primaryId.toLowerCase()) {
@@ -388,9 +396,9 @@ export const claimsApi = {
   ): Promise<BackendUploadResponse> => {
     const validToken = await ensureValidAuthToken();
     const authState = useAuthStore.getState();
-    const effectivePolicyId = options?.policyId || authState.policyNumber || 'P-0007401';
-    const effectivePatientId = options?.patientId || authState.userId || '568aab18-9f71-48dd-bccb-8d262ea0fa63';
-    const effectiveEmail = options?.email || authState.userEmail || 'patient@claimsguru.com';
+    const effectivePolicyId = options?.policyId || authState.policyNumber || undefined;
+    const effectivePatientId = options?.patientId || authState.userId || undefined;
+    const effectiveEmail = options?.email || authState.userEmail || undefined;
     const isForce = options?.force ? 'true' : 'false';
 
     if (Platform.OS === 'web') {
@@ -460,17 +468,19 @@ export const claimsApi = {
     let resData: any = null;
 
     try {
+      const uploadParams: Record<string, string> = {
+        force: isForce,
+      };
+      if (effectivePolicyId) uploadParams.policy_id = String(effectivePolicyId);
+      if (effectivePatientId) uploadParams.patient_id = String(effectivePatientId);
+      if (effectiveEmail) uploadParams.email = String(effectiveEmail);
+
       const result = await FileSystemLegacy.uploadAsync(uploadUrl, uploadUri, {
         httpMethod: 'POST',
         uploadType: FileSystemLegacy.FileSystemUploadType.MULTIPART,
         fieldName: 'files',
         mimeType: primaryMime,
-        parameters: {
-          policy_id: String(effectivePolicyId),
-          patient_id: String(effectivePatientId),
-          email: String(effectiveEmail),
-          force: isForce,
-        },
+        parameters: uploadParams,
         headers: {
           Accept: 'application/json',
           ...(validToken ? { Authorization: `Bearer ${validToken}` } : {}),

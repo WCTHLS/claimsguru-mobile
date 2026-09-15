@@ -324,9 +324,9 @@ export const ChatHomeScreen = ({ navigation }: any) => {
           uri: f.uri,
         })),
         {
-          policyId: auth.policyNumber || 'P-0007401',
-          patientId: auth.userId || '181c3248-94a5-426f-8aca-92adcf0ff765',
-          email: auth.userEmail || 'sample@gmail.com',
+          policyId: auth.policyNumber || undefined,
+          patientId: auth.userId || undefined,
+          email: auth.userEmail || undefined,
           force: true,
         }
       );

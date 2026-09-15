@@ -206,9 +206,9 @@ export const useUploadStore = create<UploadState>((set, get) => ({
     try {
       const auth = useAuthStore.getState();
       const res = await claimsApi.uploadClaim(filePayloads, {
-        policyId: options?.policyId || auth.policyNumber || 'P-0007401',
-        patientId: options?.patientId || auth.userId || '568aab18-9f71-48dd-bccb-8d262ea0fa63',
-        email: options?.email || auth.userEmail || 'patient@claimsguru.com',
+        policyId: options?.policyId || auth.policyNumber || undefined,
+        patientId: options?.patientId || auth.userId || undefined,
+        email: options?.email || auth.userEmail || undefined,
         force: true,
       });
 
