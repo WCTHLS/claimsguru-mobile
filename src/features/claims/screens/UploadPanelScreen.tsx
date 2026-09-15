@@ -76,7 +76,8 @@ export const UploadPanelScreen = ({ navigation }: any) => {
       const auth = useAuthStore.getState();
       const { claimId } = await uploadToBackend({
         policyId: auth.policyNumber || 'P-0007401',
-        patientId: auth.userId || '181c3248-94a5-426f-8aca-92adcf0ff765',
+        patientId: auth.userId || '568aab18-9f71-48dd-bccb-8d262ea0fa63',
+        email: auth.userEmail || 'patient@claimsguru.com',
       });
 
       // Register active new claim in claims store

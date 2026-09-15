@@ -21,21 +21,22 @@ if ($Local) {
 }
 Write-Host "==========================================================" -ForegroundColor Cyan
 
+# Detect physical Wi-Fi IP for direct LAN connectivity (ignoring WSL/Hyper-V virtual adapters)
+$wifiEntry = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { 
+    $_.InterfaceAlias -like "*Wi-Fi*" -and 
+    $_.InterfaceAlias -notlike "*vEthernet*" -and 
+    $_.InterfaceAlias -notlike "*WSL*" -and
+    $_.IPAddress -notlike "169.254*" -and 
+    $_.IPAddress -notlike "127.*" 
+} | Select-Object -First 1
+
+$wifiIp = if ($wifiEntry) { $wifiEntry.IPAddress } else { "192.168.0.110" }
+$env:REACT_NATIVE_PACKAGER_HOSTNAME = $wifiIp
+
 # Default to Azure Pre-Prod Ingress Gateway
 $apiUrl = "https://cg-preprod-cin-ingress.purpleocean-4441f644.centralindia.azurecontainerapps.io"
 
 if ($Local) {
-    # Detect physical Wi-Fi IP for local testing
-    $wifiEntry = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { 
-        $_.InterfaceAlias -like "*Wi-Fi*" -and 
-        $_.InterfaceAlias -notlike "*vEthernet*" -and 
-        $_.InterfaceAlias -notlike "*WSL*" -and
-        $_.IPAddress -notlike "169.254*" -and 
-        $_.IPAddress -notlike "127.*" 
-    } | Select-Object -First 1
-
-    $wifiIp = if ($wifiEntry) { $wifiEntry.IPAddress } else { "192.168.1.6" }
-    $env:REACT_NATIVE_PACKAGER_HOSTNAME = $wifiIp
     $apiUrl = "http://$($wifiIp):8000"
 }
 

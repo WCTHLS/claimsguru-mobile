@@ -68,13 +68,16 @@ export const useAuthStore = create<AuthState>(set => ({
       }
 
       const isSampleUser = cleanEmail === 'sample@gmail.com' || resolvedName.toLowerCase() === 'jhon doe';
-      const first = extra?.firstName || (isSampleUser ? 'Jhon' : resolvedName.split(' ')[0]) || 'Jhon';
-      const last = extra?.lastName || (isSampleUser ? 'Doe' : resolvedName.split(' ').slice(1).join(' ')) || 'Doe';
-      const uid = extra?.userId || state.userId || (isSampleUser ? 'ec78998a-0228-434a-84f4-e08b4b7417e2' : undefined);
-      const policy = extra?.policyNumber !== undefined ? extra.policyNumber : (isSampleUser ? 'P-0007401' : state.policyNumber);
-      const dobVal = extra?.dob !== undefined ? extra.dob : (isSampleUser ? '2000-06-08' : state.dob);
-      const genderVal = extra?.gender !== undefined ? extra.gender : (isSampleUser ? 'Male' : state.gender);
-      const sumVal = extra?.sumInsured !== undefined ? extra.sumInsured : (isSampleUser ? 500000 : state.sumInsured);
+      const isSameUser = state.userEmail === cleanEmail;
+
+      const first = extra?.firstName || (isSampleUser ? 'Jhon' : (isSameUser ? state.firstName : resolvedName.split(' ')[0])) || '';
+      const last = extra?.lastName || (isSampleUser ? 'Doe' : (isSameUser ? state.lastName : resolvedName.split(' ').slice(1).join(' '))) || '';
+      const uid = extra?.userId || (isSampleUser ? 'ec78998a-0228-434a-84f4-e08b4b7417e2' : (isSameUser ? state.userId : undefined));
+      const policy = extra?.policyNumber !== undefined ? extra.policyNumber : (isSampleUser ? 'P-0007401' : (isSameUser ? state.policyNumber : null));
+      const dobVal = extra?.dob !== undefined ? extra.dob : (isSampleUser ? '2000-06-08' : (isSameUser ? state.dob : null));
+      const genderVal = extra?.gender !== undefined ? extra.gender : (isSampleUser ? 'Male' : (isSameUser ? state.gender : null));
+      const sumVal = extra?.sumInsured !== undefined ? extra.sumInsured : (isSampleUser ? 500000 : (isSameUser ? state.sumInsured : null));
+      const phoneVal = extra?.phone !== undefined ? extra.phone : (isSampleUser ? null : (isSameUser ? state.phone : null));
 
       return {
         isAuthenticated: true,
@@ -85,7 +88,7 @@ export const useAuthStore = create<AuthState>(set => ({
         userId: uid,
         firstName: first,
         lastName: last,
-        phone: extra?.phone !== undefined ? extra.phone : state.phone,
+        phone: phoneVal,
         dob: dobVal,
         gender: genderVal,
         policyNumber: policy,
@@ -97,5 +100,15 @@ export const useAuthStore = create<AuthState>(set => ({
     set({
       isAuthenticated: false,
       token: undefined,
+      userId: undefined,
+      userEmail: '',
+      userName: '',
+      firstName: '',
+      lastName: '',
+      phone: null,
+      dob: null,
+      gender: null,
+      policyNumber: null,
+      sumInsured: null,
     }),
 }));

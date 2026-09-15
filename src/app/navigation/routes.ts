@@ -19,13 +19,10 @@ export const Routes = {
   FraudDetail: 'FraudDetail',
   ValidationRules: 'ValidationRules',
   MedicalCoding: 'MedicalCoding',
-  OcrParsedFields: 'OcrParsedFields',
-  ScanAnalyzer: 'ScanAnalyzer',
   DocumentGrid: 'DocumentGrid',
   PatientProfile: 'PatientProfile',
   PatientActivity: 'PatientActivity',
   Submission: 'Submission',
-  AuditTrail: 'AuditTrail',
   ProfileSettings: 'ProfileSettings',
   OpsConsole: 'OpsConsole',
 } as const;
