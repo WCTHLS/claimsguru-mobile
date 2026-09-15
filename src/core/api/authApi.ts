@@ -98,6 +98,53 @@ async function postToCandidateEndpoints(
 }
 
 /**
+ * Execute GET request across candidate backend URLs with fallback.
+ */
+async function getFromCandidateEndpoints(
+  pathSuffixes: string[]
+): Promise<{ ok: boolean; status: number; data: any; matchedBase?: string }> {
+  const candidateBases = getBackendCandidateUrls();
+  const urlsToTry: { base: string; url: string }[] = [];
+
+  for (const base of candidateBases) {
+    for (const suffix of pathSuffixes) {
+      const cleanBase = base.replace(/\/+$/, '');
+      const cleanSuffix = suffix.startsWith('/') ? suffix : `/${suffix}`;
+      urlsToTry.push({ base: cleanBase, url: `${cleanBase}${cleanSuffix}` });
+    }
+  }
+
+  for (const item of urlsToTry) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4500);
+
+      const response = await fetch(item.url, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.status !== 404 && response.status !== 502) {
+        const data = await response.json().catch(() => ({}));
+        if (response.ok) {
+          setApiBaseUrl(item.base);
+        }
+        return { ok: response.ok, status: response.status, data, matchedBase: item.base };
+      }
+    } catch {
+      // Try next candidate endpoint
+    }
+  }
+
+  return { ok: false, status: 0, data: null };
+}
+
+/**
  * Authenticate with Username / Email and Password against MSSQL backend.
  * Automatically falls back to pre-prod direct account sync if standard login fails.
  */
@@ -117,8 +164,8 @@ export async function loginWithPassword({ username, password = '', role = 'submi
     payload
   );
 
-  // If local login endpoint failed or is not recognized, attempt pre-prod direct user sync
-  if (!res.ok) {
+  // If local login endpoint failed due to network / 404 connection error, attempt fallback
+  if (!res.ok && res.connectionError) {
     const syncRes = await postToCandidateEndpoints(
       ['/auth/sync-entra-user', '/ingress/auth/sync-entra-user'],
       {
@@ -140,15 +187,16 @@ export async function loginWithPassword({ username, password = '', role = 'submi
         : '') ||
       (raw.name && raw.name.toLowerCase() !== 'unknown' ? raw.name : '');
 
+    const isSampleUser = cleanUsername === 'sample@gmail.com' || resolvedName.toLowerCase() === 'jhon doe';
+
     if (!resolvedName || resolvedName.toLowerCase() === 'sample') {
-      if (cleanUsername === 'sample@gmail.com' || cleanUsername.includes('sample')) {
+      if (isSampleUser) {
         resolvedName = 'Jhon Doe';
       } else {
         resolvedName = cleanUsername.split('@')[0];
       }
     }
 
-    const isSampleUser = cleanUsername === 'sample@gmail.com' || resolvedName.toLowerCase() === 'jhon doe';
     const effectiveUserId = raw.user_id || (isSampleUser ? '8B6702F4-8273-43E4-8B35-AE58AF9A8ECC' : undefined);
 
     const sessionData: AuthResponse = {
@@ -165,17 +213,17 @@ export async function loginWithPassword({ username, password = '', role = 'submi
       userId: sessionData.user_id,
       firstName: raw.first_name || (isSampleUser ? 'Jhon' : undefined),
       lastName: raw.last_name || (isSampleUser ? 'Doe' : undefined),
-      phone: raw.phone,
+      phone: raw.phone !== undefined ? raw.phone : (isSampleUser ? null : undefined),
       dob: raw.dob || (isSampleUser ? '2000-06-08' : undefined),
       gender: raw.gender || (isSampleUser ? 'Male' : undefined),
       policyNumber: raw.policy_number || (isSampleUser ? 'P-0007401' : undefined),
-      sumInsured: raw.sum_insured || (isSampleUser ? 500000 : undefined),
+      sumInsured: raw.sum_insured != null ? Number(raw.sum_insured) : (isSampleUser ? 500000 : undefined),
       organization: raw.organization,
       role: sessionData.role as any,
     });
 
-    // Background profile refresh without blocking login navigation
-    fetchUserProfile(sessionData.user_id || cleanUsername).catch(() => {});
+    // Synchronize latest live profile from MSSQL backend
+    await fetchUserProfile(sessionData.user_id || cleanUsername).catch(() => {});
 
     return sessionData;
   }
@@ -245,9 +293,13 @@ export async function registerPatient(params: RegisterPatientParams): Promise<Au
       dob: params.dob || raw.dob,
       gender: params.gender || raw.gender,
       policyNumber: params.policy || raw.policy_number,
-      sumInsured: params.sumInsured || raw.sum_insured,
+      sumInsured: params.sumInsured != null ? Number(params.sumInsured) : (raw.sum_insured != null ? Number(raw.sum_insured) : undefined),
       role: 'submitter',
     });
+
+    // Background profile sync
+    fetchUserProfile(userId || cleanEmail).catch(() => {});
+
     return {
       success: true,
       user_id: userId,
@@ -357,7 +409,45 @@ export async function fetchUserProfile(userIdOrEmail?: string): Promise<Record<s
   const query = (userIdOrEmail || currentAuth.userId || currentAuth.userEmail || '').trim();
   if (!query) return null;
 
-  // Return already loaded profile details from store if available
+  try {
+    const encoded = encodeURIComponent(query);
+    const res = await getFromCandidateEndpoints([
+      `/ingress/auth/profile/${encoded}`,
+      `/auth/profile/${encoded}`,
+    ]);
+
+    if (res.ok && res.data && (res.data.success || res.data.user_id || res.data.email)) {
+      const data = res.data;
+      const firstName = data.first_name || (data.name ? data.name.split(' ')[0] : '');
+      const lastName = data.last_name || (data.name ? data.name.split(' ').slice(1).join(' ') : '');
+      const fullName =
+        data.name ||
+        `${firstName} ${lastName}`.trim() ||
+        data.email?.split('@')[0] ||
+        '';
+
+      useAuthStore.getState().setUserDetails({
+        userId: data.user_id || currentAuth.userId,
+        userEmail: data.email || currentAuth.userEmail,
+        userName: fullName,
+        firstName: firstName || undefined,
+        lastName: lastName || undefined,
+        phone: data.phone !== undefined ? data.phone : currentAuth.phone,
+        dob: data.dob !== undefined ? data.dob : currentAuth.dob,
+        gender: data.gender !== undefined ? data.gender : currentAuth.gender,
+        policyNumber: data.policy_number !== undefined ? data.policy_number : currentAuth.policyNumber,
+        sumInsured: data.sum_insured != null ? Number(data.sum_insured) : currentAuth.sumInsured,
+        organization: data.organization || currentAuth.organization,
+        role: (data.role as any) || currentAuth.role,
+      });
+
+      return data;
+    }
+  } catch (err) {
+    console.warn('[authApi] fetchUserProfile error:', err);
+  }
+
+  // Fallback to cached store details if available
   if (currentAuth.userId && currentAuth.userEmail) {
     return {
       user_id: currentAuth.userId,
@@ -365,7 +455,13 @@ export async function fetchUserProfile(userIdOrEmail?: string): Promise<Record<s
       name: currentAuth.userName,
       first_name: currentAuth.firstName,
       last_name: currentAuth.lastName,
+      phone: currentAuth.phone,
+      dob: currentAuth.dob,
+      gender: currentAuth.gender,
       policy_number: currentAuth.policyNumber,
+      sum_insured: currentAuth.sumInsured,
+      role: currentAuth.role,
+      organization: currentAuth.organization,
     };
   }
 

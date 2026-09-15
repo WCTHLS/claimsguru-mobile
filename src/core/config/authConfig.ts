@@ -48,9 +48,24 @@ export function getBackendCandidateUrls(): string[] {
   const envUrl = process.env.EXPO_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE;
   const candidates: string[] = [];
 
-  if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
-    candidates.push(envUrl.replace(/\/+$/, ''));
+  if (envUrl) {
+    const clean = envUrl.replace(/\/+$/, '');
+    candidates.push(clean);
+
+    if (Platform.OS === 'android') {
+      if (clean.includes('localhost')) {
+        candidates.push(clean.replace('localhost', '10.0.2.2'));
+      } else if (clean.includes('127.0.0.1')) {
+        candidates.push(clean.replace('127.0.0.1', '10.0.2.2'));
+      }
+    }
   }
+
+  if (Platform.OS === 'android') {
+    candidates.push('http://10.0.2.2:8000');
+  }
+  candidates.push('http://localhost:8000');
+  candidates.push('http://127.0.0.1:8000');
   candidates.push(PREPROD_DEPLOYED_URL);
 
   return Array.from(new Set(candidates));

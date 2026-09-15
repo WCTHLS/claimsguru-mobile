@@ -11,14 +11,18 @@ export const PREPROD_DEPLOYED_URL =
   'https://cg-preprod-cin-ingress.purpleocean-4441f644.centralindia.azurecontainerapps.io';
 
 const ENV_URL = process.env.EXPO_PUBLIC_API_URL;
-const isLocalhost = !ENV_URL || ENV_URL.includes('localhost') || ENV_URL.includes('127.0.0.1');
+let resolvedHost = PREPROD_DEPLOYED_URL;
 
-const DEFAULT_HOST =
-  ENV_URL && !isLocalhost
-    ? ENV_URL.replace(/\/+$/, '')
-    : PREPROD_DEPLOYED_URL;
+if (ENV_URL) {
+  const clean = ENV_URL.replace(/\/+$/, '');
+  if (Platform.OS === 'android' && (clean.includes('localhost') || clean.includes('127.0.0.1'))) {
+    resolvedHost = clean.replace('localhost', '10.0.2.2').replace('127.0.0.1', '10.0.2.2');
+  } else {
+    resolvedHost = clean;
+  }
+}
 
-export let API_BASE_URL = DEFAULT_HOST;
+export let API_BASE_URL = resolvedHost;
 
 export const setApiBaseUrl = (url: string) => {
   API_BASE_URL = url.replace(/\/+$/, '');

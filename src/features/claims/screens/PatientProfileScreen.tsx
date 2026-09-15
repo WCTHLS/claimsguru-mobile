@@ -56,7 +56,7 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
     if (userEmail || userId) {
       fetchUserProfile(userId || userEmail).catch(() => {});
     }
-  }, [routePatientId]);
+  }, [routePatientId, userEmail, userId]);
 
   // Fetch previews for claims in background to obtain risk predictions and parsed fields
   useEffect(() => {
@@ -90,6 +90,8 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
   const displayPolicyNo = focusedClaim?.policyNo || policyNumber || '—';
   const displayUserId = routePatientId || focusedClaim?.patientId || userId || '—';
 
+  const isSampleUser = userEmail === 'sample@gmail.com' || (userName && userName.toLowerCase() === 'jhon doe');
+
   const displayDob = useMemo(() => {
     if (dob) {
       try {
@@ -104,8 +106,11 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
       const approxYear = new Date().getFullYear() - focusedClaim.age;
       return `01 Jan ${approxYear}`;
     }
-    return '08 Jun 2000';
-  }, [dob, focusedClaim?.age]);
+    if (isSampleUser) {
+      return '08 Jun 2000';
+    }
+    return '—';
+  }, [dob, focusedClaim?.age, isSampleUser]);
 
   // Dynamic masking that securely obscures actual user/patient strings
   const maskVal = (type: 'policy' | 'phone' | 'email' | 'mrn' | 'dob', raw?: string | null) => {
@@ -175,7 +180,7 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
   }, [claims, claimPreviews]);
 
   // Real financial calculations for Sum Insured
-  const totalLimit = Number(sumInsured) || 500000;
+  const totalLimit = Number(sumInsured) || (isSampleUser ? 500000 : 0);
 
   const approvedAmount = useMemo(() => {
     return claims
