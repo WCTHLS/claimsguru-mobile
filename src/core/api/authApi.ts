@@ -565,10 +565,11 @@ export async function ensureValidAuthToken(): Promise<string> {
     );
 
     let token = loginRes.data?.access_token || loginRes.data?.token;
+    let regRes: any = null;
 
     // If account not yet registered on this backend environment, register it
     if (!token) {
-      const regRes = await postToCandidateEndpoints(
+      regRes = await postToCandidateEndpoints(
         ['/ingress/auth/register', '/auth/register'],
         {
           username: 'patient@claimsguru.com',
