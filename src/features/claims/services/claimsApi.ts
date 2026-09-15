@@ -247,6 +247,9 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
     days,
     claimType: 'Reimbursement',
     fieldsParsed,
+    documents: raw.documents || [],
+    createdAt: raw.created_at,
+    patientId: raw.patient_id || undefined,
   };
 }
 
