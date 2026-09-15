@@ -81,6 +81,20 @@ export interface BackendClaimPredictionReason {
   weight: number;
 }
 
+export interface BackendAuditEvent {
+  id: string;
+  actor: string;
+  action: string;
+  metadata?: any;
+  created_at?: string;
+}
+
+export interface BackendAuditResponse {
+  claim_id: string;
+  audit_trail: BackendAuditEvent[];
+  total: number;
+}
+
 export interface BackendClaimPrediction {
   rejection_score: number;
   risk_category?: string;
@@ -295,6 +309,14 @@ export const claimsApi = {
   getClaimValidation: async (claimId: string): Promise<any> => {
     try {
       return await apiClient.get<any>(API_ENDPOINTS.claimValidation(claimId));
+    } catch {
+      return null;
+    }
+  },
+
+  getClaimAudit: async (claimId: string): Promise<BackendAuditResponse | null> => {
+    try {
+      return await apiClient.get<BackendAuditResponse>(API_ENDPOINTS.claimAudit(claimId));
     } catch {
       return null;
     }

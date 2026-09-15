@@ -401,24 +401,14 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
                   ep: '/ingress/claims/{id}/documents',
                 },
                 {
-                  title: 'OCR & parsed fields',
-                  route: Routes.OcrParsedFields,
-                  ep: '/ocr · /parser',
-                },
-                {
-                  title: 'Scan analysis',
-                  route: Routes.ScanAnalyzer,
-                  ep: 'scan_analyses',
-                },
-                {
                   title: 'Medical coding',
                   route: Routes.MedicalCoding,
                   ep: '/coding/code-suggest/{id}',
                 },
                 {
-                  title: 'Audit trail',
-                  route: Routes.AuditTrail,
-                  ep: '/ingress/claims/{id}/audit',
+                  title: 'Patient activity',
+                  route: Routes.PatientActivity,
+                  ep: '/submission/claims/{id}/audit',
                 },
               ].map((svc, idx, arr) => (
                 <TouchableOpacity

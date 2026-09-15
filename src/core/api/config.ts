@@ -47,6 +47,7 @@ export const API_ENDPOINTS = {
   claimPreview: (claimId: string) => `${API_BASE_URL}/submission/claims/${claimId}/preview`,
   irdaPdf: (claimId: string, style: string = 'legacy', blank: boolean = false, inline: boolean = true) =>
     `${API_BASE_URL}/submission/claims/${claimId}/irda-pdf?style=${style}&blank=${blank ? 'true' : 'false'}&view=${inline ? 'true' : 'false'}`,
+  claimAudit: (claimId: string) => `${API_BASE_URL}/submission/claims/${claimId}/audit`,
 
   // Validation & Prediction Services
   claimValidation: (claimId: string) => `${API_BASE_URL}/validator/validate/${claimId}`,
