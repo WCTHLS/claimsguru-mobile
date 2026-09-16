@@ -45,6 +45,14 @@ export const useUploadStore = create<UploadState>((set, get) => ({
   uploading: false,
 
   addFile: (spec: string) => {
+    try {
+      const { usePipelineStore } = require('./usePipelineStore');
+      if (usePipelineStore.getState().complete) {
+        usePipelineStore.getState().resetPipeline();
+        set({ files: [] });
+      }
+    } catch {}
+
     const [name, kind, docType, confStr] = spec.split('|');
     const existing = get().files.find(f => f.name === name);
     if (existing) return;
@@ -82,6 +90,14 @@ export const useUploadStore = create<UploadState>((set, get) => ({
   },
 
   addRealFile: file => {
+    try {
+      const { usePipelineStore } = require('./usePipelineStore');
+      if (usePipelineStore.getState().complete) {
+        usePipelineStore.getState().resetPipeline();
+        set({ files: [] });
+      }
+    } catch {}
+
     let docType = 'discharge_summary';
     const lower = file.name.toLowerCase();
     if (lower.includes('bill') || lower.includes('invoice') || lower.includes('receipt')) docType = 'hospital_bill';

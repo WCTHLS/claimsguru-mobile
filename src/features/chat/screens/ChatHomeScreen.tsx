@@ -129,6 +129,13 @@ export const ChatHomeScreen = ({ navigation }: any) => {
     }
   }, [userEmail, userId]);
 
+  // Once claim processing completes, clear the upload section of the previous claim's files
+  useEffect(() => {
+    if (pipelineComplete && files.length > 0) {
+      clearFiles();
+    }
+  }, [pipelineComplete]);
+
   const getInitials = (name?: string) => {
     if (
       !name ||
@@ -163,6 +170,10 @@ export const ChatHomeScreen = ({ navigation }: any) => {
   };
 
   const handlePickFiles = async (accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx') => {
+    if (pipelineComplete) {
+      usePipelineStore.getState().resetPipeline();
+      clearFiles();
+    }
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const input = document.createElement('input');
       input.type = 'file';
@@ -210,6 +221,10 @@ export const ChatHomeScreen = ({ navigation }: any) => {
   };
 
   const handlePickGallery = async () => {
+    if (pipelineComplete) {
+      usePipelineStore.getState().resetPipeline();
+      clearFiles();
+    }
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       handlePickFiles('image/*');
       return;
@@ -239,6 +254,10 @@ export const ChatHomeScreen = ({ navigation }: any) => {
   };
 
   const handleCameraPick = async () => {
+    if (pipelineComplete) {
+      usePipelineStore.getState().resetPipeline();
+      clearFiles();
+    }
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const input = document.createElement('input');
       input.type = 'file';

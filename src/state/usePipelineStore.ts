@@ -196,8 +196,11 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
 
     // 2. Poll live backend progress, preview, validations and predictions
     let backendCompleted = false;
+    let isPollingBusy = false;
 
     activePollInterval = setInterval(async () => {
+      if (isPollingBusy || backendCompleted) return;
+      isPollingBusy = true;
       try {
         const shouldFetchValidation = (get().progressPercentage >= 50 || get().currentStepIndex >= 3);
         const [progress, statusRes, detail, preview, val, pred] = await Promise.all([
@@ -247,8 +250,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
           } catch {}
         }
 
-        const hasValidations = Boolean(val?.passed !== undefined || (val?.results && val.results.length > 0));
-        const hasPredictions = Boolean(pred?.prediction || (preview?.predictions && preview.predictions.length > 0));
+        const hasValidations = Boolean(val && val.total_rules > 0 && Array.isArray(val.results) && val.results.length > 0);
+        const hasPredictions = Boolean(pred?.prediction && (pred.prediction.rejection_score !== undefined || pred.prediction.risk_category));
         const hasCodes = Boolean(icdCount > 0 || (preview?.icd_codes && preview.icd_codes.length > 0));
         const hasFields = Boolean(fieldCount > 0);
 
@@ -288,6 +291,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
         const isCompletedStatus = [
           'FINISHED',
           'COMPLETED',
+          'VALIDATED',
+          'DONE',
           'SUBMITTED',
           'APPROVED',
           'REJECTED',
@@ -295,11 +300,10 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
 
         const isWorkflowComplete = Boolean(
           pct >= 100 ||
-          progress?.is_complete ||
+          progress?.is_complete === true ||
           statusRes?.status === 'FINISHED' ||
           statusRes?.current_step === 'FINISHED' ||
-          (statusRes?.step_index !== undefined && statusRes.step_index >= 5) ||
-          (isCompletedStatus && pct >= 85)
+          (isCompletedStatus && (pct >= 90 || (statusRes?.step_index !== undefined && statusRes.step_index >= 4)))
         );
 
         if (isWorkflowComplete) {
@@ -313,7 +317,15 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             activeTimerInterval = null;
           }
 
-          const elapsed = Math.max(Number(((Date.now() - startTime) / 1000).toFixed(1)), 1.5).toFixed(1);
+          let elapsed = Math.max(Number(((Date.now() - startTime) / 1000).toFixed(1)), 1.5).toFixed(1);
+          if (detail?.created_at && detail?.updated_at) {
+            const t1 = new Date(detail.created_at).getTime();
+            const t2 = new Date(detail.updated_at).getTime();
+            const diff = (t2 - t1) / 1000;
+            if (diff > 0 && diff < 3600) {
+              elapsed = diff.toFixed(1);
+            }
+          }
 
           if (detail) {
             try {
@@ -333,63 +345,68 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             claimDept: diagnosis,
             stepMessages: [
               `Text extracted from ${docs.length || 1} document(s)`,
-              `${fieldCount || 47} fields parsed · ${docType}`,
-              `${icdCount || 2} codes assigned (${icdList || 'D69, D69.9'})`,
+              `${fieldCount || 41} fields parsed · ${docType}`,
+              `${icdCount || 1} codes assigned (${icdList || 'D50'})`,
               `Risk ${riskScore}% · ${riskCat} · ${reasonCount} factors`,
               `${rulesPassed} of ${rulesTotal} rules passed`,
             ],
             docs: get().docs.map(d => ({ ...d, ocr: 'd', parse: 'd' })),
           });
+          try {
+            const { useUploadStore } = require('./useUploadStore');
+            useUploadStore.getState().clearFiles();
+          } catch {}
           return;
         }
 
-        // Intermediate progression: Steps 4, 3, 2, 1, 0
-        const currentStepStr = String(statusRes?.current_step || '').toUpperCase();
-        if (pct >= 85 || currentStepStr.includes('VALIDAT') || currentStepStr === 'FINALIZING' || (hasValidations && hasPredictions)) {
+        // Intermediate progression: Steps 4 (Validate), 3 (Predict), 2 (Code), 1 (Parse), 0 (OCR)
+        const stepStr = (String(statusRes?.current_step || '') + ' ' + String(progress?.step || '')).toUpperCase();
+
+        if (pct >= 91 || stepStr.includes('VALIDAT') || stepStr.includes('FINALIZ')) {
           set(state => ({
-            progressPercentage: Math.max(state.progressPercentage, 85),
+            progressPercentage: Math.max(state.progressPercentage, Math.max(pct, 92)),
             currentStepIndex: 4,
             stepStates: ['d', 'd', 'd', 'd', 'r'],
             stepMessages: [
               `Text extracted from ${docs.length || 1} document(s)`,
-              `${fieldCount || 47} fields parsed · ${docType}`,
-              `${icdCount || 2} codes assigned (${icdList || 'D69, D69.9'})`,
+              `${fieldCount || 41} fields parsed · ${docType}`,
+              `${icdCount || 1} codes assigned (${icdList || 'D50'})`,
               `Risk ${riskScore}% · ${riskCat} · ${reasonCount} factors`,
               'Running deterministic validation rules...',
             ],
             docs: state.docs.map(d => ({ ...d, ocr: 'd', parse: 'd' })),
           }));
-        } else if (pct >= 70 || currentStepStr.includes('RISK') || hasPredictions) {
+        } else if (pct >= 85 || stepStr.includes('RISK') || stepStr.includes('PREDICT')) {
           set(state => ({
-            progressPercentage: Math.max(state.progressPercentage, 70),
+            progressPercentage: Math.max(state.progressPercentage, Math.max(pct, 86)),
             currentStepIndex: 3,
             stepStates: ['d', 'd', 'd', 'r', 'q'],
             stepMessages: [
               `Text extracted from ${docs.length || 1} document(s)`,
-              `${fieldCount || 47} fields parsed · ${docType}`,
-              `${icdCount || 2} codes assigned (${icdList || 'D69, D69.9'})`,
+              `${fieldCount || 41} fields parsed · ${docType}`,
+              `${icdCount || 1} codes assigned (${icdList || 'D50'})`,
               'Evaluating rejection risk with XGBoost...',
               'Queued in default',
             ],
             docs: state.docs.map(d => ({ ...d, ocr: 'd', parse: 'd' })),
           }));
-        } else if (pct >= 45 || currentStepStr.includes('CODING') || hasCodes) {
+        } else if (pct >= 71 || stepStr.includes('COD')) {
           set(state => ({
-            progressPercentage: Math.max(state.progressPercentage, 45),
+            progressPercentage: Math.max(state.progressPercentage, Math.max(pct, 78)),
             currentStepIndex: 2,
             stepStates: ['d', 'd', 'r', 'q', 'q'],
             stepMessages: [
               `Text extracted from ${docs.length || 1} document(s)`,
-              `${fieldCount || 47} fields parsed · ${docType}`,
+              `${fieldCount || 41} fields parsed · ${docType}`,
               'Retrieving ICD-10 codes from FAISS...',
               'Queued in default',
               'Queued in default',
             ],
             docs: state.docs.map(d => ({ ...d, ocr: 'd', parse: 'd' })),
           }));
-        } else if (pct >= 20 || currentStepStr.includes('PARS') || hasFields) {
+        } else if (pct >= 36 || stepStr.includes('PARS') || hasFields) {
           set(state => ({
-            progressPercentage: Math.max(state.progressPercentage, 25),
+            progressPercentage: Math.max(state.progressPercentage, Math.max(pct, 55)),
             currentStepIndex: 1,
             stepStates: ['d', 'r', 'q', 'q', 'q'],
             stepMessages: [
@@ -401,9 +418,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             ],
             docs: state.docs.map(d => ({ ...d, ocr: 'd', parse: 'r' })),
           }));
-        } else if (pct >= 5 || currentStepStr.includes('OCR')) {
+        } else {
           set(state => ({
-            progressPercentage: Math.max(state.progressPercentage, 10),
+            progressPercentage: Math.max(state.progressPercentage, Math.max(pct, 10)),
             currentStepIndex: 0,
             stepStates: ['r', 'q', 'q', 'q', 'q'],
             stepMessages: [
@@ -419,8 +436,10 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
 
       } catch (err) {
         console.log('[usePipelineStore] Polling error:', err);
+      } finally {
+        isPollingBusy = false;
       }
-    }, 500);
+    }, 750);
   },
 
   retryPipeline: () => {
@@ -446,6 +465,10 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       clearInterval(activeTimerInterval);
       activeTimerInterval = null;
     }
+    try {
+      const { useUploadStore } = require('./useUploadStore');
+      useUploadStore.getState().clearFiles();
+    } catch {}
     set({
       active: false,
       running: false,

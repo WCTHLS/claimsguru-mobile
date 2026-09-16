@@ -43,6 +43,7 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
     running,
     failed,
     complete,
+    currentStepIndex,
     stepStates,
     stepMessages,
     attempt,
@@ -57,9 +58,15 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
 
   const activeClaimId = claimId || claims[0]?.id || '73cae928-5f39-4129-a4f2-f667e94f3f6a';
   const claimRecord = claims.find(c => c.id === activeClaimId) || claims[0];
-  const docCount = docs.length > 0 ? docs.length : 3;
+  const docCount = docs.length > 0 ? docs.length : 1;
 
   useEffect(() => {
+    // If the pipeline is currently running for this claim, let usePipelineStore drive real-time updates!
+    const store = usePipelineStore.getState();
+    if (store.running && store.claimId === activeClaimId) {
+      return;
+    }
+
     if (activeClaimId && activeClaimId.length > 20) {
       Promise.all([
         claimsApi.getClaimDetail(activeClaimId).catch(() => null),
@@ -72,16 +79,18 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
         if (detail && detail.id) {
           const rawName = preview?.parsed_fields?.patient_name || (preview as any)?.summary?.patient_name || detail.patient_name || '';
           const patientName = rawName.replace(/\s+Blood Group.*$/i, '').trim();
-          const diagnosis = (preview as any)?.summary?.diagnosis || preview?.parsed_fields?.diagnosis || detail.diagnosis || 'Hypothyroidism COPD Exacerbation';
-          const fieldCount = preview?.parsed_fields ? Object.keys(preview.parsed_fields).length : 23;
+          const diagnosis = (preview as any)?.summary?.diagnosis || preview?.parsed_fields?.diagnosis || detail.diagnosis || 'General Medicine';
+          const fieldCount = preview?.parsed_fields ? Object.keys(preview.parsed_fields).length : 41;
           const isDemo = activeClaimId === 'a4f1c9e2';
           const icdCount = preview ? (preview.icd_codes?.length ?? 0) : (isDemo ? 3 : 0);
           const cptCount = preview ? (preview.cpt_codes?.length ?? 0) : (isDemo ? 3 : 0);
-          const riskScore = Math.round((pred?.prediction?.rejection_score ?? (preview?.predictions?.[0]?.rejection_score ?? 0.58)) * 100);
-          const riskCat = pred?.prediction?.risk_category ?? (preview?.predictions?.[0]?.risk_category ?? 'MEDIUM');
-          const reasonCount = pred?.prediction?.top_reasons?.length ?? (preview?.predictions?.[0]?.top_reasons?.length ?? 5);
+          const riskScore = Math.round((pred?.prediction?.rejection_score ?? (preview?.predictions?.[0]?.rejection_score ?? 0.24)) * 100);
+          const riskCat = pred?.prediction?.risk_category ?? (preview?.predictions?.[0]?.risk_category ?? 'LOW');
+          const reasonCount = pred?.prediction?.top_reasons?.length ?? (preview?.predictions?.[0]?.top_reasons?.length ?? 3);
           const rulesTotal = val?.total_rules ?? 11;
-          const rulesPassed = val?.passed ?? 7;
+          const rulesPassed = val?.passed ?? 8;
+          const docType = preview?.documents?.[0]?.doc_type || 'discharge_summary';
+          const icdList = preview?.icd_codes ? preview.icd_codes.map((c: any) => c.code).join(', ') : 'D50';
 
           if (preview) {
             useClaimsStore.getState().setClaimPreview(activeClaimId, preview);
@@ -109,12 +118,11 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
           ].includes(String(detail.status || '').toUpperCase());
 
           const isWorkflowComplete = Boolean(
-            (progress && (progress.is_complete || progress.percentage >= 100)) ||
+            (progress && (progress.is_complete === true || progress.percentage >= 100)) ||
             statusRes?.status === 'FINISHED' ||
+            statusRes?.current_step === 'FINISHED' ||
             (statusRes?.step_index !== undefined && statusRes.step_index >= 5) ||
-            isCompletedStatus ||
-            val?.passed !== undefined ||
-            (val?.results && val.results.length > 0)
+            isCompletedStatus
           );
 
           if (isWorkflowComplete) {
@@ -125,30 +133,42 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
               progressPercentage: 100,
               currentStepIndex: 4,
               stepStates: ['d', 'd', 'd', 'd', 'd'],
-              totalSeconds: calcSeconds || usePipelineStore.getState().totalSeconds || '4.7',
-              claimWho: patientName || 'Sarita Tiwari',
+              totalSeconds: calcSeconds || usePipelineStore.getState().totalSeconds || '4.5',
+              claimWho: patientName || 'Complete',
               claimDept: diagnosis,
               stepMessages: [
                 `Text extracted from ${detail.documents?.length || docCount} documents`,
-                `${detail.documents?.length || docCount} documents parsed · ${fieldCount} of 27 fields · doc_type set`,
+                `${fieldCount} fields parsed · ${docType}`,
                 cptCount > 0
                   ? `${icdCount + cptCount} codes assigned (${icdCount} ICD-10 · ${cptCount} CPT)`
-                  : `${icdCount} code${icdCount === 1 ? '' : 's'} assigned (${icdCount} ICD-10 · 0 CPT)`,
+                  : `${icdCount || 1} code${icdCount === 1 ? '' : 's'} assigned (${icdList})`,
                 `Risk ${riskScore}% · ${riskCat} · ${reasonCount} factors`,
                 `${rulesPassed} of ${rulesTotal} rules passed`,
               ],
             });
-          } else if (calcSeconds && !usePipelineStore.getState().running) {
-            usePipelineStore.setState({ totalSeconds: calcSeconds });
+            try {
+              const { useUploadStore } = require('../../../state/useUploadStore');
+              useUploadStore.getState().clearFiles();
+            } catch {}
+          } else if (!usePipelineStore.getState().running) {
+            // Claim is still actively processing in backend — start real-time tracking!
+            usePipelineStore.getState().startPipeline([], activeClaimId);
           }
         }
-
       });
     }
   }, [activeClaimId]);
 
   const isCompleteState = complete || (!running && !failed && stepStates.every(s => s === 'd'));
   const isRunningState = running || (!complete && !failed && stepStates.some(s => s === 'r'));
+
+  const currentStepName = failed
+    ? 'failed'
+    : isCompleteState
+    ? 'completed'
+    : isRunningState
+    ? (STEP_DATA[currentStepIndex]?.name?.toLowerCase() || 'processing')
+    : 'idle';
 
   const statusLabel = failed
     ? 'FAILED'
@@ -253,7 +273,7 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
                 {activeClaimId}
               </Text>
               <Text style={[styles.claimSubText, { color: colors.muted }]}>
-                {docCount} documents · current_step: validate · attempt {attempt || 1}
+                {docCount} documents · current_step: {currentStepName} · attempt {attempt || 1}
               </Text>
             </View>
           </View>
@@ -271,9 +291,9 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
           {/* 5-Stage Stepper Card */}
           <View style={[styles.card, styles.stepperCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
             {STEP_DATA.map((step, idx) => {
-              const state = stepStates[idx] || (isCompleteState ? 'd' : idx === 0 ? 'r' : 'q');
-              const isDone = state === 'd' || isCompleteState;
-              const isRunning = !isCompleteState && state === 'r';
+              const state = stepStates[idx] || (idx === 0 ? 'r' : 'q');
+              const isDone = state === 'd';
+              const isRunning = state === 'r';
               const isFailed = state === 'f';
               const isLast = idx === STEP_DATA.length - 1;
               const stepDesc = stepMessages[idx] || step.defaultMsg;

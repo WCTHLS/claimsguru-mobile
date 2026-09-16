@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -61,10 +61,18 @@ export const UploadPanelScreen = ({ navigation }: any) => {
     setClaimType,
     uploadToBackend,
   } = useUploadStore();
-  const { startPipeline } = usePipelineStore();
+  const { startPipeline, complete: pipelineComplete, resetPipeline } = usePipelineStore();
   const { addOrUpdateClaim } = useClaimsStore();
 
   const [selectedDocTypePicker, setSelectedDocTypePicker] = useState<string | null>(null);
+
+  // If a previous claim pipeline has completed, automatically clear previous files so the panel is fresh
+  useEffect(() => {
+    if (pipelineComplete && files.length > 0) {
+      clearFiles();
+      resetPipeline();
+    }
+  }, [pipelineComplete]);
 
   const hasFiles = files.length > 0;
   const isReady = hasFiles && files.every(f => f.status === 'ready') && !uploading;
@@ -111,6 +119,10 @@ export const UploadPanelScreen = ({ navigation }: any) => {
   };
 
   const handlePickFiles = async (accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx') => {
+    if (pipelineComplete) {
+      resetPipeline();
+      clearFiles();
+    }
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const input = document.createElement('input');
       input.type = 'file';
@@ -156,6 +168,10 @@ export const UploadPanelScreen = ({ navigation }: any) => {
   };
 
   const handlePickGallery = async () => {
+    if (pipelineComplete) {
+      resetPipeline();
+      clearFiles();
+    }
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -180,6 +196,10 @@ export const UploadPanelScreen = ({ navigation }: any) => {
   };
 
   const handleTakePhoto = async () => {
+    if (pipelineComplete) {
+      resetPipeline();
+      clearFiles();
+    }
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
