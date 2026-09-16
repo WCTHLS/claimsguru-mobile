@@ -26,6 +26,7 @@ import {
   X as XIcon,
   Info,
   AlertTriangle,
+  Eye,
 } from 'lucide-react-native';
 
 const STEP_DATA = [
@@ -54,7 +55,6 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
   } = usePipelineStore();
 
   const { claims } = useClaimsStore();
-  const [accordionOpen, setAccordionOpen] = useState(false);
 
   const activeClaimId = claimId || claims[0]?.id || '73cae928-5f39-4129-a4f2-f667e94f3f6a';
   const claimRecord = claims.find(c => c.id === activeClaimId) || claims[0];
@@ -201,29 +201,6 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
     navigation.navigate(Routes.ClaimDetail, { claimId: activeClaimId });
   };
 
-  const perDocList = docs.length > 0
-    ? docs
-    : [
-        {
-          name: 'Discharge_Summary.pdf',
-          docType: 'discharge_summary',
-          ocr: 'd',
-          parse: 'd',
-        },
-        {
-          name: 'Hospital_Bill.jpg',
-          docType: 'hospital_bill',
-          ocr: 'd',
-          parse: 'd',
-        },
-        {
-          name: 'Policy_Card.pdf',
-          docType: 'policy_card',
-          ocr: 'd',
-          parse: 'd',
-        },
-      ];
-
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
@@ -356,49 +333,27 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
             })}
           </View>
 
-          {/* Per Document (isolation) Accordion */}
-          <View style={[styles.card, styles.accordionCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-            <TouchableOpacity
-              style={styles.accordionHeader}
-              onPress={() => setAccordionOpen(!accordionOpen)}
-              activeOpacity={0.7}
-            >
-              <FileText size={16} color={colors.ink} />
-              <Text style={[styles.accordionTitle, { color: colors.ink }]}>
-                Per document (isolation)
-              </Text>
-              <View style={styles.accordionChevron}>
-                {accordionOpen ? (
-                  <ChevronDown size={16} color={colors.muted} />
-                ) : (
-                  <ChevronRight size={16} color={colors.muted} />
-                )}
+          {/* Preview Uploaded Documents Button / Card */}
+          <TouchableOpacity
+            style={[styles.card, styles.previewDocsCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
+            onPress={() => navigation.navigate(Routes.PreviewDocuments, { claimId: activeClaimId })}
+            activeOpacity={0.7}
+          >
+            <View style={styles.previewDocsLeft}>
+              <View style={[styles.docThumb, { backgroundColor: colors.brandSoft }]}>
+                <Eye size={18} color={colors.brandDark} strokeWidth={2.2} />
               </View>
-            </TouchableOpacity>
-
-            {accordionOpen && (
-              <View style={[styles.accordionBody, { borderTopColor: colors.line2 }]}>
-                {perDocList.map((doc, idx) => (
-                  <View key={idx} style={[styles.perDocItem, idx < perDocList.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.line2 }]}>
-                    <View style={styles.perDocInfo}>
-                      <Text style={[styles.perDocName, { color: colors.ink }]} numberOfLines={1}>
-                        {doc.name}
-                      </Text>
-                      <Text style={[styles.perDocType, { color: colors.muted }]}>
-                        {doc.docType}
-                      </Text>
-                    </View>
-                    <View style={styles.perDocStatusRow}>
-                      <Text style={[styles.perDocStage, { color: colors.muted }]}>OCR</Text>
-                      <View style={[styles.statusDot, { backgroundColor: colors.green }]} />
-                      <Text style={[styles.perDocStage, { color: colors.muted, marginLeft: 8 }]}>Parse</Text>
-                      <View style={[styles.statusDot, { backgroundColor: colors.green }]} />
-                    </View>
-                  </View>
-                ))}
+              <View style={styles.previewDocsInfo}>
+                <Text style={[styles.previewDocsTitle, { color: colors.ink }]}>
+                  Preview uploaded documents
+                </Text>
+                <Text style={[styles.previewDocsSub, { color: colors.muted }]}>
+                  Inspect attached files, OCR extractions & high-res scans
+                </Text>
               </View>
-            )}
-          </View>
+            </View>
+            <ChevronRight size={18} color={colors.muted} strokeWidth={2} />
+          </TouchableOpacity>
 
           {/* Retry Card if failed */}
           {failed && (
@@ -433,39 +388,12 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
 
           {/* Stats / Timing Card */}
           <View style={[styles.card, styles.statsCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-            <View style={styles.kvRow}>
+            <View style={[styles.kvRow, { borderBottomWidth: 0 }]}>
               <Text style={[styles.kvKey, { color: colors.muted }]}>total_processing_seconds</Text>
               <Text style={[styles.kvVal, styles.mono, { color: colors.ink }]}>
                 {totalSeconds ? `${totalSeconds} s` : isRunningState ? '0.1 s' : '—'}
               </Text>
             </View>
-
-            <View style={styles.kvRow}>
-              <Text style={[styles.kvKey, { color: colors.muted }]}>Queues</Text>
-              <Text style={[styles.kvVal, { color: colors.ink }]}>gpu_queue → default</Text>
-            </View>
-
-            <View style={[styles.kvRow, { borderBottomWidth: 0 }]}>
-              <Text style={[styles.kvKey, { color: colors.muted }]}>Search index</Text>
-              <View style={[styles.indexPill, { backgroundColor: claimRecord?.indexed ? colors.greenSoft : colors.surface2 }]}>
-                <Text
-                  style={[
-                    styles.indexPillText,
-                    { color: claimRecord?.indexed ? colors.green : colors.muted },
-                  ]}
-                >
-                  {claimRecord?.indexed ? 'indexed' : 'not indexed'}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Time Limits Banner */}
-          <View style={[styles.banner, { backgroundColor: colors.brandSoft }]}>
-            <Info size={15} color={colors.brandDark} style={{ marginTop: 1 }} />
-            <Text style={[styles.bannerText, { color: colors.brandDark }]}>
-              Time limits: OCR 15 min soft / 20 hard · Parser 5 min · Coding 8 min / 10 min · Validator 5 min. Max 5 retries.
-            </Text>
           </View>
         </ScrollView>
 
@@ -631,58 +559,29 @@ const styles = StyleSheet.create({
     marginTop: 2,
     lineHeight: 16,
   },
-  accordionCard: {
-    overflow: 'hidden',
-  },
-  accordionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 9,
-    padding: 13,
-  },
-  accordionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    flex: 1,
-  },
-  accordionChevron: {
-    marginLeft: 'auto',
-  },
-  accordionBody: {
-    borderTopWidth: 1,
-    paddingHorizontal: 13,
-    paddingVertical: 6,
-  },
-  perDocItem: {
+  previewDocsCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    padding: 13,
   },
-  perDocInfo: {
-    flex: 1,
-    marginRight: 10,
-  },
-  perDocName: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  perDocType: {
-    fontSize: 10.5,
-    marginTop: 2,
-  },
-  perDocStatusRow: {
+  previewDocsLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
   },
-  perDocStage: {
-    fontSize: 10.5,
-    marginRight: 4,
+  previewDocsInfo: {
+    flex: 1,
   },
-  statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
+  previewDocsTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  previewDocsSub: {
+    fontSize: 11,
+    marginTop: 2,
   },
   statsCard: {
     paddingHorizontal: 14,

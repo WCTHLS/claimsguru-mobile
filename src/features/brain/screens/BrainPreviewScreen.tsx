@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StatusBar,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../core/theme/ThemeContext';
@@ -31,6 +32,7 @@ import {
   Check,
   X as XIcon,
   RefreshCw,
+  Save,
 } from 'lucide-react-native';
 
 export const BrainPreviewScreen = ({ route, navigation }: any) => {
@@ -45,12 +47,41 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   const [rerunning, setRerunning] = useState<boolean>(false);
 
   // Accordion open/close states matching prototype (Risk open by default)
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [riskOpen, setRiskOpen] = useState(true);
   const [fraudOpen, setFraudOpen] = useState(false);
   const [codingOpen, setCodingOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [readinessOpen, setReadinessOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
+
+  // Patient & Claim Details editable form state
+  const [patientName, setPatientName] = useState('');
+  const [hospitalName, setHospitalName] = useState('');
+  const [billedAmount, setBilledAmount] = useState('');
+  const [admissionDate, setAdmissionDate] = useState('');
+  const [dischargeDate, setDischargeDate] = useState('');
+  const [diagnosis, setDiagnosis] = useState('');
+  const [isDetailsDirty, setIsDetailsDirty] = useState(false);
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [detailsSaved, setDetailsSaved] = useState(false);
+
+  // Initialize editable fields from preview and store
+  useEffect(() => {
+    if (isDetailsDirty) return;
+    const p = preview?.parsed_fields || {};
+    const s = preview?.summary;
+    const storeClaims = useClaimsStore.getState().claims;
+    const c = storeClaims.find(cl => cl.id === claimId || cl.id.startsWith(claimId));
+
+    setPatientName(p.patient_name || s?.patient_name || c?.who || 'Vivek Thakur Blood Group O-');
+    setHospitalName(p.hospital_name || p.hospital || s?.hospital || (s as any)?.hospital_name || c?.hospital || 'Government Medical College');
+    const billedVal = preview?.billed_total ?? s?.total_amount ?? p.total_amount ?? c?.amt;
+    setBilledAmount(billedVal !== undefined && billedVal !== null ? String(billedVal) : '84765.51');
+    setAdmissionDate(p.admission_date || s?.admission_date || c?.admissionDate || '07-02-2024');
+    setDischargeDate(p.discharge_date || s?.discharge_date || c?.dischargeDate || '22-02-2024');
+    setDiagnosis(p.diagnosis || s?.diagnosis || c?.diagnosis || c?.dept || 'Hypothyroidism Chronic Type 2 Pulmon');
+  }, [preview, claimId, isDetailsDirty]);
 
   // Fetch or refresh claim preview from backend
   useEffect(() => {
@@ -205,6 +236,59 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
     }
   };
 
+  const handleSaveDetails = async () => {
+    if (savingDetails) return;
+    setSavingDetails(true);
+    try {
+      const payload: Record<string, string> = {
+        patient_name: patientName.trim(),
+        hospital_name: hospitalName.trim(),
+        total_amount: billedAmount.trim(),
+        admission_date: admissionDate.trim(),
+        discharge_date: dischargeDate.trim(),
+        diagnosis: diagnosis.trim(),
+      };
+
+      const success = await claimsApi.updateClaimFields(claimId, payload);
+      if (success) {
+        setDetailsSaved(true);
+        setIsDetailsDirty(false);
+        showToast('Claim details updated successfully');
+
+        const refreshed = await claimsApi.getClaimPreview(claimId);
+        if (refreshed) {
+          setPreview(refreshed);
+          useClaimsStore.getState().setClaimPreview(claimId, refreshed);
+        }
+
+        const currentClaim = useClaimsStore.getState().claims.find(c => c.id === claimId || c.id.startsWith(claimId));
+        if (currentClaim) {
+          useClaimsStore.getState().addOrUpdateClaim({
+            ...currentClaim,
+            who: patientName.trim() || currentClaim.who,
+            hospital: hospitalName.trim() || currentClaim.hospital,
+            amt: parseFloat(billedAmount) || currentClaim.amt,
+            diagnosis: diagnosis.trim() || currentClaim.diagnosis,
+            dept: diagnosis.trim() || currentClaim.dept,
+            admissionDate: admissionDate.trim() || currentClaim.admissionDate,
+            dischargeDate: dischargeDate.trim() || currentClaim.dischargeDate,
+          });
+        }
+
+        setTimeout(() => {
+          setDetailsSaved(false);
+        }, 2200);
+      } else {
+        showToast('Failed to update details. Please check connection.');
+      }
+    } catch (err) {
+      console.warn('[BrainPreviewScreen] Save details error:', err);
+      showToast('Error saving details.');
+    } finally {
+      setSavingDetails(false);
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
@@ -297,6 +381,181 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
             <Text style={[styles.bannerText, { color: colors.amber }]}>
               <Text style={styles.mono}>xgb_rejection.json</Text> was auto-trained on synthetic data at predictor startup — treat the score as indicative.
             </Text>
+          </View>
+
+          {/* Accordion 0: Patient & Claim Details (Editable Form) */}
+          <View style={[styles.accCard, { backgroundColor: colors.surface, borderColor: isDetailsDirty ? colors.brand : colors.line }]}>
+            <TouchableOpacity
+              style={styles.accHeader}
+              onPress={() => setDetailsOpen(!detailsOpen)}
+              activeOpacity={0.7}
+            >
+              <FileText size={16} color={colors.brandDark} strokeWidth={2} />
+              <Text style={[styles.accTitle, { color: colors.ink }]}>Patient & Claim Details</Text>
+
+              {isDetailsDirty ? (
+                <View style={[styles.pillBadge, { backgroundColor: colors.brandSoft }]}>
+                  <Text style={[styles.pillText, { color: colors.brandDark }]}>Unsaved edits</Text>
+                </View>
+              ) : (
+                <View style={[styles.pillBadge, { backgroundColor: colors.surface2 }]}>
+                  <Text style={[styles.pillText, { color: colors.muted }]}>Editable</Text>
+                </View>
+              )}
+
+              <View style={{ marginLeft: 'auto' }}>
+                {detailsOpen ? (
+                  <ChevronDown size={16} color={colors.muted} strokeWidth={2} />
+                ) : (
+                  <ChevronRight size={16} color={colors.muted} strokeWidth={2} />
+                )}
+              </View>
+            </TouchableOpacity>
+
+            {detailsOpen && (
+              <View style={[styles.accInner, { borderTopColor: colors.line2 }]}>
+                {/* Form Subheader & Save Details Button */}
+                <View style={[styles.formHeaderRow, { borderBottomColor: colors.line2 }]}>
+                  <Text style={[styles.formSubtitle, { color: colors.muted }]}>
+                    Extracted demographics & clinical data
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.saveBtn,
+                      detailsSaved
+                        ? { backgroundColor: colors.green }
+                        : isDetailsDirty
+                          ? { backgroundColor: colors.brand }
+                          : { backgroundColor: colors.surface2, opacity: 0.6 }
+                    ]}
+                    onPress={handleSaveDetails}
+                    disabled={(!isDetailsDirty && !detailsSaved) || savingDetails}
+                    activeOpacity={0.8}
+                  >
+                    {savingDetails ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : detailsSaved ? (
+                      <>
+                        <Check size={13} color="#ffffff" strokeWidth={2.5} />
+                        <Text style={styles.saveBtnText}>Saved! ✓</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Save size={13} color={isDetailsDirty ? '#ffffff' : colors.muted} strokeWidth={2} />
+                        <Text style={[styles.saveBtnText, !isDetailsDirty && { color: colors.muted }]}>Save Details</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                {/* Field 1: Patient Name */}
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.fieldLabel, { color: colors.muted }]}>Patient Name</Text>
+                  <TextInput
+                    style={[styles.fieldInput, { backgroundColor: colors.surface2, borderColor: colors.line, color: colors.ink }]}
+                    value={patientName}
+                    onChangeText={text => {
+                      setPatientName(text);
+                      setIsDetailsDirty(true);
+                    }}
+                    placeholder="Patient Name"
+                    placeholderTextColor={colors.muted}
+                  />
+                </View>
+
+                {/* Field 2: Hospital / Medical Center */}
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.fieldLabel, { color: colors.muted }]}>Hospital / Medical Center</Text>
+                  <TextInput
+                    style={[styles.fieldInput, { backgroundColor: colors.surface2, borderColor: colors.line, color: colors.ink }]}
+                    value={hospitalName}
+                    onChangeText={text => {
+                      setHospitalName(text);
+                      setIsDetailsDirty(true);
+                    }}
+                    placeholder="Hospital / Medical Center"
+                    placeholderTextColor={colors.muted}
+                  />
+                </View>
+
+                {/* Field 3: Billed Claim Amount (INR) */}
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.fieldLabel, { color: colors.muted }]}>Billed Claim Amount (INR)</Text>
+                  <View style={styles.amountInputWrap}>
+                    <Text style={[styles.currencyPrefix, { color: colors.brandDark }]}>₹</Text>
+                    <TextInput
+                      style={[
+                        styles.fieldInput,
+                        styles.amountInput,
+                        { backgroundColor: colors.surface2, borderColor: colors.line, color: colors.green }
+                      ]}
+                      value={billedAmount}
+                      onChangeText={text => {
+                        setBilledAmount(text);
+                        setIsDetailsDirty(true);
+                      }}
+                      keyboardType="numeric"
+                      placeholder="0.00"
+                      placeholderTextColor={colors.muted}
+                    />
+                  </View>
+                </View>
+
+                {/* Row: Admission Date & Discharge Date */}
+                <View style={styles.dateRow}>
+                  {/* Field 4: Admission Date */}
+                  <View style={[styles.fieldGroup, { flex: 1 }]}>
+                    <Text style={[styles.fieldLabel, { color: colors.muted }]}>Admission Date</Text>
+                    <TextInput
+                      style={[styles.fieldInput, { backgroundColor: colors.surface2, borderColor: colors.line, color: colors.ink }]}
+                      value={admissionDate}
+                      onChangeText={text => {
+                        setAdmissionDate(text);
+                        setIsDetailsDirty(true);
+                      }}
+                      placeholder="DD-MM-YYYY"
+                      placeholderTextColor={colors.muted}
+                    />
+                  </View>
+
+                  {/* Field 5: Discharge Date */}
+                  <View style={[styles.fieldGroup, { flex: 1 }]}>
+                    <Text style={[styles.fieldLabel, { color: colors.muted }]}>Discharge Date</Text>
+                    <TextInput
+                      style={[styles.fieldInput, { backgroundColor: colors.surface2, borderColor: colors.line, color: colors.ink }]}
+                      value={dischargeDate}
+                      onChangeText={text => {
+                        setDischargeDate(text);
+                        setIsDetailsDirty(true);
+                      }}
+                      placeholder="DD-MM-YYYY"
+                      placeholderTextColor={colors.muted}
+                    />
+                  </View>
+                </View>
+
+                {/* Field 6: Primary Clinical Diagnosis */}
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.fieldLabel, { color: colors.muted }]}>Primary Clinical Diagnosis</Text>
+                  <TextInput
+                    style={[
+                      styles.fieldInput,
+                      styles.multilineInput,
+                      { backgroundColor: colors.surface2, borderColor: colors.line, color: colors.ink }
+                    ]}
+                    value={diagnosis}
+                    onChangeText={text => {
+                      setDiagnosis(text);
+                      setIsDetailsDirty(true);
+                    }}
+                    multiline
+                    numberOfLines={2}
+                    placeholder="Primary Clinical Diagnosis"
+                    placeholderTextColor={colors.muted}
+                  />
+                </View>
+              </View>
+            )}
           </View>
 
           {/* Accordion 1: Risk Assessment (Open by default) */}
@@ -796,38 +1055,60 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
               <View style={[styles.accInner, { borderTopColor: colors.line2 }]}>
                 {preview?.documents && preview.documents.length > 0 ? (
                   preview.documents.map((doc, idx) => (
-                    <View key={idx} style={styles.factorRow}>
+                    <TouchableOpacity
+                      key={idx}
+                      style={styles.factorRow}
+                      onPress={() => navigation.navigate(Routes.DocumentGrid, { claimId, docKey: doc.doc_type || doc.id })}
+                      activeOpacity={0.7}
+                    >
                       <View style={[styles.dot, { backgroundColor: colors.green }]} />
                       <Text style={[styles.factorText, styles.mono, { color: colors.ink }]} numberOfLines={1}>
                         {doc.doc_type || doc.original_filename || doc.file_name}
                       </Text>
                       <Text style={[styles.factorVal, { color: colors.muted }]}>
-                        {doc.page_count ? `${doc.page_count}p` : '0.95'}
+                        {doc.page_count ? `${doc.page_count}p` : '1p'}
                       </Text>
-                    </View>
+                      <ChevronRight size={14} color={colors.muted} />
+                    </TouchableOpacity>
                   ))
                 ) : (
                   [
-                    { name: 'discharge_summary', conf: '0.96', status: 'ok' },
-                    { name: 'hospital_bill', conf: '0.93', status: 'ok' },
-                    { name: 'policy_card', conf: '0.90', status: 'ok' },
-                    { name: 'scan_report', conf: '0.74', status: 'warn' },
-                    { name: 'pharmacy_bill', conf: 'R004', status: 'bad' },
-                    { name: 'id_proof', conf: '0.95', status: 'ok' },
+                    { name: 'discharge_summary', conf: '1p', status: 'ok', key: 'discharge' },
+                    { name: 'hospital_bill', conf: '1p', status: 'ok', key: 'bill' },
+                    { name: 'policy_card', conf: '1p', status: 'ok', key: 'policy' },
+                    { name: 'scan_report', conf: '1p', status: 'warn', key: 'scan' },
+                    { name: 'pharmacy_bill', conf: '1p', status: 'bad', key: 'pharmacy' },
+                    { name: 'id_proof', conf: '1p', status: 'ok', key: 'id' },
                   ].map((doc, idx) => {
                     const dotColor =
                       doc.status === 'ok' ? colors.green : doc.status === 'warn' ? colors.amber : colors.red;
                     return (
-                      <View key={idx} style={styles.factorRow}>
+                      <TouchableOpacity
+                        key={idx}
+                        style={styles.factorRow}
+                        onPress={() => navigation.navigate(Routes.PreviewDocuments, { claimId, docKey: doc.key })}
+                        activeOpacity={0.7}
+                      >
                         <View style={[styles.dot, { backgroundColor: dotColor }]} />
                         <Text style={[styles.factorText, styles.mono, { color: colors.ink }]}>
                           {doc.name}
                         </Text>
                         <Text style={[styles.factorVal, { color: colors.muted }]}>{doc.conf}</Text>
-                      </View>
+                        <ChevronRight size={14} color={colors.muted} />
+                      </TouchableOpacity>
                     );
                   })
                 )}
+
+                <TouchableOpacity
+                  style={[styles.accActionBtn, { borderColor: colors.line, marginTop: 4 }]}
+                  onPress={() => navigation.navigate(Routes.PreviewDocuments, { claimId })}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.accActionBtnText, { color: colors.brandDark }]}>
+                    View documents
+                  </Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -1174,5 +1455,71 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13.5,
     fontWeight: '700',
+  },
+  formHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    marginBottom: 8,
+  },
+  formSubtitle: {
+    fontSize: 11,
+    flex: 1,
+    paddingRight: 8,
+  },
+  saveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  saveBtnText: {
+    color: '#ffffff',
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  fieldGroup: {
+    marginBottom: 8,
+  },
+  fieldLabel: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  fieldInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  amountInputWrap: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  currencyPrefix: {
+    position: 'absolute',
+    left: 11,
+    fontSize: 13.5,
+    fontWeight: '700',
+    zIndex: 2,
+  },
+  amountInput: {
+    paddingLeft: 25,
+    fontWeight: '700',
+  },
+  dateRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  multilineInput: {
+    minHeight: 46,
+    textAlignVertical: 'top',
+    paddingTop: 8,
   },
 });

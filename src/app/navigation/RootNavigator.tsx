@@ -20,6 +20,7 @@ import { ProfileSettingsScreen } from '../../features/profile/screens/ProfileSet
 import { UploadPanelScreen } from '../../features/claims/screens/UploadPanelScreen';
 import { ClaimDetailScreen } from '../../features/claims/screens/ClaimDetailScreen';
 import { DocumentGridScreen } from '../../features/claims/screens/DocumentGridScreen';
+import { PreviewDocumentsScreen } from '../../features/claims/screens/PreviewDocumentsScreen';
 import { PatientProfileScreen } from '../../features/claims/screens/PatientProfileScreen';
 import { PatientActivityScreen } from '../../features/claims/screens/PatientActivityScreen';
 import { SubmissionScreen } from '../../features/claims/screens/SubmissionScreen';
@@ -50,7 +51,8 @@ const linking: any = {
       [Routes.Submission]: 'claims/:claimId/submission',
       [Routes.WorkflowPipeline]: 'claims/:claimId/pipeline',
       [Routes.UploadPanel]: 'upload',
-      [Routes.DocumentGrid]: 'claims/:claimId/documents',
+      [Routes.DocumentGrid]: 'claims/documents',
+      [Routes.PreviewDocuments]: 'claims/:claimId/preview-documents',
       [Routes.PatientProfile]: 'patient/:patientId',
       [Routes.PatientActivity]: 'claims/:claimId/activity',
       [Routes.BrainPreview]: 'claims/:claimId/brain',
@@ -165,6 +167,10 @@ export const RootNavigator = () => {
         <Stack.Screen
           name={Routes.DocumentGrid}
           component={DocumentGridScreen}
+        />
+        <Stack.Screen
+          name={Routes.PreviewDocuments}
+          component={PreviewDocumentsScreen}
         />
         <Stack.Screen
           name={Routes.PatientProfile}

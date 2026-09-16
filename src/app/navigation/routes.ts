@@ -20,6 +20,7 @@ export const Routes = {
   ValidationRules: 'ValidationRules',
   MedicalCoding: 'MedicalCoding',
   DocumentGrid: 'DocumentGrid',
+  PreviewDocuments: 'PreviewDocuments',
   PatientProfile: 'PatientProfile',
   PatientActivity: 'PatientActivity',
   Submission: 'Submission',

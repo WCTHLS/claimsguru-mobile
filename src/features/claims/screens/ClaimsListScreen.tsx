@@ -24,7 +24,7 @@ export const ClaimsListScreen = ({ navigation }: any) => {
   const { claims, selectClaim, loadClaims, refreshing, backendConnected } = useClaimsStore();
   const { running: pipelineRunning, claimId: pipelineClaimId } = usePipelineStore();
   const { userName, userId, userEmail, gender } = useAuthStore();
-  const [activeFilter, setActiveFilter] = useState<'All' | 'Running' | 'FAILED' | 'Needs index'>('All');
+  const [activeFilter, setActiveFilter] = useState<'All' | 'Running' | 'FAILED'>('All');
 
   const getInitials = (name?: string) => {
     if (
@@ -54,13 +54,11 @@ export const ClaimsListScreen = ({ navigation }: any) => {
   const totalCount = claims.length;
   const inPipelineCount = claims.filter(c => c.status === 'running').length;
   const failedCount = claims.filter(c => c.status === 'FAILED').length;
-  const indexedCount = claims.filter(c => c.indexed).length;
 
   const filteredClaims = claims.filter(c => {
     if (activeFilter === 'All') return true;
     if (activeFilter === 'Running') return c.status === 'running';
     if (activeFilter === 'FAILED') return c.status === 'FAILED';
-    if (activeFilter === 'Needs index') return !c.indexed;
     return true;
   });
 
@@ -141,7 +139,7 @@ export const ClaimsListScreen = ({ navigation }: any) => {
             />
           }
         >
-          {/* 2x2 KPI Grid */}
+          {/* 3 KPI Stats Row */}
           <View style={styles.kpiGrid}>
             <View style={styles.kpiRow}>
               <View style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
@@ -152,23 +150,16 @@ export const ClaimsListScreen = ({ navigation }: any) => {
                 <Text style={[styles.kpiVal, { color: colors.ink }]}>{inPipelineCount}</Text>
                 <Text style={[styles.kpiLabel, { color: colors.muted }]}>In pipeline</Text>
               </View>
-            </View>
-
-            <View style={styles.kpiRow}>
               <View style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
                 <Text style={[styles.kpiVal, { color: colors.red }]}>{failedCount}</Text>
                 <Text style={[styles.kpiLabel, { color: colors.muted }]}>FAILED</Text>
-              </View>
-              <View style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                <Text style={[styles.kpiVal, { color: colors.ink }]}>{indexedCount}</Text>
-                <Text style={[styles.kpiLabel, { color: colors.muted }]}>Indexed for search</Text>
               </View>
             </View>
           </View>
 
           {/* Filter Chips */}
           <View style={styles.chipsRow}>
-            {(['All', 'Running', 'FAILED', 'Needs index'] as const).map(filter => {
+            {(['All', 'Running', 'FAILED'] as const).map(filter => {
               const isSelected = activeFilter === filter;
               return (
                 <TouchableOpacity

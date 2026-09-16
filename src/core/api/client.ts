@@ -160,6 +160,23 @@ export const apiClient = {
     );
   },
 
+  put: <T>(url: string, body?: any, options?: RequestOptions): Promise<T> => {
+    return requestWithTimeout<T>(
+      url,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...getAuthHeaders(),
+          ...options?.headers,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      },
+      options?.timeoutMs
+    );
+  },
+
   delete: <T>(url: string, options?: RequestOptions): Promise<T> => {
     return requestWithTimeout<T>(
       url,

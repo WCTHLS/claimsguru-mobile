@@ -564,6 +564,16 @@ export const claimsApi = {
     return apiClient.delete(API_ENDPOINTS.claimDetail(claimId));
   },
 
+  updateClaimFields: async (claimId: string, fields: Record<string, string>): Promise<boolean> => {
+    try {
+      await apiClient.put(API_ENDPOINTS.claimFields(claimId), { fields });
+      return true;
+    } catch (err) {
+      console.warn('[claimsApi] Failed to update claim fields:', err);
+      return false;
+    }
+  },
+
   getClaimFileUrl: (claimId: string): string => {
     return API_ENDPOINTS.claimFile(claimId);
   },
