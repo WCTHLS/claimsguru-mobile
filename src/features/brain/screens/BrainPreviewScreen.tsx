@@ -7,6 +7,9 @@ import {
   TouchableOpacity,
   StatusBar,
   ActivityIndicator,
+  TextInput,
+  Alert,
+  Modal,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../core/theme/ThemeContext';
@@ -15,6 +18,7 @@ import { VALIDATION_RULES } from '../../../mocks/rules.mock';
 import { useClaimsStore } from '../../../state/useClaimsStore';
 import { usePipelineStore } from '../../../state/usePipelineStore';
 import { claimsApi, BackendClaimPreview, BackendClaimValidationRule } from '../../claims/services/claimsApi';
+import { formatINR } from '../../../core/utils/currency';
 import { GlobalBottomTabBar } from '../../../app/navigation/GlobalBottomTabBar';
 import {
   ChevronLeft,
@@ -31,7 +35,26 @@ import {
   Check,
   X as XIcon,
   RefreshCw,
+  Receipt,
+  Pencil,
+  Trash2,
+  Plus,
 } from 'lucide-react-native';
+
+export interface BrainExpenseItem {
+  id: string;
+  category: string;
+  amount: number;
+}
+
+const DEFAULT_EXPENSES_LIST: BrainExpenseItem[] = [
+  { id: 'exp-1', category: 'Room & Nursing Charges', amount: 3200 },
+  { id: 'exp-2', category: 'Consultation & Doctor Visits', amount: 1500 },
+  { id: 'exp-3', category: 'Pharmacy & Medications', amount: 12300 },
+  { id: 'exp-4', category: 'Lab & Diagnostic Tests', amount: 7800 },
+  { id: 'exp-5', category: 'OT & Procedure Charges', amount: 5700 },
+  { id: 'exp-6', category: 'Medical Consumables', amount: 7095 },
+];
 
 export const BrainPreviewScreen = ({ route, navigation }: any) => {
   const { colors } = useTheme();
@@ -48,9 +71,31 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   const [riskOpen, setRiskOpen] = useState(true);
   const [fraudOpen, setFraudOpen] = useState(false);
   const [codingOpen, setCodingOpen] = useState(false);
+  const [expensesOpen, setExpensesOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [readinessOpen, setReadinessOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
+
+  // Expenses management state
+  const [expenses, setExpenses] = useState<BrainExpenseItem[]>(() => {
+    if (preview?.expenses && preview.expenses.length > 0) {
+      return preview.expenses.map((e, idx) => ({
+        id: (e as any).id || `exp-${idx}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        category: e.category || 'Medical expense',
+        amount: Math.round(Number(e.amount) || 0),
+      }));
+    }
+    return DEFAULT_EXPENSES_LIST;
+  });
+  const [isExpensesInitialized, setIsExpensesInitialized] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editCategory, setEditCategory] = useState<string>('');
+  const [editAmount, setEditAmount] = useState<string>('');
+  const [isAdding, setIsAdding] = useState<boolean>(false);
+  const [newCategory, setNewCategory] = useState<string>('');
+  const [newAmount, setNewAmount] = useState<string>('');
+  const [deleteTargetExpense, setDeleteTargetExpense] = useState<BrainExpenseItem | null>(null);
+  const [showDeleteExpenseModal, setShowDeleteExpenseModal] = useState<boolean>(false);
 
   // Fetch or refresh claim preview from backend
   useEffect(() => {
@@ -58,6 +103,16 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
     if (claimId) {
       if (cachedPreview && !preview) {
         setPreview(cachedPreview);
+        if (cachedPreview.expenses && cachedPreview.expenses.length > 0 && !isExpensesInitialized) {
+          setExpenses(
+            cachedPreview.expenses.map((e, idx) => ({
+              id: `exp-${idx}-${Date.now()}`,
+              category: e.category || 'Medical expense',
+              amount: Math.round(Number(e.amount) || 0),
+            }))
+          );
+          setIsExpensesInitialized(true);
+        }
         setLoading(false);
       }
       claimsApi.getClaimPreview(claimId)
@@ -65,6 +120,16 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
           if (isMounted && res) {
             setPreview(res);
             useClaimsStore.getState().setClaimPreview(claimId, res);
+            if (res.expenses && res.expenses.length > 0 && !isExpensesInitialized) {
+              setExpenses(
+                res.expenses.map((e, idx) => ({
+                  id: `exp-${idx}-${Date.now()}`,
+                  category: e.category || 'Medical expense',
+                  amount: Math.round(Number(e.amount) || 0),
+                }))
+              );
+              setIsExpensesInitialized(true);
+            }
             setLoading(false);
           } else if (isMounted) {
             setLoading(false);
@@ -180,6 +245,154 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2500);
+  };
+
+  // Expenses handlers
+  const totalExpense = expenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+  const handleStartEdit = (item: BrainExpenseItem) => {
+    setEditingId(item.id);
+    setEditCategory(item.category);
+    setEditAmount(String(item.amount));
+    setIsAdding(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditCategory('');
+    setEditAmount('');
+  };
+
+  const handleSaveEdit = (id: string) => {
+    const cat = editCategory.trim();
+    if (!cat) {
+      showToast('Please enter a category name');
+      return;
+    }
+    const cleanAmt = editAmount.replace(/[^0-9.]/g, '');
+    const parsed = Math.round(parseFloat(cleanAmt) || 0);
+    if (parsed <= 0) {
+      showToast('Please enter an amount greater than 0');
+      return;
+    }
+
+    const updated = expenses.map(e => (e.id === id ? { ...e, category: cat, amount: parsed } : e));
+    setExpenses(updated);
+    setIsExpensesInitialized(true);
+    setEditingId(null);
+    setEditCategory('');
+    setEditAmount('');
+
+    // Sync preview and claims store
+    const newTotal = updated.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    if (preview) {
+      const updatedPreview: BackendClaimPreview = {
+        ...preview,
+        expenses: updated.map(e => ({ id: e.id, category: e.category, amount: e.amount } as any)),
+        expense_total: newTotal,
+        billed_total: newTotal,
+        summary: preview.summary ? { ...preview.summary, total_amount: String(newTotal) } : undefined,
+      };
+      setPreview(updatedPreview);
+      useClaimsStore.getState().setClaimPreview(claimId, updatedPreview);
+    }
+    useClaimsStore.getState().addOrUpdateClaim({
+      id: claimId,
+      amt: newTotal,
+    });
+    showToast(`Saved "${cat}" (${formatINR(parsed)})`);
+  };
+
+  const handleDeleteExpense = (item: BrainExpenseItem) => {
+    setDeleteTargetExpense(item);
+    setShowDeleteExpenseModal(true);
+  };
+
+  const confirmDeleteExpense = () => {
+    if (!deleteTargetExpense) return;
+    const target = deleteTargetExpense;
+    const updated = expenses.filter(e => e.id !== target.id);
+    setExpenses(updated);
+    setIsExpensesInitialized(true);
+    if (editingId === target.id) {
+      setEditingId(null);
+    }
+    const newTotal = updated.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    if (preview) {
+      const updatedPreview: BackendClaimPreview = {
+        ...preview,
+        expenses: updated.map(e => ({ id: e.id, category: e.category, amount: e.amount } as any)),
+        expense_total: newTotal,
+        billed_total: newTotal,
+        summary: preview.summary ? { ...preview.summary, total_amount: String(newTotal) } : undefined,
+      };
+      setPreview(updatedPreview);
+      useClaimsStore.getState().setClaimPreview(claimId, updatedPreview);
+    }
+    useClaimsStore.getState().addOrUpdateClaim({
+      id: claimId,
+      amt: newTotal,
+    });
+    setShowDeleteExpenseModal(false);
+    setDeleteTargetExpense(null);
+    showToast(`Deleted "${target.category}"`);
+  };
+
+  const handleStartAdd = () => {
+    setIsAdding(true);
+    setNewCategory('');
+    setNewAmount('');
+    setEditingId(null);
+  };
+
+  const handleCancelAdd = () => {
+    setIsAdding(false);
+    setNewCategory('');
+    setNewAmount('');
+  };
+
+  const handleSaveNewExpense = () => {
+    const cat = newCategory.trim();
+    if (!cat) {
+      showToast('Please enter a category name');
+      return;
+    }
+    const cleanAmt = newAmount.replace(/[^0-9.]/g, '');
+    const parsed = Math.round(parseFloat(cleanAmt) || 0);
+    if (parsed <= 0) {
+      showToast('Please enter an amount greater than 0');
+      return;
+    }
+
+    const newItem: BrainExpenseItem = {
+      id: `exp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      category: cat,
+      amount: parsed,
+    };
+    const updated = [...expenses, newItem];
+    setExpenses(updated);
+    setIsExpensesInitialized(true);
+    setIsAdding(false);
+    setNewCategory('');
+    setNewAmount('');
+
+    const newTotal = updated.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    if (preview) {
+      const updatedPreview: BackendClaimPreview = {
+        ...preview,
+        expenses: updated.map(e => ({ id: e.id, category: e.category, amount: e.amount } as any)),
+        expense_total: newTotal,
+        billed_total: newTotal,
+        summary: preview.summary ? { ...preview.summary, total_amount: String(newTotal) } : undefined,
+      };
+      setPreview(updatedPreview);
+      useClaimsStore.getState().setClaimPreview(claimId, updatedPreview);
+    }
+    useClaimsStore.getState().addOrUpdateClaim({
+      id: claimId,
+      amt: newTotal,
+    });
+    showToast(`Added "${cat}" (${formatINR(parsed)})`);
   };
 
   const handleRerun = async () => {
@@ -544,6 +757,201 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
             )}
           </View>
 
+          {/* Accordion: Expenses */}
+          <View style={[styles.accCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <TouchableOpacity
+              style={styles.accHeader}
+              onPress={() => setExpensesOpen(!expensesOpen)}
+              activeOpacity={0.7}
+            >
+              <Receipt size={16} color={colors.ink} strokeWidth={2} />
+              <Text style={[styles.accTitle, { color: colors.ink }]}>Expenses</Text>
+              <View style={[styles.pillBadge, { backgroundColor: colors.greenSoft }]}>
+                <Text style={[styles.pillText, { color: colors.green }]}>
+                  {expenses.length} items · {formatINR(totalExpense)}
+                </Text>
+              </View>
+              <View style={{ marginLeft: 'auto' }}>
+                {expensesOpen ? (
+                  <ChevronDown size={16} color={colors.muted} strokeWidth={2} />
+                ) : (
+                  <ChevronRight size={16} color={colors.muted} strokeWidth={2} />
+                )}
+              </View>
+            </TouchableOpacity>
+
+            {expensesOpen && (
+              <View style={[styles.accInner, { borderTopColor: colors.line2 }]}>
+                {/* Sub-header with item count and Add button */}
+                <View style={styles.expSubHeaderRow}>
+                  <Text style={[styles.codeSectionHeader, { color: colors.muted, marginBottom: 0 }]}>
+                    ITEMISED BREAKDOWN ({expenses.length})
+                  </Text>
+                  {!isAdding && (
+                    <TouchableOpacity
+                      style={[styles.addExpBtn, { borderColor: colors.brand, backgroundColor: colors.surface2 }]}
+                      onPress={handleStartAdd}
+                      activeOpacity={0.7}
+                    >
+                      <Plus size={13} color={colors.brandDark} strokeWidth={2.4} />
+                      <Text style={[styles.addExpBtnText, { color: colors.brandDark }]}>Add item</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Add Expense Form */}
+                {isAdding && (
+                  <View style={[styles.editExpBox, { backgroundColor: colors.surface2, borderColor: colors.brand }]}>
+                    <Text style={[styles.editBoxTitle, { color: colors.brandDark }]}>New expense item</Text>
+                    <View style={styles.editInputGroup}>
+                      <Text style={[styles.inputLabel, { color: colors.muted }]}>Category</Text>
+                      <TextInput
+                        style={[styles.editTextInput, { backgroundColor: colors.surface, color: colors.ink, borderColor: colors.line }]}
+                        placeholder="e.g. Diagnostic Imaging, Consumables"
+                        placeholderTextColor={colors.muted}
+                        value={newCategory}
+                        onChangeText={setNewCategory}
+                        autoFocus
+                      />
+                    </View>
+                    <View style={styles.editInputGroup}>
+                      <Text style={[styles.inputLabel, { color: colors.muted }]}>Amount (₹)</Text>
+                      <TextInput
+                        style={[styles.editTextInput, { backgroundColor: colors.surface, color: colors.ink, borderColor: colors.line }]}
+                        placeholder="e.g. 4500"
+                        placeholderTextColor={colors.muted}
+                        value={newAmount}
+                        onChangeText={setNewAmount}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={styles.editActionsRow}>
+                      <TouchableOpacity
+                        style={[styles.editBtnCancel, { borderColor: colors.line }]}
+                        onPress={handleCancelAdd}
+                        activeOpacity={0.7}
+                      >
+                        <XIcon size={14} color={colors.muted} strokeWidth={2} />
+                        <Text style={[styles.editBtnCancelText, { color: colors.ink }]}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.editBtnSave, { backgroundColor: colors.brand }]}
+                        onPress={handleSaveNewExpense}
+                        activeOpacity={0.8}
+                      >
+                        <Check size={14} color="#ffffff" strokeWidth={2.4} />
+                        <Text style={styles.editBtnSaveText}>Save</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {/* List of expenses */}
+                {expenses.length > 0 ? (
+                  expenses.map(item => {
+                    const isBeingEdited = editingId === item.id;
+
+                    if (isBeingEdited) {
+                      return (
+                        <View
+                          key={item.id}
+                          style={[styles.editExpBox, { backgroundColor: colors.surface2, borderColor: colors.brand }]}
+                        >
+                          <Text style={[styles.editBoxTitle, { color: colors.brandDark }]}>Edit expense</Text>
+                          <View style={styles.editInputGroup}>
+                            <Text style={[styles.inputLabel, { color: colors.muted }]}>Category</Text>
+                            <TextInput
+                              style={[styles.editTextInput, { backgroundColor: colors.surface, color: colors.ink, borderColor: colors.line }]}
+                              placeholder="Category name"
+                              placeholderTextColor={colors.muted}
+                              value={editCategory}
+                              onChangeText={setEditCategory}
+                              autoFocus
+                            />
+                          </View>
+                          <View style={styles.editInputGroup}>
+                            <Text style={[styles.inputLabel, { color: colors.muted }]}>Amount (₹)</Text>
+                            <TextInput
+                              style={[styles.editTextInput, { backgroundColor: colors.surface, color: colors.ink, borderColor: colors.line }]}
+                              placeholder="Amount"
+                              placeholderTextColor={colors.muted}
+                              value={editAmount}
+                              onChangeText={setEditAmount}
+                              keyboardType="numeric"
+                            />
+                          </View>
+                          <View style={styles.editActionsRow}>
+                            <TouchableOpacity
+                              style={[styles.editBtnCancel, { borderColor: colors.line }]}
+                              onPress={handleCancelEdit}
+                              activeOpacity={0.7}
+                            >
+                              <XIcon size={14} color={colors.muted} strokeWidth={2} />
+                              <Text style={[styles.editBtnCancelText, { color: colors.ink }]}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.editBtnSave, { backgroundColor: colors.brand }]}
+                              onPress={() => handleSaveEdit(item.id)}
+                              activeOpacity={0.8}
+                            >
+                              <Check size={14} color="#ffffff" strokeWidth={2.4} />
+                              <Text style={styles.editBtnSaveText}>Save</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      );
+                    }
+
+                    return (
+                      <View key={item.id} style={[styles.expRow, { borderBottomColor: colors.line2 }]}>
+                        <View style={styles.expInfo}>
+                          <Text style={[styles.expCategory, { color: colors.ink }]}>
+                            {item.category}
+                          </Text>
+                        </View>
+                        <Text style={[styles.expAmount, { color: colors.ink }]}>
+                          {formatINR(item.amount)}
+                        </Text>
+                        <View style={styles.expRowActions}>
+                          <TouchableOpacity
+                            style={[styles.expIconBtn, { backgroundColor: colors.surface2 }]}
+                            onPress={() => handleStartEdit(item)}
+                            activeOpacity={0.7}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Pencil size={13} color={colors.brandDark} strokeWidth={2} />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.expIconBtn, { backgroundColor: colors.redSoft }]}
+                            onPress={() => handleDeleteExpense(item)}
+                            activeOpacity={0.7}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Trash2 size={13} color={colors.red} strokeWidth={2} />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    );
+                  })
+                ) : (
+                  <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 12, color: colors.muted, fontStyle: 'italic' }}>
+                      No expenses found. Tap "Add item" to add one.
+                    </Text>
+                  </View>
+                )}
+
+                {/* Total Row */}
+                <View style={[styles.expTotalRow, { borderTopColor: colors.line }]}>
+                  <Text style={[styles.expTotalLabel, { color: colors.ink }]}>Total claimed amount</Text>
+                  <Text style={[styles.expTotalAmount, { color: colors.brandDark }]}>
+                    {formatINR(totalExpense)}
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
+
           {/* Accordion 3: Validation Rules */}
           <View style={[styles.accCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
             <TouchableOpacity
@@ -872,6 +1280,57 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
         {/* Global Bottom Tab Bar matching prototype & screenshot */}
         <GlobalBottomTabBar navigation={navigation} activeTab="claims" />
       </View>
+
+      {/* Delete Expense Confirmation Modal */}
+      <Modal
+        visible={showDeleteExpenseModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowDeleteExpenseModal(false);
+          setDeleteTargetExpense(null);
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <View style={[styles.modalIconBox, { backgroundColor: colors.redSoft }]}>
+              <Trash2 size={24} color={colors.red} />
+            </View>
+
+            <Text style={[styles.modalTitle, { color: colors.ink }]}>Delete expense?</Text>
+
+            <Text style={[styles.modalMessage, { color: colors.muted }]}>
+              Are you sure you want to delete{' '}
+              <Text style={{ fontWeight: '700', color: colors.ink }}>
+                {deleteTargetExpense?.category}
+              </Text>
+              {deleteTargetExpense ? ` (${formatINR(deleteTargetExpense.amount)})` : ''}? This will recalculate the claimed total.
+            </Text>
+
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { borderColor: colors.line, backgroundColor: colors.surface2 }]}
+                onPress={() => {
+                  setShowDeleteExpenseModal(false);
+                  setDeleteTargetExpense(null);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.modalCancelBtnText, { color: colors.ink }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalDeleteBtn}
+                onPress={confirmDeleteExpense}
+                activeOpacity={0.8}
+              >
+                <Trash2 size={16} color="#ffffff" style={{ marginRight: 6 }} />
+                <Text style={styles.modalDeleteBtnText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1171,6 +1630,206 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryBtnText: {
+    color: '#ffffff',
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+  expSubHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 6,
+  },
+  addExpBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  addExpBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  expRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+  },
+  expInfo: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  expCategory: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  expAmount: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginRight: 10,
+  },
+  expRowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  expIconBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editExpBox: {
+    borderRadius: 12,
+    borderWidth: 1.5,
+    padding: 12,
+    marginVertical: 6,
+  },
+  editBoxTitle: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  editInputGroup: {
+    marginBottom: 8,
+  },
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  editTextInput: {
+    height: 38,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  editActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 6,
+  },
+  editBtnCancel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    backgroundColor: 'transparent',
+  },
+  editBtnCancelText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  editBtnSave: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  editBtnSaveText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  expTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 10,
+    marginTop: 4,
+    borderTopWidth: 1.5,
+  },
+  expTotalLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  expTotalAmount: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 13.5,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 18,
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+  },
+  modalCancelBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelBtnText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+  },
+  modalDeleteBtn: {
+    flex: 1,
+    backgroundColor: '#dc2626',
+    borderRadius: 12,
+    paddingVertical: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  modalDeleteBtnText: {
     color: '#ffffff',
     fontSize: 13.5,
     fontWeight: '700',

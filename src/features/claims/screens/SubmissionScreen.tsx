@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Linking,
   StatusBar,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -42,9 +43,27 @@ import { formatINR } from '../../../core/utils/currency';
 import { claimsApi } from '../services/claimsApi';
 
 
+const cleanInsuredName = (raw?: string) => {
+  if (!raw) return '';
+  let cleaned = raw
+    .replace(/^(Name|Patient\s*Name|Patient)\s*[:\-]?\s*/i, '')
+    .replace(/\s+Blood Group.*$/i, '')
+    .trim();
+  const tokens = cleaned.split(/\s+/);
+  const deduplicated: string[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (i === 0 || tokens[i].toLowerCase() !== tokens[i - 1].toLowerCase()) {
+      deduplicated.push(tokens[i]);
+    }
+  }
+  return deduplicated.join(' ');
+};
+
 export const SubmissionScreen = ({ route, navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
+  const isNarrow = windowWidth < 360;
   const claimId = route?.params?.claimId || 'a4f1c9e2';
   const { claims, addOrUpdateClaim } = useClaimsStore();
 
@@ -71,9 +90,6 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
 
   const claim = claims.find(c => c.id === claimId || c.id.startsWith(claimId)) || claims[0] || fallbackClaim;
 
-  // Payer / Adapter state (default 'generic' as in reference prototype)
-  const [payer, setPayer] = useState<'generic' | 'fhir' | 'x12'>('generic');
-  const [showPayerModal, setShowPayerModal] = useState(false);
 
   // IRDAI & TPA Form Render Style (options: 'modern' | 'blank' | 'tpa')
   const [renderStyle, setRenderStyle] = useState<'modern' | 'blank' | 'tpa'>(
@@ -85,9 +101,9 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
 
   // Form Fields - Part A
   const [fPolicy, setFPolicy] = useState(claim.policyNo || 'SAMPLE-PH-77421');
-  const [fName, setFName] = useState(claim.who || 'R. Menon');
+  const [fName, setFName] = useState(cleanInsuredName(claim.who) || 'R. Menon');
   const [fDob, setFDob] = useState('18-04-1972');
-  const [fAdmission, setFAdmission] = useState('12-08-2026');
+  const [fAdmission, setFAdmission] = useState(claim.admissionDate || '12-08-2026');
   const [preAuthYes, setPreAuthYes] = useState(false); // Screenshot shows 'No' selected
   const [fRelation, setFRelation] = useState('Self');
   const [showRelationModal, setShowRelationModal] = useState(false);
@@ -98,7 +114,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
   // Form Fields - Part B
   const [fHospName, setFHospName] = useState(claim.hospital || 'Sunrise Multispecialty');
   const [fHospReg, setFHospReg] = useState('SAMPLE-HOSP-0192');
-  const [fDischarge, setFDischarge] = useState('16-08-2026');
+  const [fDischarge, setFDischarge] = useState(claim.dischargeDate || '16-08-2026');
   const [fRoomCategory, setFRoomCategory] = useState('Single private');
   const [showRoomModal, setShowRoomModal] = useState(false);
   const [emergencyYes, setEmergencyYes] = useState(true); // Screenshot shows 'Yes' selected
@@ -295,27 +311,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
     setShowSuccessModal(true);
   };
 
-  const getPayerLabel = () => {
-    switch (payer) {
-      case 'generic':
-        return 'generic (default) · TPA PDF + IRDAI form';
-      case 'fhir':
-        return 'Sample Health TPA · FHIR R4';
-      case 'x12':
-        return 'Sample Insurer · X12 837P';
-    }
-  };
-
-  const getSubmitButtonLabel = () => {
-    switch (payer) {
-      case 'generic':
-        return 'Submit · generic';
-      case 'fhir':
-        return 'Submit · FHIR R4';
-      case 'x12':
-        return 'Submit · X12 837P';
-    }
-  };
+  const getSubmitButtonLabel = () => 'Submit Claim';
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bg }]} edges={['top']}>
@@ -364,97 +360,76 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Card 1: Payer · adapter */}
+        {/* IRDAI & TPA Form Render Style */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <Text style={[styles.fieldLabel, { color: colors.muted }]}>Payer · adapter</Text>
+          <View style={styles.secRow}>
+            <Text style={[styles.secTitle, { color: colors.ink }]}>
+              {renderStyle === 'tpa' ? 'TPA Report & Form Style' : 'IRDAI form render style'}
+            </Text>
+            <Text style={[styles.rendererHdr, { color: colors.muted }]}>
+              {renderStyle === 'tpa' ? 'Report: TPA-Audit' : `X-IRDA-Renderer: ${renderStyle}`}
+            </Text>
+          </View>
+
+          {/* 3-segment switcher: modern | blank | tpa */}
+          <View style={[styles.segGroup, { borderColor: colors.line }]}>
+            {(['modern', 'blank', 'tpa'] as const).map((styleOpt) => {
+              const isSelected = renderStyle === styleOpt;
+              return (
+                <TouchableOpacity
+                  key={styleOpt}
+                  style={[
+                    styles.segOption,
+                    isSelected && { backgroundColor: colors.brand },
+                  ]}
+                  onPress={() => setRenderStyle(styleOpt)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.segOptionText,
+                      {
+                        color: isSelected ? colors.onBrand : colors.muted,
+                        fontWeight: isSelected ? '700' : '600',
+                      },
+                    ]}
+                  >
+                    {styleOpt}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Info banner when tpa is active */}
+          {renderStyle === 'tpa' && (
+            <View style={[styles.bannerWarn, { backgroundColor: colors.brandSoft, borderColor: colors.brand }]}>
+              <FileText size={15} color={colors.brandDark} style={styles.bannerIcon} />
+              <Text style={[styles.bannerWarnText, { color: colors.brandDark }]}>
+                TPA Comprehensive Audit Report: AI-powered medical claim verification, clinical coding audit &amp; cost reconciliation dossier.
+              </Text>
+            </View>
+          )}
+
+          <Text style={[styles.subNote, { color: colors.muted }]}>
+            modern = WeasyPrint IRDAI Claim Form (Part A &amp; B) · blank = Empty template · tpa = TPA Comprehensive Audit Report
+          </Text>
+
           <TouchableOpacity
-            style={[styles.selectBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}
-            onPress={() => setShowPayerModal(true)}
+            style={[styles.irdaFormCardBtn, { borderColor: colors.line, backgroundColor: colors.surface2 }]}
+            onPress={() => {
+              setShowPdfModal(true);
+              loadIrdaPdf(renderStyle);
+            }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.selectBoxText, { color: colors.ink }]} numberOfLines={1}>
-              {getPayerLabel()}
+            <FileText size={16} color={colors.brandDark} />
+            <Text style={[styles.irdaFormCardBtnText, { color: colors.brandDark }]}>
+              {renderStyle === 'tpa' ? 'View TPA Audit Report' : 'View IRDAI Claim Form'}
             </Text>
-            <ChevronDown size={16} color={colors.muted} />
+            <ExternalLink size={14} color={colors.brandDark} style={{ marginLeft: 'auto' }} />
           </TouchableOpacity>
-
-          <Text style={[styles.monoSubtext, { color: colors.muted }]}>
-            SUBMISSION_DEFAULT_PAYER=generic · endpoints from FHIR_ENDPOINT / X12_ENDPOINT
-          </Text>
         </View>
-
-        {/* Card 2: IRDAI form render style (visible when payer === 'generic') */}
-        {payer === 'generic' && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-            <View style={styles.secRow}>
-              <Text style={[styles.secTitle, { color: colors.ink }]}>
-                {renderStyle === 'tpa' ? 'TPA Report & Form Style' : 'IRDAI form render style'}
-              </Text>
-              <Text style={[styles.rendererHdr, { color: colors.muted }]}>
-                {renderStyle === 'tpa' ? 'Report: TPA-Audit' : `X-IRDA-Renderer: ${renderStyle}`}
-              </Text>
-            </View>
-
-            {/* 3-segment switcher: modern | blank | tpa */}
-            <View style={[styles.segGroup, { borderColor: colors.line }]}>
-              {(['modern', 'blank', 'tpa'] as const).map((styleOpt) => {
-                const isSelected = renderStyle === styleOpt;
-                return (
-                  <TouchableOpacity
-                    key={styleOpt}
-                    style={[
-                      styles.segOption,
-                      isSelected && { backgroundColor: colors.brand },
-                    ]}
-                    onPress={() => setRenderStyle(styleOpt)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.segOptionText,
-                        {
-                          color: isSelected ? colors.onBrand : colors.muted,
-                          fontWeight: isSelected ? '700' : '600',
-                        },
-                      ]}
-                    >
-                      {styleOpt}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Info banner when tpa is active */}
-            {renderStyle === 'tpa' && (
-              <View style={[styles.bannerWarn, { backgroundColor: colors.brandSoft, borderColor: colors.brand }]}>
-                <FileText size={15} color={colors.brandDark} style={styles.bannerIcon} />
-                <Text style={[styles.bannerWarnText, { color: colors.brandDark }]}>
-                  TPA Comprehensive Audit Report: AI-powered medical claim verification, clinical coding audit &amp; cost reconciliation dossier.
-                </Text>
-              </View>
-            )}
-
-            <Text style={[styles.subNote, { color: colors.muted }]}>
-              modern = WeasyPrint IRDAI Claim Form (Part A &amp; B) · blank = Empty template · tpa = TPA Comprehensive Audit Report
-            </Text>
-
-            <TouchableOpacity
-              style={[styles.irdaFormCardBtn, { borderColor: colors.line, backgroundColor: colors.surface2 }]}
-              onPress={() => {
-                setShowPdfModal(true);
-                loadIrdaPdf(renderStyle);
-              }}
-              activeOpacity={0.7}
-            >
-              <FileText size={16} color={colors.brandDark} />
-              <Text style={[styles.irdaFormCardBtnText, { color: colors.brandDark }]}>
-                {renderStyle === 'tpa' ? 'View TPA Audit Report' : 'View IRDAI Claim Form'}
-              </Text>
-              <ExternalLink size={14} color={colors.brandDark} style={{ marginLeft: 'auto' }} />
-            </TouchableOpacity>
-          </View>
-        )}
 
 
         {/* Part A vs Part B Selector Tabs */}
@@ -518,9 +493,9 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                 />
               </View>
 
-              {/* Two-column grid: Date of birth & Date of admission */}
-              <View style={styles.grid2}>
-                <View style={styles.field}>
+              {/* Responsive grid: Date of birth & Date of admission */}
+              <View style={[styles.grid2, isNarrow && styles.gridStacked]}>
+                <View style={[styles.gridCol, isNarrow && styles.gridColStacked]}>
                   <Text style={[styles.fieldLabel, { color: colors.muted }]}>Date of birth</Text>
                   <View style={[styles.dateInpWrap, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
                     <TextInput
@@ -529,12 +504,15 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                       onChangeText={setFDob}
                       placeholder="DD-MM-YYYY"
                       placeholderTextColor={colors.muted}
+                      maxLength={10}
+                      autoCorrect={false}
+                      autoCapitalize="none"
                     />
-                    <Calendar size={15} color={colors.muted} />
+                    <Calendar size={15} color={colors.muted} style={styles.dateIcon} />
                   </View>
                 </View>
 
-                <View style={styles.field}>
+                <View style={[styles.gridCol, isNarrow && styles.gridColStacked]}>
                   <Text style={[styles.fieldLabel, { color: colors.muted }]}>Date of admission</Text>
                   <View style={[styles.dateInpWrap, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
                     <TextInput
@@ -543,8 +521,11 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                       onChangeText={setFAdmission}
                       placeholder="DD-MM-YYYY"
                       placeholderTextColor={colors.muted}
+                      maxLength={10}
+                      autoCorrect={false}
+                      autoCapitalize="none"
                     />
-                    <Calendar size={15} color={colors.muted} />
+                    <Calendar size={15} color={colors.muted} style={styles.dateIcon} />
                   </View>
                 </View>
               </View>
@@ -719,9 +700,9 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                 />
               </View>
 
-              {/* Two-column grid: Date of discharge & Room category */}
-              <View style={styles.grid2}>
-                <View style={styles.field}>
+              {/* Responsive grid: Date of discharge & Room category */}
+              <View style={[styles.grid2, isNarrow && styles.gridStacked]}>
+                <View style={[styles.gridCol, isNarrow && styles.gridColStacked]}>
                   <Text style={[styles.fieldLabel, { color: colors.muted }]}>Date of discharge</Text>
                   <View style={[styles.dateInpWrap, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
                     <TextInput
@@ -730,12 +711,15 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                       onChangeText={setFDischarge}
                       placeholder="DD-MM-YYYY"
                       placeholderTextColor={colors.muted}
+                      maxLength={10}
+                      autoCorrect={false}
+                      autoCapitalize="none"
                     />
-                    <Calendar size={15} color={colors.muted} />
+                    <Calendar size={15} color={colors.muted} style={styles.dateIcon} />
                   </View>
                 </View>
 
-                <View style={styles.field}>
+                <View style={[styles.gridCol, isNarrow && styles.gridColStacked]}>
                   <Text style={[styles.fieldLabel, { color: colors.muted }]}>Room category</Text>
                   <TouchableOpacity
                     style={[styles.selectBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}
@@ -745,7 +729,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                     <Text style={[styles.selectBoxText, { color: colors.ink }]} numberOfLines={1}>
                       {fRoomCategory}
                     </Text>
-                    <ChevronDown size={15} color={colors.muted} />
+                    <ChevronDown size={15} color={colors.muted} style={{ flexShrink: 0 }} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -841,43 +825,6 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
         </View>
       )}
 
-      {/* Payer Selector Modal */}
-      <Modal transparent visible={showPayerModal} animationType="fade" onRequestClose={() => setShowPayerModal(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowPayerModal(false)}>
-          <View style={[styles.pickerModalCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-            <Text style={[styles.pickerModalTitle, { color: colors.ink }]}>Select Payer Adapter</Text>
-            {[
-              { id: 'generic', title: 'generic (default) · TPA PDF + IRDAI form' },
-              { id: 'fhir', title: 'Sample Health TPA · FHIR R4' },
-              { id: 'x12', title: 'Sample Insurer · X12 837P' },
-            ].map((opt) => (
-              <TouchableOpacity
-                key={opt.id}
-                style={[
-                  styles.pickerOptionRow,
-                  { borderBottomColor: colors.line2 },
-                  payer === opt.id && { backgroundColor: colors.brandSoft },
-                ]}
-                onPress={() => {
-                  setPayer(opt.id as any);
-                  setShowPayerModal(false);
-                  showToast(`Payer set to ${opt.id}`);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.pickerOptionText,
-                    { color: payer === opt.id ? colors.brandDark : colors.ink, fontWeight: payer === opt.id ? '700' : '500' },
-                  ]}
-                >
-                  {opt.title}
-                </Text>
-                {payer === opt.id && <Check size={16} color={colors.brand} strokeWidth={2.6} />}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
 
       {/* Relationship Selector Modal */}
       <Modal transparent visible={showRelationModal} animationType="fade" onRequestClose={() => setShowRelationModal(false)}>
@@ -965,7 +912,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
               Submit claim {claim.id.slice(0, 8)}?
             </Text>
             <Text style={[styles.modalBody, { color: colors.muted }]}>
-              POST /submission/submit/{claim.id.slice(0, 8)} · payer {payer} (TPA PDF + IRDAI {renderStyle}). The submission is written to the submissions table and audited.
+              POST /submission/submit/{claim.id.slice(0, 8)} · IRDAI &amp; TPA dossier ({renderStyle}). The submission is written to the submissions table and audited.
             </Text>
             <View style={styles.modalBtnRow}>
               <TouchableOpacity
@@ -1021,7 +968,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
               <View style={[styles.receiptRow, { borderBottomWidth: 0 }]}>
                 <Text style={[styles.receiptLabel, { color: colors.muted }]}>Payer Gateway</Text>
                 <Text style={[styles.receiptVal, { color: colors.green }]}>
-                  {payer === 'generic' ? 'IRDAI Electronic Portal' : payer.toUpperCase()}
+                  IRDAI Electronic Portal
                 </Text>
               </View>
             </View>
@@ -1355,32 +1302,54 @@ const styles = StyleSheet.create({
   },
   grid2: {
     flexDirection: 'row',
-    gap: 9,
+    gap: 10,
+    width: '100%',
+  },
+  gridStacked: {
+    flexDirection: 'column',
+    gap: 0,
+  },
+  gridCol: {
+    flex: 1,
+    minWidth: 0,
+    marginBottom: 11,
+  },
+  gridColStacked: {
+    flex: 0,
+    width: '100%',
   },
   dateInpWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 11,
     paddingVertical: 10,
     borderRadius: 11,
     borderWidth: 1,
+    minHeight: 44,
   },
   dateInp: {
     flex: 1,
-    fontSize: 13.5,
+    fontSize: 13,
     padding: 0,
+    minWidth: 0,
+  },
+  dateIcon: {
+    marginLeft: 6,
+    flexShrink: 0,
   },
   selectBox: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 11,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
     borderRadius: 11,
     borderWidth: 1,
+    minHeight: 44,
   },
   selectBoxText: {
-    fontSize: 13.5,
+    fontSize: 13,
     flex: 1,
     marginRight: 6,
   },

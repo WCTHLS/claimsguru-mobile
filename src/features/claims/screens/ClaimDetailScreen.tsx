@@ -29,9 +29,7 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
   const { colors } = useTheme();
   const claimId = route?.params?.claimId || '3f8a1d6c-52b4-4e7a-9c11-0d5e2ab77104';
   const { claims, deleteClaim, addOrUpdateClaim } = useClaimsStore();
-  const [activeTab, setActiveTab] = useState<'Summary' | 'Expenses'>('Summary');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [liveExpenses, setLiveExpenses] = useState<{ category: string; amount: number }[] | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -120,14 +118,6 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
             }
           }
         }
-
-        if (previewData && previewData.expenses && previewData.expenses.length > 0) {
-          const formatted = previewData.expenses.map((e: any) => ({
-            category: e.category || 'Medical expense',
-            amount: Math.round(e.amount || 0),
-          }));
-          setLiveExpenses(formatted);
-        }
       } catch (err: any) {
         console.log('[ClaimDetailScreen] Backend fetch error:', err?.message || err);
       }
@@ -171,18 +161,6 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
   const statusBg = isFailed ? colors.redSoft : isRunning ? colors.amberSoft : colors.greenSoft;
   const statusColor = isFailed ? colors.red : isRunning ? colors.amber : colors.green;
   const statusLabel = isFailed ? 'FAILED' : isRunning ? 'PROCESSING' : 'COMPLETE';
-
-  const defaultExpenses = [
-    { category: 'Room', amount: 3200 },
-    { category: 'Consultation', amount: 1500 },
-    { category: 'Pharmacy', amount: 12300 },
-    { category: 'Lab & Diagnostics', amount: 7800 },
-    { category: 'OT & Nursing', amount: 5700 },
-    { category: 'Consumables', amount: 7095 },
-  ];
-
-  const expenses = liveExpenses || defaultExpenses;
-  const totalExpense = expenses.reduce((acc, item) => acc + item.amount, 0);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>
@@ -315,124 +293,64 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
             </View>
           </View>
 
-          {/* 2 Segmented Tabs */}
-          <View style={[styles.tabsContainer, { backgroundColor: colors.surface2 }]}>
-            {(['Summary', 'Expenses'] as const).map(tab => {
-              const isSelected = activeTab === tab;
-              return (
-                <TouchableOpacity
-                  key={tab}
-                  style={[
-                    styles.tabBtn,
-                    isSelected && [styles.tabBtnOn, { backgroundColor: colors.surface }],
-                  ]}
-                  onPress={() => setActiveTab(tab)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.tabBtnText,
-                      {
-                        color: isSelected ? colors.brandDark : colors.muted,
-                        fontWeight: isSelected ? '700' : '500',
-                      },
-                    ]}
-                  >
-                    {tab}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+          {/* Summary Card */}
+          <View style={[styles.card, styles.summaryCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <View style={[styles.kvRow, { borderBottomColor: colors.line }]}>
+              <Text style={[styles.kvKey, { color: colors.muted }]}>Policy number</Text>
+              <Text style={[styles.kvVal, styles.mono, { color: colors.ink }]}>
+                {claim.policyNo || 'P-0007401'}
+              </Text>
+            </View>
+
+            <View style={[styles.kvRow, { borderBottomColor: colors.line }]}>
+              <Text style={[styles.kvKey, { color: colors.muted }]}>Insurer / TPA</Text>
+              <Text style={[styles.kvVal, { color: colors.ink }]}>
+                {claim.hospital?.includes('Government') ? 'PMJAY / State TPA' : 'ClaimsGuru Health TPA'}
+              </Text>
+            </View>
+
+            <View style={[styles.kvRow, { borderBottomColor: colors.line }]}>
+              <Text style={[styles.kvKey, { color: colors.muted }]}>Admission</Text>
+              <Text style={[styles.kvVal, { color: colors.ink }]}>
+                {claim.admissionDate || '12 Feb 2024'}
+              </Text>
+            </View>
+
+            <View style={[styles.kvRow, { borderBottomColor: colors.line }]}>
+              <Text style={[styles.kvKey, { color: colors.muted }]}>Discharge</Text>
+              <Text style={[styles.kvVal, { color: colors.ink }]}>
+                {claim.dischargeDate || '15 Feb 2024'}
+              </Text>
+            </View>
+
+            <View style={[styles.kvRow, { borderBottomColor: colors.line }]}>
+              <Text style={[styles.kvKey, { color: colors.muted }]}>Primary diagnosis</Text>
+              <Text style={[styles.kvVal, { color: colors.ink }]}>
+                {claim.diagnosis || 'Hypothyroidism COPD Exacerbation'}
+              </Text>
+            </View>
+
+            <View style={[styles.kvRow, { borderBottomColor: colors.line }]}>
+              <Text style={[styles.kvKey, { color: colors.muted }]}>Treating doctor</Text>
+              <Text style={[styles.kvVal, { color: colors.ink }]}>
+                {claim.doctor || 'Dr. Attending Physician'}
+              </Text>
+            </View>
+
+            <View style={[styles.kvRow, { borderBottomColor: colors.line }]}>
+              <Text style={[styles.kvKey, { color: colors.muted }]}>Amount claimed</Text>
+              <Text style={[styles.kvVal, { color: colors.ink }]}>
+                {formatINR(claim.amt || 37595)}
+              </Text>
+            </View>
+
+            <View style={[styles.kvRow, { borderBottomWidth: 0 }]}>
+              <Text style={[styles.kvKey, { color: colors.muted }]}>Fields parsed</Text>
+              <Text style={[styles.kvVal, { color: colors.ink }]}>
+                {claim.fieldsParsed || '36 fields'}
+              </Text>
+            </View>
           </View>
-
-          {/* Tab 1: Summary */}
-          {activeTab === 'Summary' && (
-            <View style={[styles.card, styles.summaryCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-              <View style={styles.kvRow}>
-                <Text style={[styles.kvKey, { color: colors.muted }]}>Policy number</Text>
-                <Text style={[styles.kvVal, styles.mono, { color: colors.ink }]}>
-                  {claim.policyNo || 'P-0007401'}
-                </Text>
-              </View>
-
-              <View style={styles.kvRow}>
-                <Text style={[styles.kvKey, { color: colors.muted }]}>Insurer / TPA</Text>
-                <Text style={[styles.kvVal, { color: colors.ink }]}>
-                  {claim.hospital?.includes('Government') ? 'PMJAY / State TPA' : 'ClaimsGuru Health TPA'}
-                </Text>
-              </View>
-
-              <View style={styles.kvRow}>
-                <Text style={[styles.kvKey, { color: colors.muted }]}>Admission</Text>
-                <Text style={[styles.kvVal, { color: colors.ink }]}>
-                  {claim.admissionDate || '12 Feb 2024'}
-                </Text>
-              </View>
-
-              <View style={styles.kvRow}>
-                <Text style={[styles.kvKey, { color: colors.muted }]}>Discharge</Text>
-                <Text style={[styles.kvVal, { color: colors.ink }]}>
-                  {claim.dischargeDate || '15 Feb 2024'}
-                </Text>
-              </View>
-
-              <View style={styles.kvRow}>
-                <Text style={[styles.kvKey, { color: colors.muted }]}>Primary diagnosis</Text>
-                <Text style={[styles.kvVal, { color: colors.ink }]}>
-                  {claim.diagnosis || 'Hypothyroidism COPD Exacerbation'}
-                </Text>
-              </View>
-
-              <View style={styles.kvRow}>
-                <Text style={[styles.kvKey, { color: colors.muted }]}>Treating doctor</Text>
-                <Text style={[styles.kvVal, { color: colors.ink }]}>
-                  {claim.doctor || 'Dr. Attending Physician'}
-                </Text>
-              </View>
-
-              <View style={styles.kvRow}>
-                <Text style={[styles.kvKey, { color: colors.muted }]}>Amount claimed</Text>
-                <Text style={[styles.kvVal, { color: colors.ink }]}>
-                  {formatINR(claim.amt || 37595)}
-                </Text>
-              </View>
-
-              <View style={[styles.kvRow, { borderBottomWidth: 0 }]}>
-                <Text style={[styles.kvKey, { color: colors.muted }]}>Fields parsed</Text>
-                <Text style={[styles.kvVal, { color: colors.ink }]}>
-                  {claim.fieldsParsed || '36 fields'}
-                </Text>
-              </View>
-            </View>
-          )}
-
-          {/* Tab 2: Expenses */}
-          {activeTab === 'Expenses' && (
-            <View style={[styles.card, styles.summaryCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-              <View style={styles.expHeaderRow}>
-                <Text style={[styles.expHeaderTitle, { color: colors.ink }]}>
-                  {expenses.length} expense categories
-                </Text>
-                <Text style={[styles.expHeaderSub, { color: colors.muted }]}>Sample amounts</Text>
-              </View>
-
-              {expenses.map((item, idx) => (
-                <View key={idx} style={styles.kvRow}>
-                  <Text style={[styles.kvKey, { color: colors.muted }]}>{item.category}</Text>
-                  <Text style={[styles.kvVal, { color: colors.ink }]}>
-                    {formatINR(item.amount)}
-                  </Text>
-                </View>
-              ))}
-
-              <View style={[styles.kvRow, styles.totalRow, { borderTopColor: colors.line }]}>
-                <Text style={[styles.totalKey, { color: colors.ink }]}>Total</Text>
-                <Text style={[styles.totalVal, { color: colors.ink }]}>
-                  {formatINR(totalExpense)}
-                </Text>
-              </View>
-            </View>
-          )}
 
 
         </ScrollView>
@@ -643,80 +561,31 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     fontWeight: '600',
   },
-  tabsContainer: {
-    flexDirection: 'row',
-    borderRadius: 11,
-    padding: 3,
-    gap: 3,
-    marginBottom: 11,
-  },
-  tabBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 9,
-  },
-  tabBtnOn: {
-    shadowColor: '#102030',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  tabBtnText: {
-    fontSize: 12,
-  },
   summaryCard: {
     paddingHorizontal: 14,
     paddingVertical: 4,
   },
   kvRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingVertical: 9.5,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#eef2f6',
+    gap: 12,
   },
   kvKey: {
-    fontSize: 12.2,
+    fontSize: 12.5,
+    flexShrink: 0,
+    maxWidth: '42%',
+    lineHeight: 18,
   },
   kvVal: {
-    fontSize: 12.2,
-    fontWeight: '700',
-    textAlign: 'right',
-  },
-  expHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eef2f6',
-  },
-  expHeaderTitle: {
     fontSize: 12.5,
     fontWeight: '700',
-  },
-  expHeaderSub: {
-    fontSize: 10,
-    textTransform: 'uppercase',
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  totalRow: {
-    borderTopWidth: 2,
-    marginTop: 4,
-    borderBottomWidth: 0,
-  },
-  totalKey: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  totalVal: {
-    fontSize: 15,
-    fontWeight: '800',
+    textAlign: 'right',
+    flex: 1,
+    flexShrink: 1,
+    lineHeight: 18,
   },
 
   toast: {

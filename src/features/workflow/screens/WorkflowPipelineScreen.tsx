@@ -690,19 +690,26 @@ const styles = StyleSheet.create({
   },
   kvRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#eef2f6',
+    gap: 12,
   },
   kvKey: {
     fontSize: 12.5,
+    flexShrink: 0,
+    maxWidth: '42%',
+    lineHeight: 18,
   },
   kvVal: {
     fontSize: 12.5,
     fontWeight: '700',
     textAlign: 'right',
+    flex: 1,
+    flexShrink: 1,
+    lineHeight: 18,
   },
   indexPill: {
     paddingHorizontal: 8,
