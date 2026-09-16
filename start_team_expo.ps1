@@ -6,7 +6,9 @@
 param (
     [switch]$Tunnel = $false,
     [switch]$Clear = $true,
-    [switch]$Local = $false
+    [switch]$Local = $false,
+    [string]$ApiUrl = "",
+    [switch]$ForceEnv = $false
 )
 
 $ErrorActionPreference = "Continue"
@@ -16,6 +18,8 @@ Write-Host "==========================================================" -Foregro
 Write-Host " ClaimsGuru Mobile Stack - Team Expo Server" -ForegroundColor Cyan
 if ($Local) {
     Write-Host " (Mode: Local Docker Stack)" -ForegroundColor Yellow
+} elseif ($ApiUrl) {
+    Write-Host " (Mode: Custom API URL)" -ForegroundColor Yellow
 } else {
     Write-Host " (Mode: Azure Pre-Prod Cloud Backend)" -ForegroundColor Green
 }
@@ -33,23 +37,45 @@ $wifiEntry = Get-NetIPAddress -AddressFamily IPv4 | Where-Object {
 $wifiIp = if ($wifiEntry) { $wifiEntry.IPAddress } else { "192.168.0.110" }
 $env:REACT_NATIVE_PACKAGER_HOSTNAME = $wifiIp
 
-# Default to Azure Pre-Prod Ingress Gateway
-$apiUrl = "https://cg-preprod-cin-ingress.purpleocean-4441f644.centralindia.azurecontainerapps.io"
-
-if ($Local) {
-    $apiUrl = "http://$($wifiIp):8000"
-}
-
-# Update .env for mobile client
 $envPath = Join-Path $ProjectRoot ".env"
-$envContent = @"
+$defaultPreprodUrl = "https://cg-preprod-cin-ingress.purpleocean-4441f644.centralindia.azurecontainerapps.io"
+$activeApiUrl = $defaultPreprodUrl
+
+if ($ApiUrl) {
+    $activeApiUrl = $ApiUrl
+    $envContent = @"
 # ClaimsGuru Mobile Environment Configuration
 EXPO_PUBLIC_ENABLE_ENTRA_ID=false
-EXPO_PUBLIC_API_URL=$apiUrl
+EXPO_PUBLIC_API_URL=$activeApiUrl
 "@
-Set-Content -Path $envPath -Value $envContent -Force
+    Set-Content -Path $envPath -Value $envContent -Force
+} elseif ($Local) {
+    $activeApiUrl = "http://$($wifiIp):8000"
+    $envContent = @"
+# ClaimsGuru Mobile Environment Configuration
+EXPO_PUBLIC_ENABLE_ENTRA_ID=false
+EXPO_PUBLIC_API_URL=$activeApiUrl
+"@
+    Set-Content -Path $envPath -Value $envContent -Force
+} elseif ($ForceEnv -or -not (Test-Path $envPath)) {
+    $activeApiUrl = $defaultPreprodUrl
+    $envContent = @"
+# ClaimsGuru Mobile Environment Configuration
+EXPO_PUBLIC_ENABLE_ENTRA_ID=false
+EXPO_PUBLIC_API_URL=$activeApiUrl
+"@
+    Set-Content -Path $envPath -Value $envContent -Force
+} else {
+    # .env exists: preserve user's manual edits (do not overwrite!)
+    $envLines = Get-Content $envPath
+    foreach ($line in $envLines) {
+        if ($line -match '^\s*EXPO_PUBLIC_API_URL\s*=\s*(.+)$') {
+            $activeApiUrl = $matches[1].Trim()
+        }
+    }
+}
 
-Write-Host "Active Backend API: $apiUrl" -ForegroundColor Green
+Write-Host "Active Backend API: $activeApiUrl" -ForegroundColor Green
 Write-Host ""
 Write-Host "Starting Expo Go Server for your team..." -ForegroundColor Yellow
 Write-Host "Scan the QR code with Expo Go on Android or Camera on iOS." -ForegroundColor Cyan

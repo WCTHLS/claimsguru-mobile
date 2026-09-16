@@ -12,6 +12,7 @@ import {
   PanResponder,
   ActivityIndicator,
   Linking,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -33,15 +34,17 @@ import {
   Eye,
 } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
+import { WebView } from 'react-native-webview';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useClaimsStore } from '../../../state/useClaimsStore';
 import { Routes } from '../../../app/navigation/routes';
 import { formatINR } from '../../../core/utils/currency';
 import { claimsApi } from '../services/claimsApi';
 
+
 export const SubmissionScreen = ({ route, navigation }: any) => {
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const claimId = route?.params?.claimId || 'a4f1c9e2';
   const { claims, addOrUpdateClaim } = useClaimsStore();
 
@@ -72,9 +75,9 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
   const [payer, setPayer] = useState<'generic' | 'fhir' | 'x12'>('generic');
   const [showPayerModal, setShowPayerModal] = useState(false);
 
-  // IRDAI & TPA Form Render Style (default 'legacy' as in screenshot, options: 'modern' | 'legacy' | 'blank' | 'tpa')
-  const [renderStyle, setRenderStyle] = useState<'modern' | 'legacy' | 'blank' | 'tpa'>(
-    route?.params?.initialStyle || 'legacy'
+  // IRDAI & TPA Form Render Style (options: 'modern' | 'blank' | 'tpa')
+  const [renderStyle, setRenderStyle] = useState<'modern' | 'blank' | 'tpa'>(
+    route?.params?.initialStyle === 'tpa' ? 'tpa' : route?.params?.initialStyle === 'blank' ? 'blank' : 'modern'
   );
 
   // Part A vs Part B Tabs
@@ -176,7 +179,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
     setChecklist((prev) => ({ ...prev, [k]: !prev[k] }));
   };
 
-  const loadIrdaPdf = async (styleOverride?: 'modern' | 'legacy' | 'blank' | 'tpa') => {
+  const loadIrdaPdf = async (styleOverride?: 'modern' | 'blank' | 'tpa') => {
     const targetStyle = styleOverride || renderStyle;
 
     setPdfLoading(true);
@@ -189,8 +192,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
         setPdfFilename(res.filename);
       } else {
         const isBlank = targetStyle === 'blank';
-        const effectiveStyle = isBlank ? 'modern' : targetStyle;
-        const res = await claimsApi.fetchIrdaPdfBlob(claim.id, effectiveStyle, isBlank);
+        const res = await claimsApi.fetchIrdaPdfBlob(claim.id, 'modern', isBlank);
         setPdfBlobUrl(res.url);
         setPdfFilename(res.filename);
       }
@@ -207,7 +209,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
     loadIrdaPdf();
   };
 
-  const handleSwitchPreviewStyle = (newStyle: 'modern' | 'legacy' | 'blank' | 'tpa') => {
+  const handleSwitchPreviewStyle = (newStyle: 'modern' | 'blank' | 'tpa') => {
     setRenderStyle(newStyle);
     loadIrdaPdf(newStyle);
   };
@@ -227,8 +229,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
         directUrl = claimsApi.getTpaPdfUrl(claim.id, 'modern', false);
       } else {
         const isBlank = renderStyle === 'blank';
-        const effectiveStyle = isBlank ? 'modern' : renderStyle;
-        directUrl = claimsApi.getIrdaPdfUrl(claim.id, effectiveStyle, isBlank, false);
+        directUrl = claimsApi.getIrdaPdfUrl(claim.id, 'modern', isBlank, false);
       }
       Linking.openURL(directUrl).catch(() => {
         showToast('Unable to trigger download');
@@ -236,35 +237,25 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
     }
   };
 
+  const getDirectPdfUrl = () => {
+    if (renderStyle === 'tpa') {
+      return claimsApi.getTpaPdfUrl(claim.id, 'modern', true);
+    }
+    const isBlank = renderStyle === 'blank';
+    return claimsApi.getIrdaPdfUrl(claim.id, 'modern', isBlank, true);
+  };
+
   const handleOpenPdfExternal = () => {
+    const directUrl = getDirectPdfUrl();
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       if (pdfBlobUrl) {
         window.open(pdfBlobUrl, '_blank');
       } else {
-        let directUrl = '';
-        if (renderStyle === 'tpa') {
-          directUrl = claimsApi.getTpaPdfUrl(claim.id, 'modern', true);
-        } else {
-          const isBlank = renderStyle === 'blank';
-          const effectiveStyle = isBlank ? 'modern' : renderStyle;
-          directUrl = claimsApi.getIrdaPdfUrl(claim.id, effectiveStyle, isBlank, true);
-        }
         window.open(directUrl, '_blank');
       }
     } else {
-      let directUrl = '';
-      if (renderStyle === 'tpa') {
-        directUrl = claimsApi.getTpaPdfUrl(claim.id, 'modern', true);
-      } else {
-        const isBlank = renderStyle === 'blank';
-        const effectiveStyle = isBlank ? 'modern' : renderStyle;
-        directUrl = claimsApi.getIrdaPdfUrl(claim.id, effectiveStyle, isBlank, true);
-      }
-      const viewerUrl = directUrl.startsWith('https://')
-        ? `https://docs.google.com/viewer?url=${encodeURIComponent(directUrl)}`
-        : directUrl;
-      Linking.openURL(viewerUrl).catch(() => {
-        showToast('Unable to open external viewer');
+      Linking.openURL(directUrl).catch(() => {
+        showToast('Unable to open document');
       });
     }
   };
@@ -278,8 +269,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
         title = pdfFilename || `TPA_Audit_${claim.id.slice(0, 8)}.pdf`;
       } else {
         const isBlank = renderStyle === 'blank';
-        const effectiveStyle = isBlank ? 'modern' : renderStyle;
-        directUrl = claimsApi.getIrdaPdfUrl(claim.id, effectiveStyle, isBlank, true);
+        directUrl = claimsApi.getIrdaPdfUrl(claim.id, 'modern', isBlank, true);
         title = pdfFilename || `IRDAI_Claim_${claim.id.slice(0, 8)}.pdf`;
       }
       await Share.share({
@@ -405,9 +395,9 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
               </Text>
             </View>
 
-            {/* 4-segment switcher: modern | legacy | blank | tpa */}
+            {/* 3-segment switcher: modern | blank | tpa */}
             <View style={[styles.segGroup, { borderColor: colors.line }]}>
-              {(['modern', 'legacy', 'blank', 'tpa'] as const).map((styleOpt) => {
+              {(['modern', 'blank', 'tpa'] as const).map((styleOpt) => {
                 const isSelected = renderStyle === styleOpt;
                 return (
                   <TouchableOpacity
@@ -435,16 +425,6 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
               })}
             </View>
 
-            {/* Warning banner when legacy is active */}
-            {renderStyle === 'legacy' && (
-              <View style={[styles.bannerWarn, { backgroundColor: colors.amberSoft }]}>
-                <AlertTriangle size={15} color={colors.amber} style={styles.bannerIcon} />
-                <Text style={[styles.bannerWarnText, { color: colors.amber }]}>
-                  modern_available: false — WeasyPrint libraries missing on the server. Falling back to the fpdf2 legacy renderer (X-IRDA-Renderer: legacy).
-                </Text>
-              </View>
-            )}
-
             {/* Info banner when tpa is active */}
             {renderStyle === 'tpa' && (
               <View style={[styles.bannerWarn, { backgroundColor: colors.brandSoft, borderColor: colors.brand }]}>
@@ -456,7 +436,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
             )}
 
             <Text style={[styles.subNote, { color: colors.muted }]}>
-              modern = WeasyPrint with 70+ AcroForm widgets · legacy = fpdf2 fallback · blank = ?blank=1 template · tpa = TPA Comprehensive Audit Report
+              modern = WeasyPrint IRDAI Claim Form (Part A &amp; B) · blank = Empty template · tpa = TPA Comprehensive Audit Report
             </Text>
 
             <TouchableOpacity
@@ -469,7 +449,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
             >
               <FileText size={16} color={colors.brandDark} />
               <Text style={[styles.irdaFormCardBtnText, { color: colors.brandDark }]}>
-                {renderStyle === 'tpa' ? 'View TPA Audit Report' : `View IRDA Form (${renderStyle})`}
+                {renderStyle === 'tpa' ? 'View TPA Audit Report' : 'View IRDAI Claim Form'}
               </Text>
               <ExternalLink size={14} color={colors.brandDark} style={{ marginLeft: 'auto' }} />
             </TouchableOpacity>
@@ -1077,26 +1057,37 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
         animationType="slide"
         onRequestClose={() => setShowPdfModal(false)}
       >
-        <SafeAreaView style={[styles.pdfModalContainer, { backgroundColor: colors.bg }]}>
-          <View style={[styles.pdfAppBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
+        <View style={[styles.pdfModalContainer, { backgroundColor: colors.bg }]}>
+          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.surface} />
+          <View
+            style={[
+              styles.pdfAppBar,
+              {
+                backgroundColor: colors.surface,
+                borderBottomColor: colors.line,
+                paddingTop: Platform.OS === 'android' ? Math.max(StatusBar.currentHeight || 0, insets.top, 28) : insets.top,
+                minHeight: 54 + (Platform.OS === 'android' ? Math.max(StatusBar.currentHeight || 0, insets.top, 28) : insets.top),
+              },
+            ]}
+          >
             <TouchableOpacity onPress={() => setShowPdfModal(false)} style={styles.pdfCloseBtn}>
               <XIcon size={20} color={colors.ink} />
             </TouchableOpacity>
-            <View style={{ flex: 1, alignItems: 'center', marginHorizontal: 8 }}>
+            <View style={{ flex: 1, alignItems: 'center', marginHorizontal: 6 }}>
               {renderStyle === 'tpa' ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Text style={[styles.pdfTitle, { color: colors.ink }]} numberOfLines={1}>
-                    TPA Comprehensive Audit Report
+                    TPA Audit Report
                   </Text>
-                  <View style={{ backgroundColor: colors.brandSoft, paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 4 }}>
-                    <Text style={{ color: colors.brandDark, fontSize: 10, fontWeight: '700' }}>PREVIEW</Text>
+                  <View style={{ backgroundColor: colors.brandSoft, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
+                    <Text style={{ color: colors.brandDark, fontSize: 9, fontWeight: '700' }}>PREVIEW</Text>
                   </View>
                 </View>
               ) : (
                 <Text style={[styles.pdfTitle, { color: colors.ink }]} numberOfLines={1}>IRDAI Claim Form</Text>
               )}
               <Text style={[styles.pdfSubTitle, { color: colors.muted }]} numberOfLines={1}>
-                {renderStyle === 'tpa' ? `Claim ID: ${claim.id}` : `Part A & B · ${pdfFilename || fPolicy}`}
+                {renderStyle === 'tpa' ? `Claim ID: ${claim.id.slice(0, 8)}` : `Part A & B · ${pdfFilename || fPolicy}`}
               </Text>
             </View>
             <View style={styles.pdfHeaderActions}>
@@ -1132,7 +1123,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
             <View style={styles.pdfToolbarLeft}>
               <Text style={[styles.pdfToolbarLabel, { color: colors.muted }]}>Renderer:</Text>
               <View style={styles.pdfStylePills}>
-                {(['modern', 'legacy', 'blank', 'tpa'] as const).map((styleOpt) => {
+                {(['modern', 'blank', 'tpa'] as const).map((styleOpt) => {
                   const isSelected = renderStyle === styleOpt;
                   return (
                     <TouchableOpacity
@@ -1217,88 +1208,34 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                 />
               </View>
             ) : (
-              <ScrollView style={styles.pdfNativeScroll} contentContainerStyle={styles.pdfNativeScrollInner}>
-                <View style={[styles.pdfNativeCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                  <FileText size={44} color={colors.brand} />
-                  <Text style={[styles.pdfNativeTitle, { color: colors.ink }]}>
-                    {renderStyle === 'tpa' ? 'TPA Comprehensive Audit Report' : 'Official IRDAI Claim Form'}
-                  </Text>
-                  <Text style={[styles.pdfNativeSub, { color: colors.muted }]}>
-                    {renderStyle === 'tpa'
-                      ? 'AI-Powered Medical Claim Verification, Clinical Coding Audit & Cost Reconciliation Dossier'
-                      : 'Standard Health Insurance Reimbursement Form (Part A & B)'}
-                  </Text>
-
-                  <View style={[styles.pdfBadgeRow, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
-                    <Text style={[styles.pdfBadgeText, { color: colors.brandDark }]}>
-                      Document: {renderStyle.toUpperCase()}
-                    </Text>
-                  </View>
-
-                  <View style={styles.pdfNativeActions}>
-                    <TouchableOpacity
-                      style={[styles.pdfActionPrimary, { backgroundColor: colors.brand }]}
-                      onPress={handleOpenPdfExternal}
-                    >
-                      <Eye size={17} color="#ffffff" style={{ marginRight: 6 }} />
-                      <Text style={styles.pdfActionPrimaryText}>View Full PDF Report</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.pdfActionSecondary, { borderColor: colors.line, backgroundColor: colors.surface2 }]}
-                      onPress={handleDownloadPdf}
-                    >
-                      <Download size={16} color={colors.ink} style={{ marginRight: 6 }} />
-                      <Text style={[styles.pdfActionSecondaryText, { color: colors.ink }]}>Download</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Form Data Summary Cards matching official IRDA sections */}
-                <View style={[styles.pdfSummaryCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                  <Text style={[styles.pdfSummaryTitle, { color: colors.ink }]}>SECTION A: PRIMARY INSURED</Text>
-                  <View style={styles.pdfSummaryRow}>
-                    <Text style={[styles.pdfSummaryLabel, { color: colors.muted }]}>Name:</Text>
-                    <Text style={[styles.pdfSummaryValue, { color: colors.ink }]}>{fName}</Text>
-                  </View>
-                  <View style={styles.pdfSummaryRow}>
-                    <Text style={[styles.pdfSummaryLabel, { color: colors.muted }]}>Policy No:</Text>
-                    <Text style={[styles.pdfSummaryValue, { color: colors.ink }]}>{fPolicy}</Text>
-                  </View>
-                  <View style={styles.pdfSummaryRow}>
-                    <Text style={[styles.pdfSummaryLabel, { color: colors.muted }]}>Relationship:</Text>
-                    <Text style={[styles.pdfSummaryValue, { color: colors.ink }]}>{fRelation}</Text>
-                  </View>
-                  <View style={styles.pdfSummaryRow}>
-                    <Text style={[styles.pdfSummaryLabel, { color: colors.muted }]}>Diagnosis:</Text>
-                    <Text style={[styles.pdfSummaryValue, { color: colors.ink }]}>{fIllness}</Text>
-                  </View>
-                </View>
-
-                <View style={[styles.pdfSummaryCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                  <Text style={[styles.pdfSummaryTitle, { color: colors.ink }]}>SECTION B: HOSPITALIZATION</Text>
-                  <View style={styles.pdfSummaryRow}>
-                    <Text style={[styles.pdfSummaryLabel, { color: colors.muted }]}>Hospital:</Text>
-                    <Text style={[styles.pdfSummaryValue, { color: colors.ink }]}>{fHospName}</Text>
-                  </View>
-                  <View style={styles.pdfSummaryRow}>
-                    <Text style={[styles.pdfSummaryLabel, { color: colors.muted }]}>Doctor:</Text>
-                    <Text style={[styles.pdfSummaryValue, { color: colors.ink }]}>{fDoctor}</Text>
-                  </View>
-                  <View style={styles.pdfSummaryRow}>
-                    <Text style={[styles.pdfSummaryLabel, { color: colors.muted }]}>Period:</Text>
-                    <Text style={[styles.pdfSummaryValue, { color: colors.ink }]}>{fAdmission} to {fDischarge}</Text>
-                  </View>
-                  <View style={styles.pdfSummaryRow}>
-                    <Text style={[styles.pdfSummaryLabel, { color: colors.muted }]}>Payable Claim:</Text>
-                    <Text style={[styles.pdfSummaryValue, { color: colors.green, fontWeight: '700' }]}>{formatINR(netPayable)}</Text>
-                  </View>
-                </View>
-              </ScrollView>
+              <View style={styles.pdfFrameWrapper}>
+                <WebView
+                  key={`${claim.id}_${renderStyle}`}
+                  source={
+                    Platform.OS === 'android'
+                      ? { uri: `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(getDirectPdfUrl())}` }
+                      : { uri: getDirectPdfUrl() }
+                  }
+                  style={{ flex: 1, backgroundColor: '#525659' }}
+                  originWhitelist={['*']}
+                  javaScriptEnabled={true}
+                  domStorageEnabled={true}
+                  scalesPageToFit={true}
+                  startInLoadingState={true}
+                  renderLoading={() => (
+                    <View style={[styles.pdfLoadingOverlay, { backgroundColor: colors.bg }]}>
+                      <ActivityIndicator size="large" color={colors.brand} />
+                      <Text style={[styles.pdfLoadingText, { color: colors.ink }]}>
+                        Rendering Document in ClaimsGuru...
+                      </Text>
+                    </View>
+                  )}
+                />
+              </View>
             )}
           </View>
 
-
-          <View style={[styles.pdfFooter, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
+          <View style={[styles.pdfFooter, { backgroundColor: colors.surface, borderTopColor: colors.line, paddingBottom: Math.max(insets.bottom, 14) }]}>
             <TouchableOpacity
               style={[styles.pdfCancelBtn, { borderColor: colors.line }]}
               onPress={() => setShowPdfModal(false)}
@@ -1315,7 +1252,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
               <Text style={styles.pdfFooterBtnText}>Proceed to Submit</Text>
             </TouchableOpacity>
           </View>
-        </SafeAreaView>
+        </View>
       </Modal>
 
 
@@ -1803,7 +1740,6 @@ const styles = StyleSheet.create({
   // PDF Preview Styles
   pdfModalContainer: { flex: 1 },
   pdfAppBar: {
-    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1833,6 +1769,17 @@ const styles = StyleSheet.create({
   pdfViewerBody: { flex: 1, width: '100%', backgroundColor: '#525659' },
   pdfFrameWrapper: { flex: 1, width: '100%', height: '100%' },
   pdfLoadingState: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  pdfLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    padding: 24,
+  },
   pdfLoadingText: { marginTop: 14, fontSize: 15, fontWeight: '600' },
   pdfLoadingSub: { marginTop: 6, fontSize: 12 },
   pdfErrorState: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },

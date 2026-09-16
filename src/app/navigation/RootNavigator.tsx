@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTheme } from '../../core/theme/ThemeContext';
+import { useAuthStore } from '../../state/useAuthStore';
+import { appStorage } from '../../core/storage/appStorage';
 import { Routes } from './routes';
 import { RootStackParamList } from './types';
 
@@ -26,13 +29,98 @@ import { SignUpScreen } from '../../features/auth/screens/SignUpScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+const NAVIGATION_STATE_KEY = 'cg_nav_state';
+
+const linking: any = {
+  prefixes: ['claimsguru://', 'http://localhost', 'https://*'],
+  config: {
+    screens: {
+      [Routes.SignIn]: 'signin',
+      [Routes.SignUp]: 'signup',
+      MainTabs: {
+        screens: {
+          [Routes.ChatTab]: 'chat',
+          [Routes.ClaimsTab]: 'claims',
+          [Routes.SearchTab]: 'search',
+          [Routes.SessionsTab]: 'sessions',
+          [Routes.AllFeaturesTab]: 'features',
+        },
+      },
+      [Routes.ClaimDetail]: 'claims/:claimId',
+      [Routes.Submission]: 'claims/:claimId/submission',
+      [Routes.WorkflowPipeline]: 'claims/:claimId/pipeline',
+      [Routes.UploadPanel]: 'upload',
+      [Routes.DocumentGrid]: 'claims/:claimId/documents',
+      [Routes.PatientProfile]: 'patient/:patientId',
+      [Routes.PatientActivity]: 'claims/:claimId/activity',
+      [Routes.BrainPreview]: 'claims/:claimId/brain',
+      [Routes.RiskDetail]: 'claims/:claimId/risk',
+      [Routes.FraudDetail]: 'claims/:claimId/fraud',
+      [Routes.ValidationRules]: 'claims/:claimId/validation',
+      [Routes.MedicalCoding]: 'claims/:claimId/coding',
+      [Routes.ProfileSettings]: 'profile',
+      [Routes.OpsConsole]: 'ops',
+    },
+  },
+};
+
 export const RootNavigator = () => {
   const { colors } = useTheme();
+  const { isAuthenticated } = useAuthStore();
+  const [isReady, setIsReady] = useState(false);
+  const [initialState, setInitialState] = useState<any>(undefined);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const restoreState = async () => {
+      try {
+        const savedStateString = await appStorage.getItem(NAVIGATION_STATE_KEY);
+        if (savedStateString) {
+          const state = JSON.parse(savedStateString);
+          if (isMounted && state && state.routes && state.routes.length > 0) {
+            setInitialState(state);
+          }
+        }
+      } catch (e) {
+        console.warn('[RootNavigator] Failed to restore navigation state:', e);
+      } finally {
+        if (isMounted) {
+          setIsReady(true);
+        }
+      }
+    };
+
+    restoreState();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleStateChange = (state: any) => {
+    if (state) {
+      try {
+        appStorage.setItem(NAVIGATION_STATE_KEY, JSON.stringify(state));
+      } catch {}
+    }
+  };
+
+  if (!isReady) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={colors.brand} />
+      </View>
+    );
+  }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      linking={linking}
+      initialState={initialState}
+      onStateChange={handleStateChange}
+    >
       <Stack.Navigator
-        initialRouteName={Routes.SignIn}
+        initialRouteName={isAuthenticated ? "MainTabs" : Routes.SignIn}
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: colors.bg },
