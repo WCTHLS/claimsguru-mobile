@@ -1,5 +1,7 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { UserRole } from '../core/rbac/permissions';
+import { appStorage } from '../core/storage/appStorage';
 
 export interface UserExtraDetails {
   userId?: string;
@@ -35,80 +37,92 @@ interface AuthState {
   signOut: () => void;
 }
 
-export const useAuthStore = create<AuthState>(set => ({
-  userId: '181c3248-94a5-426f-8aca-92adcf0ff765',
-  role: 'submitter',
-  userName: 'Jhon Doe',
-  userEmail: 'sample@gmail.com',
-  firstName: 'Jhon',
-  lastName: 'Doe',
-  phone: null,
-  dob: '2000-06-08',
-  gender: 'Male',
-  policyNumber: 'P-0007401',
-  sumInsured: 500000,
-  organization: 'ClaimsGuru Patient Portal',
-  token: undefined,
-  isAuthenticated: true,
-  setRole: role => set({ role }),
-  setUserDetails: details => set(state => ({ ...state, ...details })),
-  signIn: (email = 'sample@gmail.com', name?: string, token?: string, extra?: UserExtraDetails) =>
-    set(state => {
-      const cleanEmail = (email || '').trim().toLowerCase();
-      let resolvedName =
-        name ||
-        (extra?.firstName ? `${extra.firstName} ${extra.lastName || ''}`.trim() : '');
-
-      if (!resolvedName || resolvedName.toLowerCase() === 'sample' || resolvedName.toLowerCase() === 'unknown') {
-        if (cleanEmail === 'sample@gmail.com' || cleanEmail.includes('sample')) {
-          resolvedName = 'Jhon Doe';
-        } else {
-          resolvedName = cleanEmail.split('@')[0] || 'Jhon Doe';
-        }
-      }
-
-      const isSampleUser = cleanEmail === 'sample@gmail.com' || resolvedName.toLowerCase() === 'jhon doe';
-      const isSameUser = state.userEmail === cleanEmail;
-
-      const first = extra?.firstName || (isSampleUser ? 'Jhon' : (isSameUser ? state.firstName : resolvedName.split(' ')[0])) || '';
-      const last = extra?.lastName || (isSampleUser ? 'Doe' : (isSameUser ? state.lastName : resolvedName.split(' ').slice(1).join(' '))) || '';
-      const uid = extra?.userId || (isSampleUser ? 'ec78998a-0228-434a-84f4-e08b4b7417e2' : (isSameUser ? state.userId : undefined));
-      const policy = extra?.policyNumber !== undefined ? extra.policyNumber : (isSampleUser ? 'P-0007401' : (isSameUser ? state.policyNumber : null));
-      const dobVal = extra?.dob !== undefined ? extra.dob : (isSampleUser ? '2000-06-08' : (isSameUser ? state.dob : null));
-      const genderVal = extra?.gender !== undefined ? extra.gender : (isSampleUser ? 'Male' : (isSameUser ? state.gender : null));
-      const sumVal = extra?.sumInsured !== undefined ? extra.sumInsured : (isSampleUser ? 500000 : (isSameUser ? state.sumInsured : null));
-      const phoneVal = extra?.phone !== undefined ? extra.phone : (isSampleUser ? null : (isSameUser ? state.phone : null));
-
-      return {
-        isAuthenticated: true,
-        userEmail: cleanEmail,
-        userName: resolvedName,
-        token: token || `token-${Date.now()}`,
-        role: extra?.role || state.role || 'submitter',
-        userId: uid,
-        firstName: first,
-        lastName: last,
-        phone: phoneVal,
-        dob: dobVal,
-        gender: genderVal,
-        policyNumber: policy,
-        sumInsured: sumVal,
-        organization: extra?.organization || state.organization,
-      };
-    }),
-  signOut: () =>
-    set({
-      isAuthenticated: false,
-      token: undefined,
-      userId: undefined,
-      userEmail: '',
-      userName: '',
-      firstName: '',
-      lastName: '',
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      userId: '181c3248-94a5-426f-8aca-92adcf0ff765',
+      role: 'submitter',
+      userName: 'Jhon Doe',
+      userEmail: 'sample@gmail.com',
+      firstName: 'Jhon',
+      lastName: 'Doe',
       phone: null,
-      dob: null,
-      gender: null,
-      policyNumber: null,
-      sumInsured: null,
+      dob: '2000-06-08',
+      gender: 'Male',
+      policyNumber: 'P-0007401',
+      sumInsured: 500000,
+      organization: 'ClaimsGuru Patient Portal',
+      token: undefined,
+      isAuthenticated: true,
+      setRole: role => set({ role }),
+      setUserDetails: details => set(state => ({ ...state, ...details })),
+      signIn: (email = 'sample@gmail.com', name?: string, token?: string, extra?: UserExtraDetails) =>
+        set(state => {
+          const cleanEmail = (email || '').trim().toLowerCase();
+          let resolvedName =
+            name ||
+            (extra?.firstName ? `${extra.firstName} ${extra.lastName || ''}`.trim() : '');
+
+          if (!resolvedName || resolvedName.toLowerCase() === 'sample' || resolvedName.toLowerCase() === 'unknown') {
+            if (cleanEmail === 'sample@gmail.com' || cleanEmail.includes('sample')) {
+              resolvedName = 'Jhon Doe';
+            } else {
+              resolvedName = cleanEmail.split('@')[0] || 'Jhon Doe';
+            }
+          }
+
+          const isSampleUser = cleanEmail === 'sample@gmail.com' || resolvedName.toLowerCase() === 'jhon doe';
+          const isSameUser = state.userEmail === cleanEmail;
+
+          const first = extra?.firstName || (isSampleUser ? 'Jhon' : (isSameUser ? state.firstName : resolvedName.split(' ')[0])) || '';
+          const last = extra?.lastName || (isSampleUser ? 'Doe' : (isSameUser ? state.lastName : resolvedName.split(' ').slice(1).join(' '))) || '';
+          const uid = extra?.userId || (isSampleUser ? 'ec78998a-0228-434a-84f4-e08b4b7417e2' : (isSameUser ? state.userId : undefined));
+          const policy = extra?.policyNumber !== undefined ? extra.policyNumber : (isSampleUser ? 'P-0007401' : (isSameUser ? state.policyNumber : null));
+          const dobVal = extra?.dob !== undefined ? extra.dob : (isSampleUser ? '2000-06-08' : (isSameUser ? state.dob : null));
+          const genderVal = extra?.gender !== undefined ? extra.gender : (isSampleUser ? 'Male' : (isSameUser ? state.gender : null));
+          const sumVal = extra?.sumInsured !== undefined ? extra.sumInsured : (isSampleUser ? 500000 : (isSameUser ? state.sumInsured : null));
+          const phoneVal = extra?.phone !== undefined ? extra.phone : (isSampleUser ? null : (isSameUser ? state.phone : null));
+
+          return {
+            isAuthenticated: true,
+            userEmail: cleanEmail,
+            userName: resolvedName,
+            token: token || `token-${Date.now()}`,
+            role: extra?.role || state.role || 'submitter',
+            userId: uid,
+            firstName: first,
+            lastName: last,
+            phone: phoneVal,
+            dob: dobVal,
+            gender: genderVal,
+            policyNumber: policy,
+            sumInsured: sumVal,
+            organization: extra?.organization || state.organization,
+          };
+        }),
+      signOut: () => {
+        try {
+          appStorage.removeItem('cg_nav_state');
+        } catch {}
+        set({
+          isAuthenticated: false,
+          token: undefined,
+          userId: undefined,
+          userEmail: '',
+          userName: '',
+          firstName: '',
+          lastName: '',
+          phone: null,
+          dob: null,
+          gender: null,
+          policyNumber: null,
+          sumInsured: null,
+        });
+      },
     }),
-}));
+    {
+      name: 'cg_auth_store',
+      storage: createJSONStorage(() => appStorage),
+    }
+  )
+);
