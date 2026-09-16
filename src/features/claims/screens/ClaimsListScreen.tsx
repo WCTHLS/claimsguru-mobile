@@ -111,7 +111,7 @@ export const ClaimsListScreen = ({ navigation }: any) => {
       <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
         <TouchableOpacity
           style={styles.avatarBtn}
-          onPress={() => navigation.navigate(Routes.ProfileSettings)}
+          onPress={() => navigation.navigate(Routes.PatientProfile)}
           activeOpacity={0.7}
         >
           <UserAvatar size={34} name={userName} gender={gender} />

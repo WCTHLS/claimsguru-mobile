@@ -19,19 +19,17 @@ import { Routes } from '../../../app/navigation/routes';
 import { GlobalBottomTabBar } from '../../../app/navigation/GlobalBottomTabBar';
 import {
   ChevronLeft,
-  Download,
   Trash2,
   LayoutGrid,
   Check,
-  ChevronRight,
   AlertTriangle,
 } from 'lucide-react-native';
 
 export const ClaimDetailScreen = ({ route, navigation }: any) => {
   const { colors } = useTheme();
   const claimId = route?.params?.claimId || '3f8a1d6c-52b4-4e7a-9c11-0d5e2ab77104';
-  const { claims, indexClaim, deleteClaim, addOrUpdateClaim } = useClaimsStore();
-  const [activeTab, setActiveTab] = useState<'Summary' | 'Expenses' | 'Services'>('Summary');
+  const { claims, deleteClaim, addOrUpdateClaim } = useClaimsStore();
+  const [activeTab, setActiveTab] = useState<'Summary' | 'Expenses'>('Summary');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [liveExpenses, setLiveExpenses] = useState<{ category: string; amount: number }[] | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -149,15 +147,6 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  const handleDownload = () => {
-    showToast(`GET /ingress/claims/${claim.id.slice(0, 8)}.../file → Discharge_Summary.pdf`);
-  };
-
-  const handleIndex = () => {
-    indexClaim(claim.id);
-    showToast('POST /search/index/… → indexed for full-text + vector search');
-  };
-
   const handleDelete = () => {
     setShowDeleteModal(true);
   };
@@ -213,10 +202,6 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
         <Text style={[styles.title, { color: colors.ink }]}>Claim detail</Text>
 
         <View style={styles.appBarActions}>
-          <TouchableOpacity style={styles.iconBtn} onPress={handleDownload} activeOpacity={0.7}>
-            <Download size={19} color={colors.ink} />
-          </TouchableOpacity>
-
           <TouchableOpacity style={styles.iconBtn} onPress={handleDelete} activeOpacity={0.7}>
             <Trash2 size={19} color={colors.ink} />
           </TouchableOpacity>
@@ -236,7 +221,6 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Main Claim Header Card */}
           {/* Main Claim Header Card */}
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
             {/* Status Pills */}
@@ -331,32 +315,9 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
             </View>
           </View>
 
-          {/* Action Buttons Row */}
-          <View style={styles.actionBtnRow}>
-            <TouchableOpacity
-              style={[styles.actionBtn, { borderColor: colors.line }]}
-              onPress={handleIndex}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.actionBtnText, { color: colors.brandDark }]}>
-                Index for search
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionBtn, { borderColor: colors.line }]}
-              onPress={handleDownload}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.actionBtnText, { color: colors.brandDark }]}>
-                Download original
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* 3 Segmented Tabs */}
+          {/* 2 Segmented Tabs */}
           <View style={[styles.tabsContainer, { backgroundColor: colors.surface2 }]}>
-            {(['Summary', 'Expenses', 'Services'] as const).map(tab => {
+            {(['Summary', 'Expenses'] as const).map(tab => {
               const isSelected = activeTab === tab;
               return (
                 <TouchableOpacity
@@ -473,53 +434,7 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
             </View>
           )}
 
-          {/* Tab 3: Services */}
-          {activeTab === 'Services' && (
-            <View style={[styles.card, styles.servicesCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-              {[
-                {
-                  title: 'AI Brain Preview',
-                  route: Routes.BrainPreview,
-                  ep: '/submission/claims/{id}/preview',
-                },
-                {
-                  title: 'Documents',
-                  route: Routes.DocumentGrid,
-                  ep: '/ingress/claims/{id}/documents',
-                },
-                {
-                  title: 'Medical coding',
-                  route: Routes.MedicalCoding,
-                  ep: '/coding/code-suggest/{id}',
-                },
-                {
-                  title: 'Patient activity',
-                  route: Routes.PatientActivity,
-                  ep: '/submission/claims/{id}/audit',
-                },
-              ].map((svc, idx, arr) => (
-                <TouchableOpacity
-                  key={svc.title}
-                  style={[
-                    styles.serviceRow,
-                    idx < arr.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.line2 },
-                  ]}
-                  onPress={() => {
-                    navigation.navigate(svc.route as any, { claimId: claim.id });
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.serviceTitle, { color: colors.ink }]}>{svc.title}</Text>
-                    <Text style={[styles.serviceEp, styles.mono, { color: colors.muted }]}>
-                      {svc.ep}
-                    </Text>
-                  </View>
-                  <ChevronRight size={16} color={colors.muted} />
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
+
         </ScrollView>
 
         {/* Floating Toast Notification */}
@@ -728,24 +643,6 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     fontWeight: '600',
   },
-  actionBtnRow: {
-    flexDirection: 'row',
-    gap: 9,
-    marginBottom: 11,
-  },
-  actionBtn: {
-    flex: 1,
-    borderWidth: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
-    paddingVertical: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionBtnText: {
-    fontSize: 12.5,
-    fontWeight: '700',
-  },
   tabsContainer: {
     flexDirection: 'row',
     borderRadius: 11,
@@ -821,25 +718,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
   },
-  servicesCard: {
-    padding: 0,
-    overflow: 'hidden',
-  },
-  serviceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 13,
-    paddingVertical: 11,
-  },
-  serviceTitle: {
-    fontSize: 12.5,
-    fontWeight: '600',
-  },
-  serviceEp: {
-    fontSize: 10.5,
-    marginTop: 2,
-  },
+
   toast: {
     position: 'absolute',
     bottom: 74,

@@ -467,7 +467,12 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       {/* Header Bar */}
       <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity style={styles.avatarBtn} onPress={() => setShowProfileModal(true)}>
+          <TouchableOpacity
+            style={styles.avatarBtn}
+            onPress={() => navigation.navigate(Routes.PatientProfile)}
+            accessibilityLabel="Patient profile"
+            activeOpacity={0.7}
+          >
             <UserAvatar size={34} name={userName} gender={gender} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.ink }]}>ClaimsGuru</Text>

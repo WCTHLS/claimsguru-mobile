@@ -9,7 +9,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Eye, EyeOff, FileText, AlertCircle, ShieldCheck } from 'lucide-react-native';
+import { ChevronLeft, Settings, FileText, AlertCircle, ShieldCheck } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useAuthStore } from '../../../state/useAuthStore';
 import { useClaimsStore } from '../../../state/useClaimsStore';
@@ -38,7 +38,6 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
 
   const { claims, loadClaims, claimPreviews, fetchClaimPreview } = useClaimsStore();
 
-  const [isMasked, setIsMasked] = useState(true);
   const [activeTab, setActiveTab] = useState<'claims' | 'docs' | 'flags'>('claims');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -112,37 +111,10 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
     return '—';
   }, [dob, focusedClaim?.age, isSampleUser]);
 
-  // Dynamic masking that securely obscures actual user/patient strings
-  const maskVal = (type: 'policy' | 'phone' | 'email' | 'mrn' | 'dob', raw?: string | null) => {
+  // Values are displayed directly without PHI masking
+  const maskVal = (_type: 'policy' | 'phone' | 'email' | 'mrn' | 'dob', raw?: string | null) => {
     if (!raw || !raw.trim() || raw === '—') return '—';
-    if (!isMasked) return raw;
-    const trimmed = raw.trim();
-    if (type === 'policy') {
-      if (trimmed.length <= 4) return '••••' + trimmed;
-      return '••••••••' + trimmed.slice(-4);
-    }
-    if (type === 'phone') {
-      if (trimmed.length <= 4) return '••••••' + trimmed;
-      return '+91 ••••• •' + trimmed.slice(-4);
-    }
-    if (type === 'email') {
-      const parts = trimmed.split('@');
-      if (parts.length === 2) {
-        const first = parts[0].charAt(0);
-        return `${first}•••••@${parts[1]}`;
-      }
-      return '••••••••';
-    }
-    if (type === 'mrn') {
-      if (trimmed.length <= 6) return '••••' + trimmed;
-      return `${trimmed.slice(0, 4)}-••••${trimmed.slice(-4)}`;
-    }
-    if (type === 'dob') {
-      const parts = trimmed.split(/[- /]/);
-      const year = parts[0].length === 4 ? parts[0] : parts[parts.length - 1];
-      return `•• ••• ${year}`;
-    }
-    return '••••••••';
+    return raw;
   };
 
   // Real claims count and approved metrics
@@ -376,11 +348,12 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
         </TouchableOpacity>
         <Text style={[styles.appBarTitle, { color: colors.ink }]}>Patient profile</Text>
         <TouchableOpacity
-          style={styles.maskBtn}
-          onPress={() => setIsMasked(!isMasked)}
+          style={styles.settingsBtn}
+          onPress={() => navigation.navigate(Routes.ProfileSettings)}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityLabel="Profile & settings"
         >
-          {isMasked ? <Eye size={19} color={colors.ink} /> : <EyeOff size={19} color={colors.brandDark} />}
+          <Settings size={20} color={colors.ink} />
         </TouchableOpacity>
       </View>
 
@@ -424,7 +397,7 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
             </View>
           </View>
           <Text style={[styles.maskNote, { color: colors.muted }]}>
-            {isMasked ? 'PHI masked · tap the eye to reveal' : 'PHI revealed · DOB, policy, phone, email, UID'}
+            PHI revealed · DOB, policy, phone, email, UID
           </Text>
         </View>
 
@@ -699,7 +672,7 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: 6 },
   appBarTitle: { fontSize: 16.5, fontWeight: '700' },
-  maskBtn: { padding: 6 },
+  settingsBtn: { padding: 6 },
   content: { flex: 1 },
   scrollInner: { padding: 13, paddingBottom: 24 },
   card: {
