@@ -383,8 +383,14 @@ export const DocumentGridScreen = ({ navigation, route }: any) => {
     switch (status) {
       case 'complete':
         return { label: 'Complete', bg: '#ecfdf5', text: '#059669', icon: CheckCircle2 };
+      case 'approved':
+        return { label: 'Approved', bg: '#ecfdf5', text: '#059669', icon: CheckCircle2 };
+      case 'settled':
+        return { label: 'Settled', bg: '#ecfdf5', text: '#059669', icon: CheckCircle2 };
       case 'submitted':
         return { label: 'Submitted', bg: '#eff6ff', text: '#2563eb', icon: Layers };
+      case 'rejected':
+        return { label: 'Rejected', bg: '#fef2f2', text: '#dc2626', icon: AlertCircle };
       case 'running':
         return { label: 'Processing', bg: '#fffbeb', text: '#d97706', icon: Clock };
       case 'FAILED':

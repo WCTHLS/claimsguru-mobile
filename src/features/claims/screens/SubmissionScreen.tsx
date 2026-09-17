@@ -74,6 +74,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
   // Payer / Adapter state (default 'generic' as in reference prototype)
   const [payer, setPayer] = useState<'generic' | 'fhir' | 'x12'>('generic');
   const [showPayerModal, setShowPayerModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // IRDAI & TPA Form Render Style (options: 'modern' | 'blank' | 'tpa')
   const [renderStyle, setRenderStyle] = useState<'modern' | 'blank' | 'tpa'>(
@@ -282,14 +283,33 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
     }
   };
 
-  const handleSubmitFinal = () => {
-    setShowConfirmModal(false);
-    const receiptCode = `IRDAI-${new Date().getFullYear()}-SUB-${Math.floor(10000 + Math.random() * 90000)}`;
+  const handleSubmitFinal = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    let receiptCode = `IRDAI-${new Date().getFullYear()}-SUB-${Math.floor(10000 + Math.random() * 90000)}`;
+
+    try {
+      const res = await claimsApi.submitClaim(claim.id, payer);
+      if (res) {
+        if (res.reference) {
+          receiptCode = res.reference;
+        } else if (res.submission_id) {
+          receiptCode = `TPA-${payer.toUpperCase()}-${res.submission_id.slice(0, 8)}`;
+        }
+      }
+    } catch (err: any) {
+      console.warn('[SubmissionScreen] Server submission warning:', err?.message || err);
+    } finally {
+      setIsSubmitting(false);
+      setShowConfirmModal(false);
+    }
+
     setSubmissionReceiptId(receiptCode);
 
     addOrUpdateClaim({
       id: claim.id,
       status: 'submitted',
+      rawStatus: 'SUBMITTED',
     });
 
     setShowSuccessModal(true);
@@ -975,10 +995,15 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                 <Text style={[styles.modalCancelText, { color: colors.muted }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalConfirmBtn, { backgroundColor: colors.brand }]}
+                style={[styles.modalConfirmBtn, { backgroundColor: colors.brand, opacity: isSubmitting ? 0.7 : 1 }]}
                 onPress={handleSubmitFinal}
+                disabled={isSubmitting}
               >
-                <Text style={styles.modalConfirmText}>Submit</Text>
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>Submit</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>

@@ -120,7 +120,11 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
   // Real claims count and approved metrics
   const totalClaimsCount = claims.length;
   const approvedClaimsCount = useMemo(() => {
-    return claims.filter(c => c.status === 'complete' || c.status === 'submitted').length;
+    return claims.filter(c => {
+      const st = (c.status || '').toLowerCase();
+      const raw = ((c as any).rawStatus || '').toUpperCase();
+      return st === 'approved' || st === 'settled' || raw === 'APPROVED' || raw === 'SETTLED';
+    }).length;
   }, [claims]);
 
   // Real average risk score calculation
@@ -156,13 +160,30 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
 
   const approvedAmount = useMemo(() => {
     return claims
-      .filter(c => c.status === 'complete')
+      .filter(c => {
+        const st = (c.status || '').toLowerCase();
+        const raw = ((c as any).rawStatus || '').toUpperCase();
+        return st === 'approved' || st === 'settled' || raw === 'APPROVED' || raw === 'SETTLED';
+      })
       .reduce((sum, c) => sum + (Number(c.amt) || 0), 0);
   }, [claims]);
 
   const pendingAmount = useMemo(() => {
     return claims
-      .filter(c => c.status === 'submitted' || c.status === 'running')
+      .filter(c => {
+        const st = (c.status || '').toLowerCase();
+        const raw = ((c as any).rawStatus || '').toUpperCase();
+        return (
+          st === 'submitted' ||
+          st === 'complete' ||
+          st === 'running' ||
+          raw === 'SUBMITTED' ||
+          raw === 'COMPLETED' ||
+          raw === 'VALIDATED' ||
+          raw === 'UPLOADED' ||
+          raw === 'PROCESSING'
+        );
+      })
       .reduce((sum, c) => sum + (Number(c.amt) || 0), 0);
   }, [claims]);
 
@@ -516,22 +537,43 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
               </View>
             ) : (
               claims.map((c, i) => {
-                const isComplete = c.status === 'complete';
-                const isSubmitted = c.status === 'submitted';
-                const isRunning = c.status === 'running';
-                const isFailed = c.status === 'FAILED';
+                const st = (c.status || '').toLowerCase();
+                const raw = ((c as any).rawStatus || '').toUpperCase();
+                const isApproved = st === 'approved' || st === 'settled' || raw === 'APPROVED' || raw === 'SETTLED';
+                const isRejected = st === 'rejected' || raw === 'REJECTED';
+                const isSubmitted = st === 'submitted' || raw === 'SUBMITTED';
+                const isComplete = st === 'complete' || raw === 'COMPLETED' || raw === 'VALIDATED';
+                const isRunning = st === 'running';
+                const isFailed = st === 'FAILED' || raw.includes('FAIL');
 
                 let stColor = colors.green;
                 let stBg = colors.greenSoft;
-                if (isComplete) {
-                  stColor = colors.amber;
-                  stBg = colors.amberSoft;
-                } else if (isRunning) {
+                let displayLabel = 'COMPLETE';
+
+                if (isApproved) {
+                  stColor = colors.green;
+                  stBg = colors.greenSoft;
+                  displayLabel = st === 'settled' || raw === 'SETTLED' ? 'SETTLED' : 'APPROVED';
+                } else if (isRejected) {
+                  stColor = colors.red;
+                  stBg = colors.redSoft;
+                  displayLabel = 'REJECTED';
+                } else if (isSubmitted) {
                   stColor = colors.brandDark;
                   stBg = colors.brandSoft;
+                  displayLabel = 'SUBMITTED';
+                } else if (isComplete) {
+                  stColor = colors.green;
+                  stBg = colors.greenSoft;
+                  displayLabel = 'COMPLETE';
+                } else if (isRunning) {
+                  stColor = colors.amber;
+                  stBg = colors.amberSoft;
+                  displayLabel = 'RUNNING';
                 } else if (isFailed) {
                   stColor = colors.red;
                   stBg = colors.redSoft;
+                  displayLabel = 'FAILED';
                 }
 
                 const claimTitle = `${c.dept || c.diagnosis || 'Medical Claim'} · ${formatINR(c.amt)}`;
@@ -560,7 +602,7 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
                       </Text>
                     </View>
                     <View style={[styles.statusBadge, { backgroundColor: stBg }]}>
-                      <Text style={[styles.statusBadgeText, { color: stColor }]}>{c.status}</Text>
+                      <Text style={[styles.statusBadgeText, { color: stColor }]}>{displayLabel}</Text>
                     </View>
                   </TouchableOpacity>
                 );

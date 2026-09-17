@@ -159,23 +159,35 @@ export interface BackendClaimPreview {
 
 export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimPreview | null): ClaimItem {
   const shortId = raw.id.slice(0, 8);
-  const statusLower = (raw.status || '').toLowerCase();
+  const rawStatus = (raw.status || '').trim();
+  const statusUpper = rawStatus.toUpperCase();
 
-  let uiStatus: 'complete' | 'submitted' | 'running' | 'FAILED' = 'complete';
-  if (statusLower.includes('fail') || statusLower.includes('error')) {
+  let uiStatus: 'complete' | 'submitted' | 'approved' | 'rejected' | 'settled' | 'running' | 'FAILED' = 'complete';
+  if (statusUpper.includes('FAIL') || statusUpper.includes('ERROR')) {
     uiStatus = 'FAILED';
+  } else if (statusUpper === 'APPROVED') {
+    uiStatus = 'approved';
+  } else if (statusUpper === 'REJECTED') {
+    uiStatus = 'rejected';
+  } else if (statusUpper === 'SETTLED') {
+    uiStatus = 'settled';
+  } else if (statusUpper === 'SUBMITTED') {
+    uiStatus = 'submitted';
   } else if (
-    statusLower === 'running' ||
-    statusLower === 'uploaded' ||
-    statusLower === 'starting' ||
-    statusLower === 'queued' ||
-    statusLower === 'ocr_partial' ||
-    statusLower === 'in_progress' ||
-    statusLower === 'processing'
+    statusUpper === 'RUNNING' ||
+    statusUpper === 'UPLOADED' ||
+    statusUpper === 'STARTING' ||
+    statusUpper === 'QUEUED' ||
+    statusUpper === 'OCR_PARTIAL' ||
+    statusUpper === 'OCR_PROCESSING' ||
+    statusUpper === 'IN_PROGRESS' ||
+    statusUpper === 'PROCESSING' ||
+    statusUpper === 'PARSING' ||
+    statusUpper === 'CODING' ||
+    statusUpper === 'PREDICTING' ||
+    statusUpper === 'VALIDATING'
   ) {
     uiStatus = 'running';
-  } else if (statusLower === 'submitted') {
-    uiStatus = 'submitted';
   } else {
     uiStatus = 'complete';
   }
@@ -280,6 +292,7 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
     amt,
     step,
     status: uiStatus,
+    rawStatus: raw.status,
     indexed: false,
     policyNo: policy,
     hospital,
@@ -562,6 +575,21 @@ export const claimsApi = {
 
   deleteClaim: async (claimId: string): Promise<void> => {
     return apiClient.delete(API_ENDPOINTS.claimDetail(claimId));
+  },
+
+  submitClaim: async (
+    claimId: string,
+    payer: string = 'generic'
+  ): Promise<{
+    submission_id?: string;
+    claim_id?: string;
+    payer?: string;
+    status?: string;
+    submitted_at?: string;
+    reference?: string;
+  }> => {
+    const url = API_ENDPOINTS.claimSubmit(claimId);
+    return apiClient.post(url, { payer });
   },
 
   updateClaimFields: async (claimId: string, fields: Record<string, string>): Promise<boolean> => {

@@ -678,7 +678,8 @@ export const ChatHomeScreen = ({ navigation }: any) => {
           >
             <View style={styles.pipelineHeader}>
               <Text style={[styles.pipelineTitle, { color: colors.ink }]}>
-                Pipeline · claim <Text style={{ fontWeight: '700' }}>{pipelineClaimId ? pipelineClaimId.slice(0, 8) : 'running'}</Text>
+                {pipelineRunning ? 'Pipeline · claim ' : 'Latest claim processed · claim '}
+                <Text style={{ fontWeight: '700' }}>{pipelineClaimId ? pipelineClaimId.slice(0, 8) : 'running'}</Text>
               </Text>
               <Text style={[styles.pipelineSub, { color: colors.muted }]}>
                 {pipelineRunning ? `Running live backend pipeline (${pipelineProgress}%)` : 'OCR → Parse → Code → Predict → Validate'}

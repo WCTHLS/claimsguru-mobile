@@ -71,34 +71,64 @@ export const ClaimsListScreen = ({ navigation }: any) => {
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'complete':
-        return {
-          bg: colors.amberSoft,
-          text: colors.amber,
-          label: 'COMPLETE',
-        };
-      case 'submitted':
-        return {
-          bg: colors.greenSoft,
-          text: colors.green,
-          label: 'SUBMITTED',
-        };
-      case 'running':
-        return {
-          bg: colors.brandSoft,
-          text: colors.brandDark,
-          label: 'RUNNING',
-        };
-      case 'FAILED':
-      default:
-        return {
-          bg: colors.redSoft,
-          text: colors.red,
-          label: 'FAILED',
-        };
+  const getStatusBadge = (status: string, rawStatus?: string) => {
+    const st = (status || '').toLowerCase();
+    const raw = (rawStatus || '').toUpperCase();
+
+    if (st === 'approved' || raw === 'APPROVED') {
+      return {
+        bg: colors.greenSoft,
+        text: colors.green,
+        label: 'APPROVED',
+      };
     }
+    if (st === 'settled' || raw === 'SETTLED') {
+      return {
+        bg: colors.greenSoft,
+        text: colors.green,
+        label: 'SETTLED',
+      };
+    }
+    if (st === 'rejected' || raw === 'REJECTED') {
+      return {
+        bg: colors.redSoft,
+        text: colors.red,
+        label: 'REJECTED',
+      };
+    }
+    if (st === 'submitted' || raw === 'SUBMITTED') {
+      return {
+        bg: colors.brandSoft,
+        text: colors.brandDark,
+        label: 'SUBMITTED',
+      };
+    }
+    if (st === 'complete' || raw === 'COMPLETED' || raw === 'VALIDATED') {
+      return {
+        bg: colors.greenSoft,
+        text: colors.green,
+        label: 'COMPLETE',
+      };
+    }
+    if (st === 'running' || raw === 'RUNNING' || raw === 'PROCESSING' || raw === 'UPLOADED') {
+      return {
+        bg: colors.amberSoft,
+        text: colors.amber,
+        label: 'RUNNING',
+      };
+    }
+    if (st === 'failed' || st === 'FAILED' || raw.includes('FAIL')) {
+      return {
+        bg: colors.redSoft,
+        text: colors.red,
+        label: 'FAILED',
+      };
+    }
+    return {
+      bg: colors.greenSoft,
+      text: colors.green,
+      label: 'COMPLETE',
+    };
   };
 
   return (
@@ -200,7 +230,7 @@ export const ClaimsListScreen = ({ navigation }: any) => {
               </View>
             ) : (
               filteredClaims.map((claim, index) => {
-                const badge = getStatusBadge(claim.status);
+                const badge = getStatusBadge(claim.status, claim.rawStatus);
                 const isLast = index === filteredClaims.length - 1;
                 const shortId = claim.id.slice(0, 8);
 

@@ -46,9 +46,9 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   const [loading, setLoading] = useState<boolean>(!preview);
   const [rerunning, setRerunning] = useState<boolean>(false);
 
-  // Accordion open/close states matching prototype (Risk open by default)
+  // Accordion open/close states (all closed by default)
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [riskOpen, setRiskOpen] = useState(true);
+  const [riskOpen, setRiskOpen] = useState(false);
   const [fraudOpen, setFraudOpen] = useState(false);
   const [codingOpen, setCodingOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -372,14 +372,6 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
             <Text style={[styles.verdictTitle, { color: verdictColor }]}>{verdictStatus}</Text>
             <Text style={[styles.verdictSub, { color: verdictColor }]}>
               {verdictSub}
-            </Text>
-          </View>
-
-          {/* Synthetic Model Warning Banner */}
-          <View style={[styles.banner, { backgroundColor: colors.amberSoft }]}>
-            <AlertTriangle size={15} color={colors.amber} style={{ marginTop: 2 }} />
-            <Text style={[styles.bannerText, { color: colors.amber }]}>
-              <Text style={styles.mono}>xgb_rejection.json</Text> was auto-trained on synthetic data at predictor startup — treat the score as indicative.
             </Text>
           </View>
 
@@ -1054,50 +1046,53 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
             {docsOpen && (
               <View style={[styles.accInner, { borderTopColor: colors.line2 }]}>
                 {preview?.documents && preview.documents.length > 0 ? (
-                  preview.documents.map((doc, idx) => (
-                    <TouchableOpacity
-                      key={idx}
-                      style={styles.factorRow}
-                      onPress={() => navigation.navigate(Routes.DocumentGrid, { claimId, docKey: doc.doc_type || doc.id })}
-                      activeOpacity={0.7}
-                    >
-                      <View style={[styles.dot, { backgroundColor: colors.green }]} />
-                      <Text style={[styles.factorText, styles.mono, { color: colors.ink }]} numberOfLines={1}>
-                        {doc.doc_type || doc.original_filename || doc.file_name}
-                      </Text>
-                      <Text style={[styles.factorVal, { color: colors.muted }]}>
-                        {doc.page_count ? `${doc.page_count}p` : '1p'}
-                      </Text>
-                      <ChevronRight size={14} color={colors.muted} />
-                    </TouchableOpacity>
-                  ))
-                ) : (
-                  [
-                    { name: 'discharge_summary', conf: '1p', status: 'ok', key: 'discharge' },
-                    { name: 'hospital_bill', conf: '1p', status: 'ok', key: 'bill' },
-                    { name: 'policy_card', conf: '1p', status: 'ok', key: 'policy' },
-                    { name: 'scan_report', conf: '1p', status: 'warn', key: 'scan' },
-                    { name: 'pharmacy_bill', conf: '1p', status: 'bad', key: 'pharmacy' },
-                    { name: 'id_proof', conf: '1p', status: 'ok', key: 'id' },
-                  ].map((doc, idx) => {
-                    const dotColor =
-                      doc.status === 'ok' ? colors.green : doc.status === 'warn' ? colors.amber : colors.red;
+                  preview.documents.map((doc, idx) => {
+                    const storeClaims = useClaimsStore.getState().claims;
+                    const c = storeClaims.find(cl => cl.id === claimId || cl.id.startsWith(claimId));
+                    const claimDoc = c?.documents?.find((cd: any) => cd.id === doc.id || cd.file_name === doc.file_name);
+                    const raw =
+                      doc.original_filename ||
+                      doc.file_name ||
+                      claimDoc?.original_filename ||
+                      claimDoc?.file_name ||
+                      `document_${idx + 1}.pdf`;
+                    const cleanName = raw.split(/[/\\]/).pop() || raw;
+
                     return (
                       <TouchableOpacity
                         key={idx}
                         style={styles.factorRow}
-                        onPress={() => navigation.navigate(Routes.PreviewDocuments, { claimId, docKey: doc.key })}
+                        onPress={() => navigation.navigate(Routes.DocumentGrid, { claimId, docKey: doc.id || doc.doc_type })}
                         activeOpacity={0.7}
                       >
-                        <View style={[styles.dot, { backgroundColor: dotColor }]} />
-                        <Text style={[styles.factorText, styles.mono, { color: colors.ink }]}>
-                          {doc.name}
+                        <View style={[styles.dot, { backgroundColor: colors.green }]} />
+                        <Text style={[styles.factorText, styles.mono, { color: colors.ink }]} numberOfLines={1}>
+                          {cleanName}
                         </Text>
-                        <Text style={[styles.factorVal, { color: colors.muted }]}>{doc.conf}</Text>
-                        <ChevronRight size={14} color={colors.muted} />
                       </TouchableOpacity>
                     );
                   })
+                ) : (
+                  [
+                    { name: 'document_1.pdf', key: 'doc1' },
+                    { name: 'document_2.pdf', key: 'doc2' },
+                    { name: 'document_3.pdf', key: 'doc3' },
+                    { name: 'document_4.pdf', key: 'doc4' },
+                    { name: 'document_5.pdf', key: 'doc5' },
+                    { name: 'document_6.pdf', key: 'doc6' },
+                  ].map((doc, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      style={styles.factorRow}
+                      onPress={() => navigation.navigate(Routes.PreviewDocuments, { claimId, docKey: doc.key })}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.dot, { backgroundColor: colors.green }]} />
+                      <Text style={[styles.factorText, styles.mono, { color: colors.ink }]} numberOfLines={1}>
+                        {doc.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
                 )}
 
                 <TouchableOpacity

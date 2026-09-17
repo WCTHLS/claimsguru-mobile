@@ -53,6 +53,7 @@ export const API_ENDPOINTS = {
   irdaPdf: (claimId: string, style: string = 'legacy', blank: boolean = false, inline: boolean = true) =>
     `${API_BASE_URL}/submission/claims/${claimId}/irda-pdf?style=${style}&blank=${blank ? 'true' : 'false'}&view=${inline ? 'true' : 'false'}`,
   claimAudit: (claimId: string) => `${API_BASE_URL}/submission/claims/${claimId}/audit`,
+  claimSubmit: (claimId: string) => `${API_BASE_URL}/submission/submit/${claimId}`,
   tpaPdf: (claimId: string, style: string = 'modern', inline: boolean = true, tpaName?: string) =>
     `${API_BASE_URL}/submission/claims/${claimId}/tpa-pdf?style=${style}&view=${inline ? 'true' : 'false'}${tpaName ? `&tpa_name=${encodeURIComponent(tpaName)}` : ''}`,
 

@@ -10,7 +10,8 @@ export interface ClaimItem {
   gender?: string;
   dept: string;
   amt: number;
-  status: 'complete' | 'submitted' | 'running' | 'FAILED';
+  status: 'complete' | 'submitted' | 'approved' | 'rejected' | 'settled' | 'running' | 'FAILED';
+  rawStatus?: string;
   step: 'ocr' | 'parse' | 'code' | 'predict' | 'validate' | '—';
   indexed: boolean;
   rules?: string;

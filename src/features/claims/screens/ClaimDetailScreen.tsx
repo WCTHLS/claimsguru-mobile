@@ -166,11 +166,43 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
     }
   };
 
-  const isFailed = claim.status === 'FAILED';
-  const isRunning = claim.status === 'running';
-  const statusBg = isFailed ? colors.redSoft : isRunning ? colors.amberSoft : colors.greenSoft;
-  const statusColor = isFailed ? colors.red : isRunning ? colors.amber : colors.green;
-  const statusLabel = isFailed ? 'FAILED' : isRunning ? 'PROCESSING' : 'COMPLETE';
+  const st = (claim.status || '').toLowerCase();
+  const rawSt = ((claim as any).rawStatus || '').toUpperCase();
+  const isFailed = st === 'failed' || st === 'FAILED' || rawSt.includes('FAIL');
+  const isApproved = st === 'approved' || st === 'settled' || rawSt === 'APPROVED' || rawSt === 'SETTLED';
+  const isRejected = st === 'rejected' || rawSt === 'REJECTED';
+  const isSubmitted = st === 'submitted' || rawSt === 'SUBMITTED';
+  const isRunning = st === 'running' || rawSt === 'RUNNING' || rawSt === 'PROCESSING' || rawSt === 'UPLOADED';
+
+  let statusBg = colors.greenSoft;
+  let statusColor = colors.green;
+  let statusLabel = 'COMPLETE';
+
+  if (isApproved) {
+    statusBg = colors.greenSoft;
+    statusColor = colors.green;
+    statusLabel = st === 'settled' || rawSt === 'SETTLED' ? 'SETTLED' : 'APPROVED';
+  } else if (isRejected) {
+    statusBg = colors.redSoft;
+    statusColor = colors.red;
+    statusLabel = 'REJECTED';
+  } else if (isSubmitted) {
+    statusBg = colors.brandSoft;
+    statusColor = colors.brandDark;
+    statusLabel = 'SUBMITTED';
+  } else if (isFailed) {
+    statusBg = colors.redSoft;
+    statusColor = colors.red;
+    statusLabel = 'FAILED';
+  } else if (isRunning) {
+    statusBg = colors.amberSoft;
+    statusColor = colors.amber;
+    statusLabel = 'PROCESSING';
+  } else {
+    statusBg = colors.greenSoft;
+    statusColor = colors.green;
+    statusLabel = 'COMPLETE';
+  }
 
   const defaultExpenses = [
     { category: 'Room', amount: 3200 },
