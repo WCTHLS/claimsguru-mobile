@@ -247,11 +247,13 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
                 </Text>
               </View>
 
-              <View style={[styles.pill, { backgroundColor: claim.indexed ? colors.greenSoft : colors.surface2 }]}>
-                <Text style={[styles.pillText, { color: claim.indexed ? colors.green : colors.muted }]}>
-                  {claim.indexed ? 'Indexed · searchable' : 'Not indexed'}
-                </Text>
-              </View>
+              {claim.indexed ? (
+                <View style={[styles.pill, { backgroundColor: colors.greenSoft }]}>
+                  <Text style={[styles.pillText, { color: colors.green }]}>
+                    Indexed · searchable
+                  </Text>
+                </View>
+              ) : null}
             </View>
 
             {/* Patient Header */}

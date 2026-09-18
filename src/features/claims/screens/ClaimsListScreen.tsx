@@ -258,9 +258,6 @@ export const ClaimsListScreen = ({ navigation }: any) => {
                         {claim.amt ? formatINR(claim.amt) : 'amount pending'}
                         {' · step: '}
                         <Text style={styles.mono}>{claim.step}</Text>
-                        {!claim.indexed && (
-                          <Text style={{ color: colors.amber }}> · not indexed</Text>
-                        )}
                       </Text>
                     </View>
 
