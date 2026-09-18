@@ -102,7 +102,6 @@ export const ALL_FEATURES: FeatureDef[] = [
   { id: 'search', g: 'Other', nav: Routes.SearchTab, n: 'Search', d: 'Full-text & semantic vector search', iconName: 'search' },
   { id: 'submit', g: 'Other', nav: Routes.Submission, n: 'Submission', d: 'Payer submission & IRDAI claim forms', iconName: 'send', params: { claimId: 'a4f1c9e2' } },
   { id: 'profile', g: 'Other', nav: Routes.ProfileSettings, n: 'Profile', d: 'User roles, preferences & settings', iconName: 'settings' },
-  { id: 'ops', g: 'Other', nav: Routes.OpsConsole, n: 'Ops console', d: 'Service health & queue performance', iconName: 'terminal', perm: 'ops' },
 ];
 
 export const ChatHomeScreen = ({ navigation }: any) => {

@@ -81,34 +81,97 @@ export function getBlankIrdaFormHtml(): string {
       position: sticky;
       top: 0;
       z-index: 999;
-      background: #323639;
+      background: #23272a;
       color: #f1f5f9;
-      height: 38px;
-      padding: 0 14px;
+      min-height: 40px;
+      height: 40px;
+      padding: 0 10px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 1px solid #202224;
+      gap: 8px;
+      border-bottom: 1px solid #181a1c;
       font-size: 11px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      box-sizing: border-box;
+      width: 100%;
     }
     .pdf-bar-left {
       display: flex;
       align-items: center;
-      gap: 10px;
-      font-weight: 500;
+      gap: 6px;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
     }
-    .pdf-page-indicator {
-      background: #202224;
-      padding: 2px 8px;
-      border-radius: 3px;
+    .pdf-file-icon {
+      flex-shrink: 0;
+      display: inline-flex;
+    }
+    .pdf-filename {
+      font-weight: 600;
+      color: #ffffff;
       font-size: 11px;
-      letter-spacing: 0.05em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: block;
+      min-width: 0;
     }
-    .pdf-bar-actions {
+    .pdf-bar-right {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .pdf-template-tag {
+      background: rgba(13, 148, 136, 0.2);
+      color: #2dd4bf;
+      border: 1px solid rgba(45, 212, 191, 0.35);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      text-transform: uppercase;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .pdf-page-indicator {
+      background: #141618;
+      color: #f8fafc;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      flex-shrink: 0;
+      border: 1px solid #3b4247;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 52px;
+      line-height: 1.2;
+      box-sizing: border-box;
+      user-select: none;
+    }
+    @media (max-width: 360px) {
+      .pdf-template-tag {
+        display: none;
+      }
+      .pdf-viewer-bar {
+        padding: 0 6px;
+      }
+      .pdf-filename {
+        font-size: 10.5px;
+      }
+      .pdf-page-indicator {
+        padding: 2px 6px;
+        font-size: 10.5px;
+        min-width: 46px;
+      }
     }
     .pdf-bar-btn {
       background: transparent;
@@ -495,11 +558,17 @@ export function getBlankIrdaFormHtml(): string {
   <!-- Top PDF Toolbar -->
   <div class="pdf-viewer-bar">
     <div class="pdf-bar-left">
-      <span style="font-weight: 700; color: #fff;">IRDAI_Standard_Blank_Claim_Form.pdf</span>
-      <span class="pdf-page-indicator">1 / 10</span>
+      <span class="pdf-file-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+        </svg>
+      </span>
+      <span class="pdf-filename" title="IRDAI_Standard_Blank_Claim_Form.pdf">IRDAI_Standard_Blank_Claim_Form.pdf</span>
     </div>
-    <div class="pdf-bar-actions">
-      <span style="font-size: 10px; color: #94a3b8; font-weight: 600;">OFFICIAL BLANK TEMPLATE (10 PAGES)</span>
+    <div class="pdf-bar-right">
+      <span class="pdf-template-tag">BLANK · 10P</span>
+      <span class="pdf-page-indicator" id="pageIndicator">1 / 10</span>
     </div>
   </div>
 
@@ -1406,6 +1475,72 @@ export function getBlankIrdaFormHtml(): string {
     </div>
 
   </div>
+
+  <script>
+    (function() {
+      var indicator = document.getElementById('pageIndicator');
+      var pageSheets = document.querySelectorAll('.page-sheet');
+      var totalPages = pageSheets.length || 10;
+
+      function updatePage(pageIndex) {
+        if (indicator) {
+          indicator.textContent = pageIndex + ' / ' + totalPages;
+        }
+      }
+
+      function onScroll() {
+        var scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+        var threshold = scrollY + (window.innerHeight * 0.35);
+        var activeIndex = 1;
+
+        for (var i = 0; i < pageSheets.length; i++) {
+          var rect = pageSheets[i].getBoundingClientRect();
+          var sheetTop = rect.top + scrollY;
+          if (sheetTop <= threshold) {
+            activeIndex = i + 1;
+          }
+        }
+        updatePage(activeIndex);
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      document.addEventListener('scroll', onScroll, { passive: true });
+
+      if ('IntersectionObserver' in window) {
+        var visibleMap = {};
+        var observer = new IntersectionObserver(function(entries) {
+          entries.forEach(function(entry) {
+            for (var i = 0; i < pageSheets.length; i++) {
+              if (pageSheets[i] === entry.target) {
+                visibleMap[i] = entry.intersectionRatio;
+                break;
+              }
+            }
+          });
+
+          var maxRatio = 0;
+          var bestIndex = 0;
+          for (var idx in visibleMap) {
+            if (visibleMap[idx] > maxRatio) {
+              maxRatio = visibleMap[idx];
+              bestIndex = parseInt(idx, 10);
+            }
+          }
+          if (maxRatio > 0.15) {
+            updatePage(bestIndex + 1);
+          }
+        }, {
+          threshold: [0.15, 0.4, 0.7, 1.0]
+        });
+
+        pageSheets.forEach(function(sheet) {
+          observer.observe(sheet);
+        });
+      }
+
+      onScroll();
+    })();
+  </script>
 </body>
 </html>`;
 }

@@ -20,7 +20,6 @@ import {
   Clock,
   Moon,
   LogOut,
-  Terminal,
 } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useAuthStore } from '../../../state/useAuthStore';
@@ -36,11 +35,6 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
   const [biometric, setBiometric] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
 
-  // Processing (admin) settings state
-  const [secondaryOcr, setSecondaryOcr] = useState(true);
-  const [easyOcr, setEasyOcr] = useState(false);
-  const [paddleOcr, setPaddleOcr] = useState(true);
-  const pdfRenderDpi = 200;
 
   // Active single role (default submitter)
   const currentRole = role || 'submitter';
@@ -183,98 +177,8 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
           </View>
         </View>
 
-        {/* Section: Processing (admin) */}
-        <View style={styles.sectionHeadingRow}>
-          <Text style={[styles.sectionHeading, { color: colors.ink }]}>
-            Processing <Text style={{ color: colors.muted, fontWeight: '500' }}>(admin)</Text>
-          </Text>
-        </View>
-
-        <View style={[styles.settingsCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          {/* Item 1: Secondary OCR on PDF */}
-          <View style={[styles.settingRow, { borderBottomColor: colors.line, borderBottomWidth: 1 }]}>
-            <View style={styles.settingInfoNoIcon}>
-              <Text style={[styles.settingTitle, { color: colors.ink }]}>Secondary OCR on PDF</Text>
-              <Text style={[styles.codeSubtitle, { color: colors.muted }]}>
-                OCR_ENABLE_SECONDARY_OCR_ON_PDF
-              </Text>
-            </View>
-            <Switch
-              value={secondaryOcr}
-              onValueChange={setSecondaryOcr}
-              trackColor={{ true: '#94a3b8', false: '#e2e8f0' }}
-              thumbColor="#ffffff"
-            />
-          </View>
-
-          {/* Item 2: EasyOCR engine */}
-          <View style={[styles.settingRow, { borderBottomColor: colors.line, borderBottomWidth: 1 }]}>
-            <View style={styles.settingInfoNoIcon}>
-              <Text style={[styles.settingTitle, { color: colors.ink }]}>EasyOCR engine</Text>
-              <Text style={[styles.codeSubtitle, { color: colors.muted }]}>
-                OCR_EASYOCR_ENABLED
-              </Text>
-            </View>
-            <Switch
-              value={easyOcr}
-              onValueChange={setEasyOcr}
-              trackColor={{ true: '#94a3b8', false: '#e2e8f0' }}
-              thumbColor="#ffffff"
-            />
-          </View>
-
-          {/* Item 3: Paddle OCR */}
-          <View style={[styles.settingRow, { borderBottomColor: colors.line, borderBottomWidth: 1 }]}>
-            <View style={styles.settingInfoNoIcon}>
-              <Text style={[styles.settingTitle, { color: colors.ink }]}>Paddle OCR</Text>
-              <Text style={[styles.codeSubtitle, { color: colors.muted }]}>
-                OCR_ENABLE_PADDLE_OCR
-              </Text>
-            </View>
-            <Switch
-              value={paddleOcr}
-              onValueChange={setPaddleOcr}
-              trackColor={{ true: '#94a3b8', false: '#e2e8f0' }}
-              thumbColor="#ffffff"
-            />
-          </View>
-
-          {/* Item 4: PDF render DPI */}
-          <View style={styles.settingRow}>
-            <View style={styles.settingInfoNoIcon}>
-              <Text style={[styles.settingTitle, { color: colors.ink }]}>PDF render DPI</Text>
-              <Text style={[styles.codeSubtitle, { color: colors.muted }]}>
-                OCR_PDF_RENDER_DPI
-              </Text>
-            </View>
-            <View style={[styles.dpiBadge, { backgroundColor: isDark ? '#1e262f' : '#f1f5f9' }]}>
-              <Text style={[styles.dpiBadgeText, { color: colors.ink }]}>{pdfRenderDpi}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Links Card: Ops console (admin) & Conversation history */}
+        {/* Links Card: Conversation history */}
         <View style={[styles.settingsCard, { backgroundColor: colors.surface, borderColor: colors.line, marginTop: 12 }]}>
-          <TouchableOpacity
-            style={[styles.linkRow, { borderBottomColor: colors.line, borderBottomWidth: 1 }]}
-            onPress={() => navigation.navigate(Routes.OpsConsole)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.iconContainer}>
-              <Terminal size={18} color={colors.ink} />
-            </View>
-            <View style={styles.settingInfo}>
-              <Text style={[styles.settingTitle, { color: colors.ink }]}>Ops console</Text>
-              <Text style={[styles.settingSubtitle, { color: colors.muted }]}>
-                service health · queues · models
-              </Text>
-            </View>
-            <View style={[styles.roleBadgeSmall, { backgroundColor: colors.surface2 }]}>
-              <Text style={[styles.roleBadgeSmallText, { color: colors.muted }]}>admin</Text>
-            </View>
-            <ChevronRight size={16} color={colors.muted} style={{ marginLeft: 6 }} />
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={styles.linkRow}
             onPress={() => navigation.navigate('MainTabs', { screen: Routes.SessionsTab })}

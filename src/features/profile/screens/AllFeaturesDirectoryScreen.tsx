@@ -99,7 +99,7 @@ export const AllFeaturesDirectoryScreen = ({ navigation }: any) => {
       <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
         <Text style={[styles.appBarTitle, { color: colors.ink }]}>All Features</Text>
         <View style={[styles.countBadge, { backgroundColor: colors.brandSoft }]}>
-          <Text style={[styles.countBadgeText, { color: colors.brandDark }]}>23 screens</Text>
+          <Text style={[styles.countBadgeText, { color: colors.brandDark }]}>{ALL_FEATURES.length} screens</Text>
         </View>
       </View>
 
