@@ -40,6 +40,13 @@ import { useTheme } from '../../../core/theme/ThemeContext';
 import { useClaimsStore } from '../../../state/useClaimsStore';
 import { Routes } from '../../../app/navigation/routes';
 import { formatINR } from '../../../core/utils/currency';
+import * as FileSystem from 'expo-file-system/legacy';
+import {
+  getBlankModernPdfBlob,
+  BLANK_IRDA_PDF_FILENAME,
+  getBlankIrdaFormHtml,
+} from '../../../core/utils/blankIrdaForm';
+import { BLANK_IRDA_PDF_BASE64 } from '../../../core/assets/blankIrdaPdfBase64';
 import { claimsApi } from '../services/claimsApi';
 
 
@@ -198,6 +205,23 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
   const loadIrdaPdf = async (styleOverride?: 'modern' | 'blank' | 'tpa') => {
     const targetStyle = styleOverride || renderStyle;
 
+    // Pure blank IRDAI form: modern WeasyPrint PDF with 100% empty fields (no expenses, no totals)
+    if (targetStyle === 'blank') {
+      setPdfLoading(true);
+      setPdfError(null);
+      try {
+        const res = getBlankModernPdfBlob();
+        setPdfBlobUrl(res.url);
+        setPdfFilename(res.filename);
+      } catch (err: any) {
+        console.warn('Failed to load blank IRDA PDF:', err);
+        setPdfError('Could not prepare blank claim form.');
+      } finally {
+        setPdfLoading(false);
+      }
+      return;
+    }
+
     setPdfLoading(true);
     setPdfError(null);
 
@@ -207,8 +231,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
         setPdfBlobUrl(res.url);
         setPdfFilename(res.filename);
       } else {
-        const isBlank = targetStyle === 'blank';
-        const res = await claimsApi.fetchIrdaPdfBlob(claim.id, 'modern', isBlank);
+        const res = await claimsApi.fetchIrdaPdfBlob(claim.id, 'modern', false);
         setPdfBlobUrl(res.url);
         setPdfFilename(res.filename);
       }
@@ -230,7 +253,35 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
     loadIrdaPdf(newStyle);
   };
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
+    if (renderStyle === 'blank') {
+      if (pdfBlobUrl && Platform.OS === 'web' && typeof document !== 'undefined') {
+        const a = document.createElement('a');
+        a.href = pdfBlobUrl;
+        a.download = pdfFilename || BLANK_IRDA_PDF_FILENAME;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        showToast('Downloading blank IRDAI form (PDF)');
+        return;
+      }
+      try {
+        const fileUri = `${FileSystem.documentDirectory || ''}${BLANK_IRDA_PDF_FILENAME}`;
+        await FileSystem.writeAsStringAsync(fileUri, BLANK_IRDA_PDF_BASE64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        await Share.share({
+          title: 'IRDAI Standard Blank Claim Form',
+          message: 'Official IRDAI Standard Blank Claim Form (Part A & B) for manual pen-fill.',
+          url: fileUri,
+        });
+        showToast('Blank IRDAI form PDF ready');
+      } catch {
+        showToast('Blank form ready for printing');
+      }
+      return;
+    }
+
     if (pdfBlobUrl && Platform.OS === 'web' && typeof document !== 'undefined') {
       const a = document.createElement('a');
       a.href = pdfBlobUrl;
@@ -244,8 +295,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
       if (renderStyle === 'tpa') {
         directUrl = claimsApi.getTpaPdfUrl(claim.id, 'modern', false);
       } else {
-        const isBlank = renderStyle === 'blank';
-        directUrl = claimsApi.getIrdaPdfUrl(claim.id, 'modern', isBlank, false);
+        directUrl = claimsApi.getIrdaPdfUrl(claim.id, 'modern', false, false);
       }
       Linking.openURL(directUrl).catch(() => {
         showToast('Unable to trigger download');
@@ -257,11 +307,20 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
     if (renderStyle === 'tpa') {
       return claimsApi.getTpaPdfUrl(claim.id, 'modern', true);
     }
-    const isBlank = renderStyle === 'blank';
-    return claimsApi.getIrdaPdfUrl(claim.id, 'modern', isBlank, true);
+    if (renderStyle === 'blank') {
+      return pdfBlobUrl || `data:application/pdf;base64,${BLANK_IRDA_PDF_BASE64}`;
+    }
+    return claimsApi.getIrdaPdfUrl(claim.id, 'modern', false, true);
   };
 
   const handleOpenPdfExternal = () => {
+    if (renderStyle === 'blank') {
+      if (pdfBlobUrl && Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.open(pdfBlobUrl, '_blank');
+        return;
+      }
+    }
+
     const directUrl = getDirectPdfUrl();
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       if (pdfBlobUrl) {
@@ -277,6 +336,28 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
   };
 
   const handleSharePdf = async () => {
+    if (renderStyle === 'blank') {
+      if (pdfBlobUrl && Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.open(pdfBlobUrl, '_blank');
+        showToast('Opened blank form in new tab');
+        return;
+      }
+      try {
+        const fileUri = `${FileSystem.documentDirectory || ''}${BLANK_IRDA_PDF_FILENAME}`;
+        await FileSystem.writeAsStringAsync(fileUri, BLANK_IRDA_PDF_BASE64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        await Share.share({
+          title: 'IRDAI Standard Blank Claim Form',
+          message: 'Official IRDAI Standard Blank Claim Form (Part A & B) for manual pen-fill.',
+          url: fileUri,
+        });
+      } catch {
+        showToast('Blank form ready for sharing');
+      }
+      return;
+    }
+
     try {
       let directUrl = '';
       let title = '';
@@ -284,8 +365,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
         directUrl = claimsApi.getTpaPdfUrl(claim.id, 'modern', true);
         title = pdfFilename || `TPA_Audit_${claim.id.slice(0, 8)}.pdf`;
       } else {
-        const isBlank = renderStyle === 'blank';
-        directUrl = claimsApi.getIrdaPdfUrl(claim.id, 'modern', isBlank, true);
+        directUrl = claimsApi.getIrdaPdfUrl(claim.id, 'modern', false, true);
         title = pdfFilename || `IRDAI_Claim_${claim.id.slice(0, 8)}.pdf`;
       }
       await Share.share({
@@ -367,7 +447,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
               {renderStyle === 'tpa' ? 'TPA Report & Form Style' : 'IRDAI form render style'}
             </Text>
             <Text style={[styles.rendererHdr, { color: colors.muted }]}>
-              {renderStyle === 'tpa' ? 'Report: TPA-Audit' : `X-IRDA-Renderer: ${renderStyle}`}
+              {renderStyle === 'tpa' ? 'Report: TPA-Audit' : renderStyle === 'blank' ? 'Standard Blank (Pen-Fill)' : `X-IRDA-Renderer: ${renderStyle}`}
             </Text>
           </View>
 
@@ -411,8 +491,18 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
             </View>
           )}
 
+          {/* Info banner when blank is active */}
+          {renderStyle === 'blank' && (
+            <View style={[styles.bannerWarn, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
+              <FileText size={15} color={colors.ink} style={styles.bannerIcon} />
+              <Text style={[styles.bannerWarnText, { color: colors.ink }]}>
+                Official Blank IRDAI Form: 100% clean Part A &amp; B template. Ready to download or print for manual pen-fill.
+              </Text>
+            </View>
+          )}
+
           <Text style={[styles.subNote, { color: colors.muted }]}>
-            modern = WeasyPrint IRDAI Claim Form (Part A &amp; B) · blank = Empty template · tpa = TPA Comprehensive Audit Report
+            modern = IRDAI Claim Form (Part A &amp; B) · blank = 100% Blank (For Pen-Fill) · tpa = TPA Audit Report
           </Text>
 
           <TouchableOpacity
@@ -425,7 +515,11 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
           >
             <FileText size={16} color={colors.brandDark} />
             <Text style={[styles.irdaFormCardBtnText, { color: colors.brandDark }]}>
-              {renderStyle === 'tpa' ? 'View TPA Audit Report' : 'View IRDAI Claim Form'}
+              {renderStyle === 'tpa'
+                ? 'View TPA Audit Report'
+                : renderStyle === 'blank'
+                ? 'View Blank IRDAI Form'
+                : 'View IRDAI Claim Form'}
             </Text>
             <ExternalLink size={14} color={colors.brandDark} style={{ marginLeft: 'auto' }} />
           </TouchableOpacity>
@@ -1030,11 +1124,24 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                     <Text style={{ color: colors.brandDark, fontSize: 9, fontWeight: '700' }}>PREVIEW</Text>
                   </View>
                 </View>
+              ) : renderStyle === 'blank' ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={[styles.pdfTitle, { color: colors.ink }]} numberOfLines={1}>
+                    Blank IRDAI Claim Form
+                  </Text>
+                  <View style={{ backgroundColor: colors.brandSoft, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
+                    <Text style={{ color: colors.brandDark, fontSize: 9, fontWeight: '700' }}>BLANK</Text>
+                  </View>
+                </View>
               ) : (
                 <Text style={[styles.pdfTitle, { color: colors.ink }]} numberOfLines={1}>IRDAI Claim Form</Text>
               )}
               <Text style={[styles.pdfSubTitle, { color: colors.muted }]} numberOfLines={1}>
-                {renderStyle === 'tpa' ? `Claim ID: ${claim.id.slice(0, 8)}` : `Part A & B · ${pdfFilename || fPolicy}`}
+                {renderStyle === 'tpa'
+                  ? `Claim ID: ${claim.id.slice(0, 8)}`
+                  : renderStyle === 'blank'
+                  ? `Part A & B · ${pdfFilename || BLANK_IRDA_PDF_FILENAME}`
+                  : `Part A & B · ${pdfFilename || fPolicy}`}
               </Text>
             </View>
             <View style={styles.pdfHeaderActions}>
@@ -1117,10 +1224,14 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                 <Text style={[styles.pdfLoadingText, { color: colors.ink }]}>
                   {renderStyle === 'tpa'
                     ? 'Generating TPA Comprehensive Audit Report...'
+                    : renderStyle === 'blank'
+                    ? 'Preparing Blank IRDAI Form...'
                     : 'Generating Official IRDAI Claim Form...'}
                 </Text>
                 <Text style={[styles.pdfLoadingSub, { color: colors.muted }]}>
-                  {renderStyle === 'tpa'
+                  {renderStyle === 'blank'
+                    ? 'Loading official IRDAI Standard Form (Part A & B) for pen-fill'
+                    : renderStyle === 'tpa'
                     ? 'Fetching Clinical Coding Audit & Cost Reconciliation Dossier'
                     : `Fetching Part A & B from backend submission service (${renderStyle})`}
                 </Text>
@@ -1129,7 +1240,11 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
               <View style={[styles.pdfErrorState, { backgroundColor: colors.bg }]}>
                 <AlertTriangle size={36} color={colors.amber} />
                 <Text style={[styles.pdfErrorTitle, { color: colors.ink }]}>
-                  {renderStyle === 'tpa' ? 'Unable to Load TPA Audit Report' : 'Unable to Load IRDA Form'}
+                  {renderStyle === 'tpa'
+                    ? 'Unable to Load TPA Audit Report'
+                    : renderStyle === 'blank'
+                    ? 'Unable to Load Blank IRDA Form'
+                    : 'Unable to Load IRDA Form'}
                 </Text>
                 <Text style={[styles.pdfErrorSub, { color: colors.muted }]}>
                   {pdfError}
@@ -1145,7 +1260,13 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
               <View style={styles.pdfFrameWrapper}>
                 <iframe
                   src={pdfBlobUrl}
-                  title={renderStyle === 'tpa' ? 'TPA Comprehensive Audit Report' : 'Official IRDA Claim Form'}
+                  title={
+                    renderStyle === 'tpa'
+                      ? 'TPA Comprehensive Audit Report'
+                      : renderStyle === 'blank'
+                      ? 'Official IRDAI Standard Blank Claim Form'
+                      : 'Official IRDA Claim Form'
+                  }
                   style={{
                     width: '100%',
                     height: '100%',
@@ -1159,7 +1280,9 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                 <WebView
                   key={`${claim.id}_${renderStyle}`}
                   source={
-                    Platform.OS === 'android'
+                    renderStyle === 'blank' && pdfBlobUrl
+                      ? { uri: pdfBlobUrl }
+                      : Platform.OS === 'android'
                       ? { uri: `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(getDirectPdfUrl())}` }
                       : { uri: getDirectPdfUrl() }
                   }
