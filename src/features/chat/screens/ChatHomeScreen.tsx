@@ -100,7 +100,7 @@ export const ALL_FEATURES: FeatureDef[] = [
   { id: 'patient', g: 'Patient', nav: Routes.PatientProfile, n: 'Patient', d: 'Demographics, policy & KYC details', iconName: 'user' },
   { id: 'activity', g: 'Patient', nav: Routes.PatientActivity, n: 'Activity', d: 'Audit history & state change diffs', iconName: 'clock' },
   { id: 'search', g: 'Other', nav: Routes.SearchTab, n: 'Search', d: 'Full-text & semantic vector search', iconName: 'search' },
-  { id: 'submit', g: 'Other', nav: Routes.Submission, n: 'Submission', d: 'Payer submission & IRDAI claim forms', iconName: 'send', params: { claimId: 'a4f1c9e2' } },
+  { id: 'submit', g: 'Other', nav: Routes.Submission, n: 'Submission', d: 'Payer submission & IRDAI claim forms', iconName: 'send' },
   { id: 'profile', g: 'Other', nav: Routes.ProfileSettings, n: 'Profile', d: 'User roles, preferences & settings', iconName: 'settings' },
 ];
 
@@ -496,7 +496,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.contextScroll}>
             <View style={[styles.contextBadge, { backgroundColor: '#e6f4f1' }]}>
               <Text style={[styles.contextBadgeText, { color: '#0d9488' }]}>
-                Context · claim a4f1c9e2 · {files.length} docs
+                Context · {pipelineClaimId ? `claim ${pipelineClaimId.slice(0, 8)}` : 'new claim'} · {files.length} doc{files.length === 1 ? '' : 's'}
               </Text>
             </View>
             <View style={[styles.contextBadgePlain]}>

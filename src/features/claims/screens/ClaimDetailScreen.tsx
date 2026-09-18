@@ -33,53 +33,38 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const existingClaim = claims.find(c => c.id === claimId || c.id.startsWith(claimId));
+  const existingClaim = claims.find(c => c.id === claimId || (claimId && c.id.startsWith(claimId)));
   const fallbackClaim: any = {
-    id: claimId,
-    who: 'Sarita Tiwari',
-    dept: 'Hypothyroidism COPD Exacerbation',
-    amt: 37595,
-    status: 'complete',
-    step: 'validate',
+    id: claimId || '',
+    who: 'Loading claim…',
+    dept: 'Medical Claim',
+    amt: 0,
+    status: 'running',
+    step: 'ocr',
     indexed: false,
-    policyNo: 'P-0007401',
-    hospital: 'Government Health City',
-    doctor: 'Dr. Attending Physician',
-    diagnosis: 'Hypothyroidism COPD Exacerbation',
-    age: 42,
-    gender: 'Female',
-    admissionDate: '12 Feb 2024',
-    dischargeDate: '15 Feb 2024',
-    days: 3,
+    policyNo: '',
+    hospital: '',
+    doctor: '',
+    diagnosis: '',
+    age: undefined,
+    gender: undefined,
+    admissionDate: '',
+    dischargeDate: '',
+    days: 0,
     claimType: 'Reimbursement',
-    fieldsParsed: '36 fields',
+    fieldsParsed: '0 fields',
   };
 
   const claim = existingClaim
     ? {
         ...fallbackClaim,
         ...existingClaim,
-        who:
-          existingClaim.who && !existingClaim.who.startsWith('Processing')
-            ? existingClaim.who
-            : fallbackClaim.who,
-        hospital:
-          existingClaim.hospital && existingClaim.hospital !== 'Sunrise Multispecialty'
-            ? existingClaim.hospital
-            : fallbackClaim.hospital,
-        doctor:
-          existingClaim.doctor && existingClaim.doctor !== 'Dr. P. Rangan'
-            ? existingClaim.doctor
-            : fallbackClaim.doctor,
-        diagnosis:
-          existingClaim.diagnosis && existingClaim.diagnosis !== 'Acute coronary syndrome'
-            ? existingClaim.diagnosis
-            : fallbackClaim.diagnosis,
-        amt: existingClaim.amt && existingClaim.amt !== 184500 ? existingClaim.amt : fallbackClaim.amt,
-        policyNo:
-          existingClaim.policyNo && !existingClaim.policyNo.includes('SAMPLE')
-            ? existingClaim.policyNo
-            : fallbackClaim.policyNo,
+        who: existingClaim.who || fallbackClaim.who,
+        hospital: existingClaim.hospital || fallbackClaim.hospital,
+        doctor: existingClaim.doctor || fallbackClaim.doctor,
+        diagnosis: existingClaim.diagnosis || fallbackClaim.diagnosis,
+        amt: existingClaim.amt ?? fallbackClaim.amt,
+        policyNo: existingClaim.policyNo || fallbackClaim.policyNo,
       }
     : fallbackClaim;
 

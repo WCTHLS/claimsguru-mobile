@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ClaimItem, INITIAL_CLAIMS } from '../mocks/claims.mock';
+import { ClaimItem } from '../mocks/claims.mock';
 import { claimsApi, BackendClaimPreview } from '../features/claims/services/claimsApi';
 import { useAuthStore } from './useAuthStore';
 

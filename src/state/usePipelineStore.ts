@@ -112,10 +112,10 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   attempt: 1,
   totalSeconds: null,
   docs: [],
-  claimId: '73cae928-5f39-4129-a4f2-f667e94f3f6a',
-  claimWho: 'Parsing…',
-  claimDept: 'General Medicine',
-  claimAmt: 184500,
+  claimId: '',
+  claimWho: '',
+  claimDept: '',
+  claimAmt: 0,
 
   startPipeline: (files, claimIdOverride) => {
     if (activePollInterval) {

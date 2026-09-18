@@ -32,7 +32,7 @@ import {
 } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useClaimsStore } from '../../../state/useClaimsStore';
-import { ClaimItem, INITIAL_CLAIMS } from '../../../mocks/claims.mock';
+import { ClaimItem } from '../../../mocks/claims.mock';
 import { formatINR } from '../../../core/utils/currency';
 import { Routes } from '../../../app/navigation/routes';
 
@@ -100,207 +100,7 @@ export const getClaimDocumentsList = (claim: ClaimItem, preview?: any): ClaimDoc
     });
   }
 
-  const patientName = claim.who || 'Patient';
-  const hospital = claim.hospital || 'Hospital';
-
-  if (claim.id.startsWith('7b03') || claim.dept === 'Orthopaedics') {
-    return [
-      {
-        key: 'discharge_summary',
-        name: `Discharge Summary - ${patientName}`,
-        file: 'Discharge_Summary_Signed.pdf',
-        size: '1.6 MB',
-        badge: 'PDF',
-        conf: 0.99,
-        tags: ['discharge_summary', 'verified'],
-      },
-      {
-        key: 'hospital_bill',
-        name: `Final Tax Invoice - ${hospital}`,
-        file: 'Apollo_Final_Bill_Itemized.pdf',
-        size: '1.4 MB',
-        badge: 'BILL',
-        conf: 0.98,
-        tags: ['hospital_bill', 'gstin_verified'],
-      },
-      {
-        key: 'scan_report',
-        name: 'MRI Knee Joint (Right) Diagnostic Report',
-        file: 'MRI_Knee_Joint_Report.pdf',
-        size: '4.2 MB',
-        badge: 'SCAN',
-        conf: 0.95,
-        tags: ['radiology', 'mri'],
-      },
-      {
-        key: 'insurance_form',
-        name: 'Cashless Pre-Authorisation Request Form',
-        file: 'Cashless_PreAuth_Request.pdf',
-        size: '1.9 MB',
-        badge: 'FORM',
-        conf: 0.99,
-        tags: ['irdai_standard', 'verified'],
-      },
-      {
-        key: 'pharmacy_bill',
-        name: 'Pharmacy & Surgical Implants Tax Invoice',
-        file: 'Pharmacy_Implants_Breakup.pdf',
-        size: '820 KB',
-        badge: 'RX',
-        conf: 0.94,
-        tags: ['pharmacy_bill'],
-      },
-    ];
-  }
-
-  if (claim.id.startsWith('2e6f') || claim.dept === 'Nephrology') {
-    return [
-      {
-        key: 'discharge_summary',
-        name: `Clinical Inpatient Summary - ${patientName}`,
-        file: 'Clinical_Inpatient_Summary.pdf',
-        size: '1.5 MB',
-        badge: 'PDF',
-        conf: 0.97,
-        tags: ['inpatient_summary'],
-      },
-      {
-        key: 'hospital_bill',
-        name: `Fortis Healthcare Interim & Final Bill`,
-        file: 'Fortis_Interim_Final_Bill.pdf',
-        size: '2.1 MB',
-        badge: 'BILL',
-        conf: 0.96,
-        tags: ['hospital_bill'],
-      },
-      {
-        key: 'lab_report',
-        name: 'Ultrasound KUB & Renal Function Profile',
-        file: 'Ultrasound_KUB_Blood_Panel.pdf',
-        size: '1.1 MB',
-        badge: 'LAB',
-        conf: 0.97,
-        tags: ['pathology', 'lab_report'],
-      },
-      {
-        key: 'insurance_form',
-        name: 'Reimbursement Claim Form Part-B',
-        file: 'Mediclaim_Part_B_Signed.pdf',
-        size: '1.8 MB',
-        badge: 'FORM',
-        conf: 0.98,
-        tags: ['insurance_form'],
-      },
-    ];
-  }
-
-  if (claim.id.startsWith('9c25') || claim.dept === 'Oncology') {
-    return [
-      {
-        key: 'lab_report',
-        name: 'Histopathology & Biopsy Clinical Panel',
-        file: 'Biopsy_Histopathology_Report.pdf',
-        size: '2.8 MB',
-        badge: 'LAB',
-        conf: 0.92,
-        tags: ['biopsy', 'oncology'],
-      },
-      {
-        key: 'discharge_summary',
-        name: 'Chemotherapy Cycle Protocol & Day-care Notes',
-        file: 'DayCare_Chemo_Protocol.pdf',
-        size: '1.3 MB',
-        badge: 'PDF',
-        conf: 0.94,
-        tags: ['chemo_protocol'],
-      },
-      {
-        key: 'hospital_bill',
-        name: `Max Super Specialty Inpatient Bill`,
-        file: 'Max_Healthcare_IPD_Invoice.pdf',
-        size: '1.7 MB',
-        badge: 'BILL',
-        conf: 0.93,
-        tags: ['hospital_bill'],
-      },
-      {
-        key: 'policy_card',
-        name: 'National Health Insurance Policy Schedule',
-        file: 'Policy_Schedule_National.pdf',
-        size: '720 KB',
-        badge: 'POLICY',
-        conf: 0.99,
-        tags: ['policy_card'],
-      },
-    ];
-  }
-
-  // Default rich 7-document set for primary claim
-  return [
-    {
-      key: 'discharge_summary',
-      name: `Discharge Summary - ${patientName}`,
-      file: 'Discharge_Summary_Signed.pdf',
-      size: '1.8 MB',
-      badge: 'PDF',
-      conf: 0.99,
-      tags: ['discharge_summary', 'verified'],
-    },
-    {
-      key: 'insurance_form',
-      name: 'Reimbursement Claim Form (National Insurance)',
-      file: 'National_Insurance_Claim_Form.pdf',
-      size: '2.4 MB',
-      badge: 'FORM',
-      conf: 0.99,
-      tags: ['insurance_form', 'irdai_standard'],
-    },
-    {
-      key: 'hospital_bill',
-      name: `Hospital Bill - ${hospital}`,
-      file: 'Hospital_Final_Tax_Invoice.pdf',
-      size: '1.2 MB',
-      badge: 'BILL',
-      conf: 0.98,
-      tags: ['hospital_bill', 'gstin_verified'],
-    },
-    {
-      key: 'lab_report',
-      name: 'Lab Investigation Report (Biochemistry & Blood)',
-      file: 'Clinical_Pathology_Report.pdf',
-      size: '890 KB',
-      badge: 'LAB',
-      conf: 0.96,
-      tags: ['lab_report', 'pathology'],
-    },
-    {
-      key: 'pharmacy_bill',
-      name: 'Pharmacy Itemized Bill & Consumables',
-      file: 'Pharmacy_Tax_Invoice.pdf',
-      size: '760 KB',
-      badge: 'RX',
-      conf: 0.92,
-      tags: ['pharmacy_bill'],
-    },
-    {
-      key: 'scan_report',
-      name: 'Radiology / Chest CT Scan Report',
-      file: 'Chest_High_Res_CT_Scan.pdf',
-      size: '5.6 MB',
-      badge: 'SCAN',
-      conf: 0.91,
-      tags: ['scan_report', 'radiology'],
-    },
-    {
-      key: 'policy_card',
-      name: 'Health Insurance Policy Schedule',
-      file: 'National_Health_Policy_Schedule.pdf',
-      size: '620 KB',
-      badge: 'POLICY',
-      conf: 0.99,
-      tags: ['policy_card'],
-    },
-  ];
+  return [];
 };
 
 const getDocIcon = (key?: string) => {
@@ -323,12 +123,12 @@ export const DocumentGridScreen = ({ navigation, route }: any) => {
     loadClaims();
   }, []);
 
-  // Merge loaded claims with fallback INITIAL_CLAIMS so all claims have documents
+  // Only use loaded real claims from store
   const allClaims = useMemo<ClaimItem[]>(() => {
     if (claims && claims.length > 0) {
       return claims;
     }
-    return INITIAL_CLAIMS;
+    return [];
   }, [claims]);
 
   // Compute total documents across all claims
@@ -624,10 +424,17 @@ export const DocumentGridScreen = ({ navigation, route }: any) => {
 
                 {/* 3. Document Items List - Each document is clickable to preview that specific document */}
                 <View style={styles.docList}>
-                  {docs.map((doc, docIdx) => {
-                    const DocIcon = getDocIcon(doc.key);
-                    const isLast = docIdx === docs.length - 1;
-                    const docItemKey = `doc_${safeClaimId}_${doc.key || doc.name || docIdx}_${docIdx}`;
+                  {docs.length === 0 ? (
+                    <View style={styles.noDocsRow}>
+                      <Text style={[styles.noDocsText, { color: colors.muted }]}>
+                        No documents attached to this claim yet.
+                      </Text>
+                    </View>
+                  ) : (
+                    docs.map((doc, docIdx) => {
+                      const DocIcon = getDocIcon(doc.key);
+                      const isLast = docIdx === docs.length - 1;
+                      const docItemKey = `doc_${safeClaimId}_${doc.key || doc.name || docIdx}_${docIdx}`;
 
                     return (
                       <TouchableOpacity
@@ -674,7 +481,8 @@ export const DocumentGridScreen = ({ navigation, route }: any) => {
                         </View>
                       </TouchableOpacity>
                     );
-                  })}
+                  })
+                )}
                 </View>
               </View>
             );
@@ -1016,6 +824,16 @@ const styles = StyleSheet.create({
   },
   mono: {
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  noDocsRow: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noDocsText: {
+    fontSize: 13,
+    fontFamily: Platform.select({ ios: 'System', android: 'Roboto' }),
   },
 });
 export default DocumentGridScreen;

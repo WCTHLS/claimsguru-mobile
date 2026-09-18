@@ -38,6 +38,7 @@ import Svg, { Path } from 'react-native-svg';
 import { WebView } from 'react-native-webview';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useClaimsStore } from '../../../state/useClaimsStore';
+import { useAuthStore } from '../../../state/useAuthStore';
 import { Routes } from '../../../app/navigation/routes';
 import { formatINR } from '../../../core/utils/currency';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -71,31 +72,32 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
   const { colors, isDark } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const isNarrow = windowWidth < 360;
-  const claimId = route?.params?.claimId || 'a4f1c9e2';
+  const claimId = route?.params?.claimId;
   const { claims, addOrUpdateClaim } = useClaimsStore();
+  const auth = useAuthStore();
 
   const fallbackClaim = {
-    id: claimId || 'a4f1c9e2',
-    who: 'R. Menon',
-    dept: 'Cardiology',
-    amt: 184500,
+    id: claimId || '',
+    who: auth.userName && auth.userName.toLowerCase() !== 'sample' ? auth.userName : 'Patient',
+    dept: 'General Medicine',
+    amt: 0,
     status: 'complete' as const,
     step: 'validate' as const,
     indexed: false,
-    policyNo: 'SAMPLE-PH-77421',
-    hospital: 'Sunrise Multispecialty',
-    doctor: 'Dr. P. Rangan',
-    diagnosis: 'Chest pain on exertion; acute coronary event.',
-    age: 54,
-    gender: 'Male',
-    admissionDate: '12-08-2026',
-    dischargeDate: '16-08-2026',
-    days: 4,
+    policyNo: auth.policyNumber || '',
+    hospital: '',
+    doctor: '',
+    diagnosis: '',
+    age: 30,
+    gender: auth.gender || 'Male',
+    admissionDate: '',
+    dischargeDate: '',
+    days: 1,
     claimType: 'Reimbursement',
-    fieldsParsed: '23 of 27',
+    fieldsParsed: '0',
   };
 
-  const claim = claims.find(c => c.id === claimId || c.id.startsWith(claimId)) || claims[0] || fallbackClaim;
+  const claim = (claimId ? claims.find(c => c.id === claimId || c.id.startsWith(claimId)) : null) || claims[0] || fallbackClaim;
 
   // Payer / Adapter state (default 'generic' as in reference prototype)
   const [payer, setPayer] = useState<'generic' | 'fhir' | 'x12'>('generic');
@@ -111,28 +113,24 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
   const [partTab, setPartTab] = useState<'a' | 'b'>('a');
 
   // Form Fields - Part A
-  const [fPolicy, setFPolicy] = useState(claim.policyNo || 'SAMPLE-PH-77421');
-  const [fName, setFName] = useState(cleanInsuredName(claim.who) || 'R. Menon');
-  const [fDob, setFDob] = useState('18-04-1972');
-  const [fAdmission, setFAdmission] = useState(claim.admissionDate || '12-08-2026');
-  const [preAuthYes, setPreAuthYes] = useState(false); // Screenshot shows 'No' selected
+  const [fPolicy, setFPolicy] = useState(claim.policyNo || auth.policyNumber || '');
+  const [fName, setFName] = useState(cleanInsuredName(claim.who) || (auth.userName && auth.userName.toLowerCase() !== 'sample' ? auth.userName : ''));
+  const [fDob, setFDob] = useState(auth.dob || '');
+  const [fAdmission, setFAdmission] = useState(claim.admissionDate || '');
+  const [preAuthYes, setPreAuthYes] = useState(false);
   const [fRelation, setFRelation] = useState('Self');
   const [showRelationModal, setShowRelationModal] = useState(false);
-  const [fIllness, setFIllness] = useState(
-    'Chest pain on exertion; admitted for angioplasty following an acute coronary event.'
-  );
+  const [fIllness, setFIllness] = useState(claim.diagnosis || '');
 
   // Form Fields - Part B
-  const [fHospName, setFHospName] = useState(claim.hospital || 'Sunrise Multispecialty');
-  const [fHospReg, setFHospReg] = useState('SAMPLE-HOSP-0192');
-  const [fDischarge, setFDischarge] = useState(claim.dischargeDate || '16-08-2026');
+  const [fHospName, setFHospName] = useState(claim.hospital || '');
+  const [fHospReg, setFHospReg] = useState('');
+  const [fDischarge, setFDischarge] = useState(claim.dischargeDate || '');
   const [fRoomCategory, setFRoomCategory] = useState('Single private');
   const [showRoomModal, setShowRoomModal] = useState(false);
-  const [emergencyYes, setEmergencyYes] = useState(true); // Screenshot shows 'Yes' selected
-  const [fDoctor, setFDoctor] = useState(claim.doctor || 'Dr. P. Rangan');
-  const [fTreatment, setFTreatment] = useState(
-    'Primary PCI with drug-eluting stent to LAD; post-procedure monitoring in CCU for 48 hours.'
-  );
+  const [emergencyYes, setEmergencyYes] = useState(false);
+  const [fDoctor, setFDoctor] = useState(claim.doctor || '');
+  const [fTreatment, setFTreatment] = useState('');
 
   // Document Checklist - exact items and checked states from reference screenshot
   const [checklist, setChecklist] = useState<Record<string, boolean>>({
