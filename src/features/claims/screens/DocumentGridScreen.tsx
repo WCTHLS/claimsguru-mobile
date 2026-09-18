@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,1039 +6,681 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  LayoutAnimation,
+  RefreshControl,
   Platform,
-  UIManager,
-  Modal,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ChevronLeft,
-  Download,
-  FileText,
-  Pencil,
-  Minus,
-  Plus,
-  Check,
+  ChevronRight,
+  Search,
   X,
-  RotateCw,
-  ArrowRight,
-  Trash2,
-  AlertTriangle,
-  Folder,
+  FileText,
+  ShieldCheck,
+  FileCheck,
+  Stethoscope,
+  FileSearch,
+  ExternalLink,
+  Layers,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Building2,
+  Calendar,
+  CreditCard,
+  Eye,
 } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
+import { useClaimsStore } from '../../../state/useClaimsStore';
+import { ClaimItem, INITIAL_CLAIMS } from '../../../mocks/claims.mock';
+import { formatINR } from '../../../core/utils/currency';
 import { Routes } from '../../../app/navigation/routes';
-import {
-  INITIAL_OCR_DOCS,
-  OcrDocument,
-  ParsedField,
-  FieldSegment,
-  PageContent,
-} from '../../../mocks/ocr.mock';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  try {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  } catch {}
+export interface ClaimDocSummary {
+  key: string;
+  name: string;
+  file: string;
+  size: string;
+  badge: string;
+  conf?: number;
+  tags?: string[];
+  docType?: string;
 }
 
-export const DocumentGridScreen = ({ route, navigation }: any) => {
-  const insets = useSafeAreaInsets();
+const formatDocTitle = (d: any, idx: number): string => {
+  if (d.display_title) return d.display_title;
+  if (d.doc_type) {
+    return d.doc_type
+      .replace(/[_-]+/g, ' ')
+      .replace(/\b\w/g, (c: string) => c.toUpperCase());
+  }
+  if (d.original_filename || d.file_name) {
+    const fn = (d.original_filename || d.file_name)
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[_-]+/g, ' ');
+    return fn.replace(/\b\w/g, (c: string) => c.toUpperCase());
+  }
+  if (d.name) return d.name;
+  return `Document ${idx + 1}`;
+};
+
+const formatDocBadge = (d: any): string => {
+  const type = (d.doc_type || d.badge || '').toLowerCase();
+  if (type.includes('bill') || type.includes('invoice')) return 'BILL';
+  if (type.includes('discharge')) return 'DISCHARGE';
+  if (type.includes('lab') || type.includes('pathology')) return 'LAB';
+  if (type.includes('scan') || type.includes('radiology') || type.includes('mri') || type.includes('ct')) return 'SCAN';
+  if (type.includes('rx') || type.includes('pharmacy')) return 'RX';
+  if (type.includes('form') || type.includes('claim')) return 'FORM';
+  if (type.includes('id') || type.includes('aadhaar')) return 'ID';
+  if (type.includes('policy')) return 'POLICY';
+  const ext = (d.file_name || d.file || '').split('.').pop()?.toUpperCase();
+  if (ext && ext.length <= 4 && ext !== 'PDF') return ext;
+  return 'PDF';
+};
+
+export const getClaimDocumentsList = (claim: ClaimItem, preview?: any): ClaimDocSummary[] => {
+  const backendDocs = preview?.documents || claim?.documents;
+  if (Array.isArray(backendDocs) && backendDocs.length > 0) {
+    return backendDocs.map((d: any, idx: number) => {
+      const docTypeKey = d.doc_type || d.key || (d.id ? `doc_${d.id}` : `doc_${idx}`);
+      const rawName = formatDocTitle(d, idx);
+      const rawFile = d.file_name || d.original_filename || d.file || `${rawName}.pdf`;
+      const badge = formatDocBadge(d);
+      return {
+        key: `${docTypeKey}_${idx}`,
+        name: rawName,
+        file: rawFile,
+        size: d.size || (d.page_count ? `${d.page_count} pg · PDF` : '1.5 MB'),
+        badge: badge.length > 9 ? badge.slice(0, 9) : badge,
+        conf: typeof d.conf === 'number' ? d.conf : 0.98,
+        tags: Array.isArray(d.tags) ? d.tags : ['verified'],
+        docType: docTypeKey,
+      };
+    });
+  }
+
+  const patientName = claim.who || 'Patient';
+  const hospital = claim.hospital || 'Hospital';
+
+  if (claim.id.startsWith('7b03') || claim.dept === 'Orthopaedics') {
+    return [
+      {
+        key: 'discharge_summary',
+        name: `Discharge Summary - ${patientName}`,
+        file: 'Discharge_Summary_Signed.pdf',
+        size: '1.6 MB',
+        badge: 'PDF',
+        conf: 0.99,
+        tags: ['discharge_summary', 'verified'],
+      },
+      {
+        key: 'hospital_bill',
+        name: `Final Tax Invoice - ${hospital}`,
+        file: 'Apollo_Final_Bill_Itemized.pdf',
+        size: '1.4 MB',
+        badge: 'BILL',
+        conf: 0.98,
+        tags: ['hospital_bill', 'gstin_verified'],
+      },
+      {
+        key: 'scan_report',
+        name: 'MRI Knee Joint (Right) Diagnostic Report',
+        file: 'MRI_Knee_Joint_Report.pdf',
+        size: '4.2 MB',
+        badge: 'SCAN',
+        conf: 0.95,
+        tags: ['radiology', 'mri'],
+      },
+      {
+        key: 'insurance_form',
+        name: 'Cashless Pre-Authorisation Request Form',
+        file: 'Cashless_PreAuth_Request.pdf',
+        size: '1.9 MB',
+        badge: 'FORM',
+        conf: 0.99,
+        tags: ['irdai_standard', 'verified'],
+      },
+      {
+        key: 'pharmacy_bill',
+        name: 'Pharmacy & Surgical Implants Tax Invoice',
+        file: 'Pharmacy_Implants_Breakup.pdf',
+        size: '820 KB',
+        badge: 'RX',
+        conf: 0.94,
+        tags: ['pharmacy_bill'],
+      },
+    ];
+  }
+
+  if (claim.id.startsWith('2e6f') || claim.dept === 'Nephrology') {
+    return [
+      {
+        key: 'discharge_summary',
+        name: `Clinical Inpatient Summary - ${patientName}`,
+        file: 'Clinical_Inpatient_Summary.pdf',
+        size: '1.5 MB',
+        badge: 'PDF',
+        conf: 0.97,
+        tags: ['inpatient_summary'],
+      },
+      {
+        key: 'hospital_bill',
+        name: `Fortis Healthcare Interim & Final Bill`,
+        file: 'Fortis_Interim_Final_Bill.pdf',
+        size: '2.1 MB',
+        badge: 'BILL',
+        conf: 0.96,
+        tags: ['hospital_bill'],
+      },
+      {
+        key: 'lab_report',
+        name: 'Ultrasound KUB & Renal Function Profile',
+        file: 'Ultrasound_KUB_Blood_Panel.pdf',
+        size: '1.1 MB',
+        badge: 'LAB',
+        conf: 0.97,
+        tags: ['pathology', 'lab_report'],
+      },
+      {
+        key: 'insurance_form',
+        name: 'Reimbursement Claim Form Part-B',
+        file: 'Mediclaim_Part_B_Signed.pdf',
+        size: '1.8 MB',
+        badge: 'FORM',
+        conf: 0.98,
+        tags: ['insurance_form'],
+      },
+    ];
+  }
+
+  if (claim.id.startsWith('9c25') || claim.dept === 'Oncology') {
+    return [
+      {
+        key: 'lab_report',
+        name: 'Histopathology & Biopsy Clinical Panel',
+        file: 'Biopsy_Histopathology_Report.pdf',
+        size: '2.8 MB',
+        badge: 'LAB',
+        conf: 0.92,
+        tags: ['biopsy', 'oncology'],
+      },
+      {
+        key: 'discharge_summary',
+        name: 'Chemotherapy Cycle Protocol & Day-care Notes',
+        file: 'DayCare_Chemo_Protocol.pdf',
+        size: '1.3 MB',
+        badge: 'PDF',
+        conf: 0.94,
+        tags: ['chemo_protocol'],
+      },
+      {
+        key: 'hospital_bill',
+        name: `Max Super Specialty Inpatient Bill`,
+        file: 'Max_Healthcare_IPD_Invoice.pdf',
+        size: '1.7 MB',
+        badge: 'BILL',
+        conf: 0.93,
+        tags: ['hospital_bill'],
+      },
+      {
+        key: 'policy_card',
+        name: 'National Health Insurance Policy Schedule',
+        file: 'Policy_Schedule_National.pdf',
+        size: '720 KB',
+        badge: 'POLICY',
+        conf: 0.99,
+        tags: ['policy_card'],
+      },
+    ];
+  }
+
+  // Default rich 7-document set for primary claim
+  return [
+    {
+      key: 'discharge_summary',
+      name: `Discharge Summary - ${patientName}`,
+      file: 'Discharge_Summary_Signed.pdf',
+      size: '1.8 MB',
+      badge: 'PDF',
+      conf: 0.99,
+      tags: ['discharge_summary', 'verified'],
+    },
+    {
+      key: 'insurance_form',
+      name: 'Reimbursement Claim Form (National Insurance)',
+      file: 'National_Insurance_Claim_Form.pdf',
+      size: '2.4 MB',
+      badge: 'FORM',
+      conf: 0.99,
+      tags: ['insurance_form', 'irdai_standard'],
+    },
+    {
+      key: 'hospital_bill',
+      name: `Hospital Bill - ${hospital}`,
+      file: 'Hospital_Final_Tax_Invoice.pdf',
+      size: '1.2 MB',
+      badge: 'BILL',
+      conf: 0.98,
+      tags: ['hospital_bill', 'gstin_verified'],
+    },
+    {
+      key: 'lab_report',
+      name: 'Lab Investigation Report (Biochemistry & Blood)',
+      file: 'Clinical_Pathology_Report.pdf',
+      size: '890 KB',
+      badge: 'LAB',
+      conf: 0.96,
+      tags: ['lab_report', 'pathology'],
+    },
+    {
+      key: 'pharmacy_bill',
+      name: 'Pharmacy Itemized Bill & Consumables',
+      file: 'Pharmacy_Tax_Invoice.pdf',
+      size: '760 KB',
+      badge: 'RX',
+      conf: 0.92,
+      tags: ['pharmacy_bill'],
+    },
+    {
+      key: 'scan_report',
+      name: 'Radiology / Chest CT Scan Report',
+      file: 'Chest_High_Res_CT_Scan.pdf',
+      size: '5.6 MB',
+      badge: 'SCAN',
+      conf: 0.91,
+      tags: ['scan_report', 'radiology'],
+    },
+    {
+      key: 'policy_card',
+      name: 'Health Insurance Policy Schedule',
+      file: 'National_Health_Policy_Schedule.pdf',
+      size: '620 KB',
+      badge: 'POLICY',
+      conf: 0.99,
+      tags: ['policy_card'],
+    },
+  ];
+};
+
+const getDocIcon = (key?: string) => {
+  if (!key || typeof key !== 'string') return FileText;
+  const lower = key.toLowerCase();
+  if (lower.includes('discharge')) return ShieldCheck || FileText;
+  if (lower.includes('bill') || lower.includes('invoice') || lower.includes('receipt')) return FileCheck || FileText;
+  if (lower.includes('lab') || lower.includes('scan') || lower.includes('diagnostic')) return Stethoscope || FileText;
+  return FileSearch || FileText;
+};
+
+export const DocumentGridScreen = ({ navigation, route }: any) => {
   const { colors, isDark } = useTheme();
-  const claimId = route?.params?.claimId || 'a4f1c9e2';
-  const initialDocKey = route?.params?.docKey;
+  const { claims, loadClaims, refreshing, claimPreviews } = useClaimsStore();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'complete' | 'running' | 'submitted' | 'FAILED'>('All');
 
-  const [docs, setDocs] = useState<OcrDocument[]>(INITIAL_OCR_DOCS);
-  const initialDocIdx = initialDocKey
-    ? Math.max(0, INITIAL_OCR_DOCS.findIndex(d => d.key === initialDocKey))
-    : 0;
+  // Load claims on mount
+  useEffect(() => {
+    loadClaims();
+  }, []);
 
-  const [activeDocIdx, setActiveDocIdx] = useState(initialDocIdx);
-  const [activePage, setActivePage] = useState(0);
-  const [viewMode, setViewMode] = useState<'layout' | 'raw'>('layout');
-  const [zoomLevel, setZoomLevel] = useState<number>(0); // 0: regular, 1: +1, 2: +2
-  const [selectedFieldKey, setSelectedFieldKey] = useState<string | null>(null);
-  const [fieldFilter, setFieldFilter] = useState<'all' | 'low' | 'miss' | 'edited'>('all');
-  const [editingFieldKey, setEditingFieldKey] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState<string>('');
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [isRerunning, setIsRerunning] = useState(false);
-  const [docToDelete, setDocToDelete] = useState<OcrDocument | null>(null);
+  // Merge loaded claims with fallback INITIAL_CLAIMS so all claims have documents
+  const allClaims = useMemo<ClaimItem[]>(() => {
+    if (claims && claims.length > 0) {
+      return claims;
+    }
+    return INITIAL_CLAIMS;
+  }, [claims]);
 
-  const activeDoc = docs[activeDocIdx] || docs[0];
-  const pages = activeDoc.pages || [];
-  const currentPageContent = pages[activePage] || [];
-
-  const showToast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 2800);
-  };
-
-  // Claim total fields count
-  const claimFieldStats = React.useMemo(() => {
-    let found = 0;
-    let total = 0;
-    docs.forEach(d => {
-      d.fields.forEach(f => {
-        total++;
-        if (f.v != null) found++;
-      });
+  // Compute total documents across all claims
+  const claimDocMap = useMemo(() => {
+    const map = new Map<string, ClaimDocSummary[]>();
+    allClaims.forEach(c => {
+      const preview = claimPreviews[c.id];
+      map.set(c.id, getClaimDocumentsList(c, preview));
     });
-    return { found, total };
-  }, [docs]);
+    return map;
+  }, [allClaims, claimPreviews]);
 
-  // Current doc fields count
-  const docFieldStats = React.useMemo(() => {
-    if (!activeDoc) return { found: 0, total: 0 };
-    const found = activeDoc.fields.filter(f => f.v != null).length;
-    return { found, total: activeDoc.fields.length };
-  }, [activeDoc]);
-
-  const selectDoc = (idx: number) => {
-    setActiveDocIdx(idx);
-    setActivePage(0);
-    setSelectedFieldKey(null);
-    setEditingFieldKey(null);
-  };
-
-  const handleSelectField = (key: string, pageNum?: number) => {
-    setSelectedFieldKey(key);
-    if (pageNum !== undefined && pageNum > 0 && pageNum <= pages.length) {
-      setActivePage(pageNum - 1);
-    }
-  };
-
-  const handleStartEdit = (field: ParsedField) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setEditingFieldKey(field.k);
-    setEditValue(field.v || '');
-    setSelectedFieldKey(field.k);
-  };
-
-  const handleSaveEdit = (fieldKey: string) => {
-    if (!editValue.trim()) {
-      showToast('Enter a value or cancel');
-      return;
-    }
-
-    setDocs(prevDocs =>
-      prevDocs.map((doc, dIdx) => {
-        if (dIdx !== activeDocIdx) return doc;
-        return {
-          ...doc,
-          fields: doc.fields.map(f => {
-            if (f.k !== fieldKey) return f;
-            return {
-              ...f,
-              v: editValue.trim(),
-              c: 1.0,
-              s: 'manual',
-              warn: undefined,
-              note: 'manually edited by reviewer',
-            };
-          }),
-        };
-      })
-    );
-
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setEditingFieldKey(null);
-    showToast(`Saved ${fieldKey}`);
-  };
-
-  const handleCancelEdit = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setEditingFieldKey(null);
-  };
-
-  const handleRerunOcr = () => {
-    setIsRerunning(true);
-    showToast(`POST /ocr/${claimId.slice(0, 8)}… queued on gpu_queue`);
-    setTimeout(() => {
-      setIsRerunning(false);
-      showToast(`OCR complete · ${activeDoc.file} (${activeDoc.secs}s)`);
-    }, 1800);
-  };
-
-  const handleAcceptFields = () => {
-    let missingReq = 0;
-    docs.forEach(d => {
-      d.fields.forEach(f => {
-        if (f.req && f.v == null) missingReq++;
-      });
+  const totalDocsCount = useMemo(() => {
+    let count = 0;
+    claimDocMap.forEach(docs => {
+      count += docs.length;
     });
+    return count;
+  }, [claimDocMap]);
 
-    if (missingReq > 0) {
-      showToast(`${missingReq} required field${missingReq > 1 ? 's' : ''} missing — continuing to coding`);
-    } else {
-      showToast('All required fields verified');
-    }
-    navigation.navigate(Routes.MedicalCoding, { claimId });
-  };
-
-  const handleConfirmDelete = () => {
-    if (!docToDelete) return;
-    const toRemove = docToDelete;
-    const remaining = docs.filter(d => d.key !== toRemove.key);
-    setDocs(remaining);
-    if (activeDocIdx >= remaining.length) {
-      setActiveDocIdx(Math.max(0, remaining.length - 1));
-    }
-    setDocToDelete(null);
-    showToast(`Removed ${toRemove.name}`);
-  };
-
-  // Filtered fields for active document
-  const filteredFields = activeDoc.fields.filter(f => {
-    if (fieldFilter === 'all') return true;
-    if (fieldFilter === 'low') return f.v != null && f.c < 0.85;
-    if (fieldFilter === 'miss') return f.v == null;
-    if (fieldFilter === 'edited') return f.s === 'manual';
-    return true;
-  });
-
-  // Groups of fields
-  const fieldGroups = React.useMemo(() => {
-    const groups: { name: string; items: ParsedField[] }[] = [];
-    filteredFields.forEach(f => {
-      let grp = groups.find(g => g.name === f.g);
-      if (!grp) {
-        grp = { name: f.g, items: [] };
-        groups.push(grp);
+  // Filter claims based on status filter and search query
+  const filteredClaims = useMemo(() => {
+    return allClaims.filter(claim => {
+      // Status filter
+      if (statusFilter !== 'All' && claim.status !== statusFilter) {
+        return false;
       }
-      grp.items.push(f);
+
+      // Search filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const docs = claimDocMap.get(claim.id) || [];
+        const matchName = (claim.who || '').toLowerCase().includes(q);
+        const matchId = claim.id.toLowerCase().includes(q);
+        const matchHospital = (claim.hospital || '').toLowerCase().includes(q);
+        const matchDept = (claim.dept || '').toLowerCase().includes(q);
+        const matchDiagnosis = (claim.diagnosis || '').toLowerCase().includes(q);
+        const matchDocs = docs.some(d => d.name.toLowerCase().includes(q) || d.file.toLowerCase().includes(q));
+
+        return matchName || matchId || matchHospital || matchDept || matchDiagnosis || matchDocs;
+      }
+
+      return true;
     });
-    return groups;
-  }, [filteredFields]);
+  }, [allClaims, statusFilter, searchQuery, claimDocMap]);
 
-  // Render highlighted segment on paper
-  const renderSegment = (seg: string | FieldSegment, sIdx: number) => {
-    if (typeof seg === 'string') {
-      return (
-        <Text key={`str-${sIdx}`} style={[styles.paperBodyText, { fontSize: 13 + zoomLevel }]}>
-          {seg}
-        </Text>
-      );
+  const handleOpenPreview = (claimId: string, docKey?: string) => {
+    navigation.navigate(Routes.PreviewDocuments, { claimId, docKey });
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'complete':
+        return { label: 'Complete', bg: '#ecfdf5', text: '#059669', icon: CheckCircle2 };
+      case 'approved':
+        return { label: 'Approved', bg: '#ecfdf5', text: '#059669', icon: CheckCircle2 };
+      case 'settled':
+        return { label: 'Settled', bg: '#ecfdf5', text: '#059669', icon: CheckCircle2 };
+      case 'submitted':
+        return { label: 'Submitted', bg: '#eff6ff', text: '#2563eb', icon: Layers };
+      case 'rejected':
+        return { label: 'Rejected', bg: '#fef2f2', text: '#dc2626', icon: AlertCircle };
+      case 'running':
+        return { label: 'Processing', bg: '#fffbeb', text: '#d97706', icon: Clock };
+      case 'FAILED':
+        return { label: 'Failed', bg: '#fef2f2', text: '#dc2626', icon: AlertCircle };
+      default:
+        return { label: status, bg: '#f1f5f9', text: '#475569', icon: Clock };
     }
-
-    if (seg.l) {
-      return (
-        <Text key={`lbl-${sIdx}`} style={[styles.paperLabelText, { fontSize: 13 + zoomLevel }]}>
-          {seg.l}
-        </Text>
-      );
-    }
-
-    const fieldObj = activeDoc.fields.find(f => f.k === seg.f);
-    const fieldIndex = activeDoc.fields.findIndex(f => f.k === seg.f) + 1;
-    const isSelected = selectedFieldKey === seg.f;
-    const isLow = fieldObj && fieldObj.c < 0.85;
-    const isMissing = fieldObj && fieldObj.v == null;
-
-    let highlightBg = colors.brandSoft;
-    let borderBottomColor = colors.brand;
-    if (isMissing) {
-      highlightBg = '#fdecec';
-      borderBottomColor = colors.red;
-    } else if (isLow) {
-      highlightBg = '#fdf1e0';
-      borderBottomColor = colors.amber;
-    }
-
-    if (isSelected) {
-      highlightBg = colors.brandSoft;
-      borderBottomColor = colors.brandDark;
-    }
-
-    return (
-      <TouchableOpacity
-        key={`hl-${sIdx}`}
-        onPress={() => seg.f && handleSelectField(seg.f, fieldObj?.pg)}
-        activeOpacity={0.7}
-        style={[
-          styles.highlightSpan,
-          {
-            backgroundColor: highlightBg,
-            borderBottomColor,
-            borderBottomWidth: isSelected ? 2 : 1.5,
-          },
-        ]}
-      >
-        <Text
-          style={[
-            styles.highlightText,
-            {
-              fontSize: 13 + zoomLevel,
-              color: isMissing ? colors.red : colors.ink,
-              fontStyle: isMissing ? 'italic' : 'normal',
-              fontWeight: isSelected ? '700' : '600',
-            },
-          ]}
-        >
-          {seg.t}
-        </Text>
-        {fieldIndex > 0 && (
-          <View
-            style={[
-              styles.tagBadge,
-              {
-                backgroundColor: isMissing
-                  ? colors.red
-                  : isLow
-                  ? colors.amber
-                  : colors.brand,
-              },
-            ]}
-          >
-            <Text style={styles.tagBadgeText}>{fieldIndex}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
   };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bg }]} edges={['top']}>
-      {/* App Bar */}
+      {/* Top App Bar: <  Documents  (left-aligned) */}
       <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <ChevronLeft size={22} color={colors.ink} />
+          <ChevronLeft size={24} color={colors.ink} strokeWidth={2.4} />
         </TouchableOpacity>
-        <Text style={[styles.appBarTitle, { color: colors.ink }]}>Documents</Text>
-        <View style={{ width: 32 }} />
+        <View style={styles.appBarTitleContainer}>
+          <Text style={[styles.appBarTitle, { color: colors.ink }]} numberOfLines={1}>
+            Documents
+          </Text>
+          <Text style={[styles.appBarSubtitle, { color: colors.muted }]}>
+            {totalDocsCount} files attached across {allClaims.length} claims
+          </Text>
+        </View>
+        <View style={styles.headerRightBadge}>
+          <View style={[styles.docCountPill, { backgroundColor: colors.brandSoft }]}>
+            <FileText size={13} color={colors.brandDark} strokeWidth={2.2} />
+            <Text style={[styles.docCountText, { color: colors.brandDark }]}>{totalDocsCount}</Text>
+          </View>
+        </View>
       </View>
 
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollInner}>
-        {/* Horizontal Document Selector Chips */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.docChipsScroll}
-        >
-          {docs.map((doc, idx) => {
-            const isSel = idx === activeDocIdx;
-            const docFound = doc.fields.filter(f => f.v != null).length;
-            const docTotal = doc.fields.length;
-            const hasWarn = doc.flag || docFound < docTotal;
+      {/* Search and Filters Header */}
+      <View style={[styles.searchFilterContainer, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
+        {/* Search Bar */}
+        <View style={[styles.searchBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
+          <Search size={16} color={colors.muted} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.ink }]}
+            placeholder="Search by patient, claim ID, hospital, document..."
+            placeholderTextColor={colors.muted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            clearButtonMode="while-editing"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <X size={15} color={colors.muted} />
+            </TouchableOpacity>
+          )}
+        </View>
 
+        {/* Filter Pills */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersScroll}>
+          {[
+            { key: 'All', label: `All Claims (${allClaims.length})` },
+            { key: 'complete', label: 'Complete' },
+            { key: 'submitted', label: 'Submitted' },
+            { key: 'running', label: 'Processing' },
+            { key: 'FAILED', label: 'Failed' },
+          ].map(tab => {
+            const isSel = statusFilter === tab.key;
             return (
               <TouchableOpacity
-                key={doc.key}
+                key={tab.key}
                 style={[
-                  styles.docChip,
-                  {
-                    backgroundColor: isSel ? colors.brandSoft : colors.surface,
-                    borderColor: isSel
-                      ? colors.brand
-                      : hasWarn
-                      ? colors.amber
-                      : colors.line,
-                  },
+                  styles.filterPill,
+                  isSel
+                    ? { backgroundColor: colors.brand, borderColor: colors.brand }
+                    : { backgroundColor: colors.surface2, borderColor: colors.line },
                 ]}
-                onPress={() => selectDoc(idx)}
+                onPress={() => setStatusFilter(tab.key as any)}
                 activeOpacity={0.7}
               >
                 <Text
                   style={[
-                    styles.docChipText,
-                    {
-                      color: isSel ? colors.brandDark : colors.ink,
-                      fontWeight: isSel ? '700' : '500',
-                    },
+                    styles.filterPillText,
+                    { color: isSel ? '#ffffff' : colors.muted, fontWeight: isSel ? '700' : '500' },
                   ]}
                 >
-                  {doc.name}
+                  {tab.label}
                 </Text>
-                <View
-                  style={[
-                    styles.docChipCountBadge,
-                    {
-                      backgroundColor: isSel ? colors.brand : colors.surface2,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.docChipCountText,
-                      { color: isSel ? '#ffffff' : colors.muted },
-                    ]}
-                  >
-                    {docFound}/{docTotal}
-                  </Text>
-                </View>
               </TouchableOpacity>
             );
           })}
-
-          <TouchableOpacity
-            style={[styles.addDocChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
-            onPress={() => showToast('Attach document from camera, gallery, or files')}
-            activeOpacity={0.7}
-          >
-            <Plus size={14} color={colors.brandDark} />
-            <Text style={[styles.addDocChipText, { color: colors.brandDark }]}>Add</Text>
-          </TouchableOpacity>
         </ScrollView>
-
-        {/* Selected Document Info & Job Card */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <View style={styles.cardHeaderRow}>
-            <View style={[styles.docIconBox, { backgroundColor: colors.brandSoft }]}>
-              <FileText size={20} color={colors.brand} />
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[styles.docCardTitle, { color: colors.ink }]} numberOfLines={1}>
-                {activeDoc.file}
-              </Text>
-              <Text style={[styles.docCardSub, { color: colors.muted }]} numberOfLines={1}>
-                {activeDoc.engine}
-              </Text>
-            </View>
-            <View style={[styles.statusBadge, { backgroundColor: isRerunning ? colors.brandSoft : '#e6f5ef' }]}>
-              <Text style={[styles.statusBadgeText, { color: isRerunning ? colors.brandDark : colors.green }]}>
-                {isRerunning ? 'RUNNING' : 'COMPLETE'}
-              </Text>
-            </View>
-          </View>
-
-          {/* 4-Metric Stats Grid */}
-          <View style={[styles.statsGrid, { backgroundColor: colors.surface2 }]}>
-            <View style={styles.statCell}>
-              <Text style={[styles.statValue, { color: colors.ink }]}>{pages.length}</Text>
-              <Text style={[styles.statLabel, { color: colors.muted }]}>pages</Text>
-            </View>
-            <View style={styles.statCell}>
-              <Text style={[styles.statValue, { color: colors.ink }]}>{Math.round(activeDoc.conf * 100)}%</Text>
-              <Text style={[styles.statLabel, { color: colors.muted }]}>OCR conf.</Text>
-            </View>
-            <View style={styles.statCell}>
-              <Text style={[styles.statValue, { color: colors.ink }]}>{activeDoc.secs}</Text>
-              <Text style={[styles.statLabel, { color: colors.muted }]}>seconds</Text>
-            </View>
-            <View style={styles.statCell}>
-              <Text style={[styles.statValue, { color: colors.ink }]}>{activeDoc.dpi}</Text>
-              <Text style={[styles.statLabel, { color: colors.muted }]}>render DPI</Text>
-            </View>
-          </View>
-
-          {/* Pills Row */}
-          <View style={styles.metaPillsRow}>
-            <View style={[styles.pill, { backgroundColor: colors.brandSoft }]}>
-              <Text style={[styles.pillText, { color: colors.brandDark }]}>
-                doc_type: {activeDoc.key} · {(activeDoc.cls || 0.95).toFixed(2)}
-              </Text>
-            </View>
-            <View style={[styles.pill, { backgroundColor: colors.surface2 }]}>
-              <Text style={[styles.pillText, { color: colors.muted }]}>
-                {activeDoc.badge || 'PDF'} · {activeDoc.size || '1.2 MB'}
-              </Text>
-            </View>
-            {activeDoc.flag && (
-              <View style={[styles.pill, { backgroundColor: '#fdecec' }]}>
-                <Text style={[styles.pillText, { color: colors.red }]}>
-                  {activeDoc.flag} failed
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Action Buttons Row */}
-          <View style={styles.docActionsRow}>
-            <TouchableOpacity
-              style={[styles.docActionBtn, { borderColor: colors.line }]}
-              onPress={() => showToast(`Downloading ${activeDoc.file}…`)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.docActionBtnText, { color: colors.ink }]}>Download</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.docActionBtn, { borderColor: colors.line }]}
-              onPress={() => setDocToDelete(activeDoc)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.docActionBtnText, { color: colors.ink }]}>Remove</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Scan Analysis Card (When Document is a Radiology/Medical Scan) */}
-        {activeDoc.scan && activeDoc.scanData && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.cardSectionTitle, { color: colors.ink }]}>Scan analysis</Text>
-              <View style={[styles.severityPill, { backgroundColor: '#fdf1e0' }]}>
-                <Text style={[styles.severityPillText, { color: colors.amber }]}>
-                  {activeDoc.scanData.severity}
-                </Text>
-              </View>
-            </View>
-
-            {/* Modality Chips */}
-            <View style={styles.modalityChipsRow}>
-              {['MRI', 'CT', 'X-Ray', 'Ultrasound', 'PET', 'Mammography'].map(m => {
-                const isSel = m === activeDoc.scanData?.type;
-                return (
-                  <View
-                    key={m}
-                    style={[
-                      styles.modalityChip,
-                      {
-                        backgroundColor: isSel ? colors.brandSoft : colors.surface2,
-                        borderColor: isSel ? colors.brand : 'transparent',
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.modalityChipText,
-                        { color: isSel ? colors.brandDark : colors.muted, fontWeight: isSel ? '700' : '500' },
-                      ]}
-                    >
-                      {m}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-
-            {/* Extracted Findings */}
-            <View style={styles.findingsList}>
-              {activeDoc.scanData.findings.map((f, fIdx) => (
-                <View key={fIdx} style={[styles.findingRow, { borderBottomColor: colors.line2 }]}>
-                  <View
-                    style={[
-                      styles.dot,
-                      {
-                        backgroundColor:
-                          f.severity === 'ok' ? colors.green : f.severity === 'warn' ? colors.amber : colors.red,
-                      },
-                    ]}
-                  />
-                  <Text style={[styles.findingTitle, { color: colors.ink }]}>{f.title}</Text>
-                  <View
-                    style={[
-                      styles.findingBadge,
-                      {
-                        backgroundColor:
-                          f.severity === 'ok'
-                            ? '#e6f5ef'
-                            : f.severity === 'warn'
-                            ? '#fdf1e0'
-                            : '#fdecec',
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.findingBadgeText,
-                        {
-                          color:
-                            f.severity === 'ok'
-                              ? colors.green
-                              : f.severity === 'warn'
-                              ? colors.amber
-                              : colors.red,
-                        },
-                      ]}
-                    >
-                      {f.badge}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-
-            {/* Linked Codes */}
-            <Text style={[styles.linkedCodesTitle, { color: colors.muted }]}>Linked codes</Text>
-            {activeDoc.scanData.codes.map((c, cIdx) => (
-              <View key={cIdx} style={[styles.codeRow, { borderBottomColor: colors.line2 }]}>
-                <View style={[styles.codeBox, { backgroundColor: colors.surface2 }]}>
-                  <Text style={[styles.codeBoxText, { color: colors.ink }]}>{c.code}</Text>
-                </View>
-                <Text style={[styles.codeDescText, { color: colors.muted }]}>{c.description}</Text>
-                <View
-                  style={[
-                    styles.findingBadge,
-                    { backgroundColor: c.status === 'ok' ? '#e6f5ef' : '#fdf1e0' },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.findingBadgeText,
-                      { color: c.status === 'ok' ? colors.green : colors.amber },
-                    ]}
-                  >
-                    {c.badge}
-                  </Text>
-                </View>
-              </View>
-            ))}
-
-            <TouchableOpacity
-              style={[styles.reviewCodingBtn, { borderColor: colors.line }]}
-              onPress={() => navigation.navigate(Routes.MedicalCoding, { claimId })}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.reviewCodingBtnText, { color: colors.brandDark }]}>
-                Review coding →
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Document Section: Layout / Raw OCR + Zoom Controls */}
-        <View style={styles.viewerHeaderRow}>
-          <Text style={[styles.sectionTitle, { color: colors.ink }]}>Document</Text>
-
-          <View style={styles.viewerControlsRight}>
-            {/* Layout vs Raw OCR Toggle */}
-            <View style={[styles.segmentedToggle, { backgroundColor: colors.surface2 }]}>
-              <TouchableOpacity
-                style={[
-                  styles.segmentBtn,
-                  viewMode === 'layout' && [styles.segmentBtnActive, { backgroundColor: colors.surface }],
-                ]}
-                onPress={() => setViewMode('layout')}
-              >
-                <Text
-                  style={[
-                    styles.segmentBtnText,
-                    { color: viewMode === 'layout' ? colors.brandDark : colors.muted },
-                  ]}
-                >
-                  Layout
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.segmentBtn,
-                  viewMode === 'raw' && [styles.segmentBtnActive, { backgroundColor: colors.surface }],
-                ]}
-                onPress={() => setViewMode('raw')}
-              >
-                <Text
-                  style={[
-                    styles.segmentBtnText,
-                    { color: viewMode === 'raw' ? colors.brandDark : colors.muted },
-                  ]}
-                >
-                  Raw OCR
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Zoom Controls */}
-            <TouchableOpacity
-              style={[styles.zoomBtn, { borderColor: colors.line }]}
-              onPress={() => setZoomLevel(prev => Math.max(0, prev - 1))}
-              disabled={zoomLevel === 0}
-            >
-              <Minus size={14} color={zoomLevel === 0 ? colors.muted : colors.ink} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.zoomBtn, { borderColor: colors.line }]}
-              onPress={() => setZoomLevel(prev => Math.min(2, prev + 1))}
-              disabled={zoomLevel === 2}
-            >
-              <Plus size={14} color={zoomLevel === 2 ? colors.muted : colors.ink} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Paper or Raw View Canvas */}
-        {viewMode === 'layout' ? (
-          <View
-            style={[
-              styles.paperCanvas,
-              {
-                backgroundColor: isDark ? colors.surface : '#ffffff',
-                borderColor: colors.line,
-              },
-            ]}
-          >
-            {currentPageContent.map((contentItem, idx) => {
-              if (Array.isArray(contentItem)) {
-                return (
-                  <View key={`line-${idx}`} style={styles.paperParagraphRow}>
-                    {contentItem.map((seg, sIdx) => renderSegment(seg, sIdx))}
-                  </View>
-                );
-              }
-
-              if (contentItem.h) {
-                return (
-                  <Text
-                    key={`h-${idx}`}
-                    style={[styles.paperHeading, { color: colors.ink, fontSize: 14.5 + zoomLevel }]}
-                  >
-                    {contentItem.h}
-                  </Text>
-                );
-              }
-
-              if (contentItem.sub) {
-                return (
-                  <Text
-                    key={`sub-${idx}`}
-                    style={[styles.paperSubheading, { color: colors.muted, fontSize: 11.5 + zoomLevel }]}
-                  >
-                    {contentItem.sub}
-                  </Text>
-                );
-              }
-
-              if (contentItem.r) {
-                return <View key={`rule-${idx}`} style={[styles.paperDivider, { backgroundColor: colors.line }]} />;
-              }
-
-              if (contentItem.p) {
-                return (
-                  <Text
-                    key={`p-${idx}`}
-                    style={[styles.paperParagraph, { color: colors.ink, fontSize: 12.5 + zoomLevel }]}
-                  >
-                    {contentItem.p}
-                  </Text>
-                );
-              }
-
-              return null;
-            })}
-          </View>
-        ) : (
-          <View style={styles.rawCanvas}>
-            <Text style={styles.rawText}>
-              {currentPageContent
-                .map(contentItem => {
-                  if (Array.isArray(contentItem)) {
-                    return contentItem
-                      .map(seg => {
-                        if (typeof seg === 'string') return seg;
-                        if (seg.l) return seg.l;
-                        const f = activeDoc.fields.find(field => field.k === seg.f);
-                        const c = f ? f.c : 1.0;
-                        const raw = seg.raw || seg.t;
-                        return `${raw} [${c.toFixed(2)}]`;
-                      })
-                      .join('');
-                  }
-                  if (contentItem.h) return contentItem.h.toUpperCase();
-                  if (contentItem.sub) return contentItem.sub;
-                  if (contentItem.r) return '----------------------------------------';
-                  return contentItem.p || '';
-                })
-                .join('\n\n')}
-            </Text>
-          </View>
-        )}
-
-        {/* Page Switcher */}
-        <View style={styles.pageNavRow}>
-          <Text style={[styles.pageIndicatorText, { color: colors.ink }]}>
-            Page {activePage + 1} / {pages.length}
-          </Text>
-          <View style={styles.pageBtnGroup}>
-            <TouchableOpacity
-              style={[styles.pageNavBtn, { borderColor: colors.line }]}
-              onPress={() => setActivePage(p => Math.max(0, p - 1))}
-              disabled={activePage === 0}
-            >
-              <ChevronLeft size={16} color={activePage === 0 ? colors.muted : colors.ink} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.pageNavBtn, { borderColor: colors.line }]}
-              onPress={() => setActivePage(p => Math.min(pages.length - 1, p + 1))}
-              disabled={activePage >= pages.length - 1}
-            >
-              <ArrowRight size={16} color={activePage >= pages.length - 1 ? colors.muted : colors.ink} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Highlight Legend */}
-        <View style={styles.legendRow}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendBox, { backgroundColor: colors.brandSoft, borderColor: colors.brand }]} />
-            <Text style={[styles.legendText, { color: colors.muted }]}>extracted</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendBox, { backgroundColor: '#fdf1e0', borderColor: colors.amber }]} />
-            <Text style={[styles.legendText, { color: colors.muted }]}>low confidence</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendBox, { backgroundColor: '#fdecec', borderColor: colors.red }]} />
-            <Text style={[styles.legendText, { color: colors.muted }]}>not found</Text>
-          </View>
-          <Text style={[styles.legendHint, { color: colors.muted }]}>tap highlight ↔ field</Text>
-        </View>
-
-        {/* Parsed Fields Section */}
-        <View style={styles.fieldsSectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.ink }]}>
-            Parsed fields{' '}
-            <Text style={{ fontSize: 12.5, fontWeight: 'normal', color: colors.muted }}>
-              {docFieldStats.found} of {docFieldStats.total}
-            </Text>
-          </Text>
-          <Text style={[styles.claimTotalText, { color: colors.muted }]}>
-            claim: {claimFieldStats.found} of {claimFieldStats.total}
-          </Text>
-        </View>
-
-        {/* Field Filter Chips */}
-        <View style={styles.filterChipsRow}>
-          {[
-            { id: 'all', label: 'All' },
-            { id: 'low', label: 'Low confidence' },
-            { id: 'miss', label: 'Missing' },
-            { id: 'edited', label: 'Edited' },
-          ].map(flt => {
-            const isSel = fieldFilter === flt.id;
-            return (
-              <TouchableOpacity
-                key={flt.id}
-                style={[
-                  styles.filterChip,
-                  {
-                    backgroundColor: isSel ? colors.brandSoft : colors.surface,
-                    borderColor: isSel ? colors.brand : colors.line,
-                  },
-                ]}
-                onPress={() => setFieldFilter(flt.id as any)}
-              >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    { color: isSel ? colors.brandDark : colors.muted, fontWeight: isSel ? '700' : '500' },
-                  ]}
-                >
-                  {flt.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Grouped Fields Cards */}
-        {fieldGroups.map(grp => (
-          <View
-            key={grp.name}
-            style={[styles.fieldsGroupCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
-          >
-            <View style={[styles.groupHeaderRow, { backgroundColor: colors.surface2 }]}>
-              <Text style={[styles.groupHeaderTitle, { color: colors.muted }]}>{grp.name}</Text>
-              <Text style={[styles.groupHeaderCount, { color: colors.muted }]}>
-                {grp.items.filter(f => f.v != null).length}/{grp.items.length}
-              </Text>
-            </View>
-
-            {grp.items.map((fld, fIdx) => {
-              const isSelected = selectedFieldKey === fld.k;
-              const isEditing = editingFieldKey === fld.k;
-              const isLow = fld.c < 0.85;
-              const isMissing = fld.v == null;
-
-              let barColor = colors.brand;
-              if (isMissing) barColor = colors.red;
-              else if (isLow) barColor = colors.amber;
-
-              return (
-                <View
-                  key={fld.k}
-                  style={[
-                    styles.fieldRowWrap,
-                    fIdx < grp.items.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.line2 },
-                    isSelected && { backgroundColor: colors.brandSoft },
-                  ]}
-                >
-                  <TouchableOpacity
-                    style={styles.fieldRow}
-                    onPress={() => handleSelectField(fld.k, fld.pg)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <Text style={[styles.fieldKeyText, { color: colors.ink }]}>{fld.k}</Text>
-                        {fld.req && fld.v == null && (
-                          <View style={[styles.badgePill, { backgroundColor: '#fdecec' }]}>
-                            <Text style={[styles.badgePillText, { color: colors.red }]}>required</Text>
-                          </View>
-                        )}
-                      </View>
-
-                      <Text
-                        style={[
-                          styles.fieldValText,
-                          {
-                            color: isMissing ? colors.red : colors.ink,
-                            fontStyle: isMissing ? 'italic' : 'normal',
-                          },
-                        ]}
-                      >
-                        {fld.v || 'Not found'}
-                      </Text>
-
-                      <View style={styles.fieldMetaRow}>
-                        <View style={[styles.sourcePill, { backgroundColor: colors.surface2 }]}>
-                          <Text style={[styles.sourcePillText, { color: colors.muted }]}>{fld.s}</Text>
-                        </View>
-                        <Text style={[styles.pageMetaText, { color: colors.muted }]}>p.{fld.pg}</Text>
-                        {fld.warn && (
-                          <View style={[styles.badgePill, { backgroundColor: '#fdf1e0' }]}>
-                            <Text style={[styles.badgePillText, { color: colors.amber }]}>{fld.warn}</Text>
-                          </View>
-                        )}
-                        {fld.note && !fld.warn && (
-                          <Text style={[styles.noteText, { color: colors.muted }]} numberOfLines={1}>
-                            · {fld.note}
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-
-                    <View style={styles.confidenceBarCol}>
-                      <View style={[styles.confBarTrack, { backgroundColor: colors.surface2 }]}>
-                        <View
-                          style={[
-                            styles.confBarFill,
-                            {
-                              width: `${Math.round(fld.c * 100)}%`,
-                              backgroundColor: barColor,
-                            },
-                          ]}
-                        />
-                      </View>
-                      <Text style={[styles.confScoreText, { color: colors.muted }]}>
-                        {fld.c.toFixed(2)}
-                      </Text>
-                    </View>
-
-                    <TouchableOpacity
-                      style={styles.editIconBtn}
-                      onPress={() => handleStartEdit(fld)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Pencil size={15} color={colors.brandDark} />
-                    </TouchableOpacity>
-                  </TouchableOpacity>
-
-                  {/* Inline Field Editor */}
-                  {isEditing && (
-                    <View style={[styles.inlineEditBox, { backgroundColor: colors.brandSoft, borderColor: colors.line }]}>
-                      <Text style={[styles.editHintText, { color: colors.muted }]}>
-                        {fld.k} · {fld.v == null ? 'add value read from document' : 'correct extracted value'}
-                      </Text>
-                      <TextInput
-                        style={[styles.editInput, { backgroundColor: colors.surface, color: colors.ink, borderColor: colors.line }]}
-                        value={editValue}
-                        onChangeText={setEditValue}
-                        placeholder="Type value…"
-                        placeholderTextColor={colors.muted}
-                        autoFocus
-                      />
-                      <View style={styles.editActionRow}>
-                        <TouchableOpacity
-                          style={[styles.cancelBtn, { borderColor: colors.line }]}
-                          onPress={handleCancelEdit}
-                        >
-                          <Text style={[styles.cancelBtnText, { color: colors.ink }]}>Cancel</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.saveBtn, { backgroundColor: colors.brand }]}
-                          onPress={() => handleSaveEdit(fld.k)}
-                        >
-                          <Text style={styles.saveBtnText}>Save</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-          </View>
-        ))}
-
-        <Text style={[styles.footerNoteText, { color: colors.muted }]}>
-          Sources: regex layoutlm llm (OpenRouter → Gemini) manual. Field names are placeholders for the parser's real 20+ fields.
-        </Text>
-      </ScrollView>
-
-      {/* Sticky Bottom Actions Bar */}
-      <View
-        style={[
-          styles.stickyFooter,
-          {
-            backgroundColor: colors.surface,
-            borderTopColor: colors.line,
-            paddingBottom: Math.max(insets.bottom + 8, 16),
-          },
-        ]}
-      >
-        <TouchableOpacity
-          style={[styles.footerBtnOutline, { borderColor: colors.line }]}
-          onPress={handleRerunOcr}
-          disabled={isRerunning}
-        >
-          {isRerunning ? (
-            <RotateCw size={16} color={colors.brandDark} />
-          ) : (
-            <Text style={[styles.footerBtnOutlineText, { color: colors.brandDark }]}>Re-run OCR</Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.footerBtnFilled, { backgroundColor: colors.brand }]}
-          onPress={handleAcceptFields}
-        >
-          <Text style={styles.footerBtnFilledText}>Accept fields → Coding</Text>
-        </TouchableOpacity>
       </View>
 
-      {/* Delete Document Modal */}
-      <Modal
-        visible={docToDelete !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDocToDelete(null)}
+      {/* Main Claims-wise Documents List */}
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadClaims(true)}
+            tintColor={colors.brand}
+          />
+        }
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.modalTitle, { color: colors.ink }]}>
-              Remove {docToDelete?.name}?
+        {filteredClaims.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <FileSearch size={44} color={colors.muted} strokeWidth={1.5} />
+            <Text style={[styles.emptyTitle, { color: colors.ink }]}>No claims or documents found</Text>
+            <Text style={[styles.emptySub, { color: colors.muted }]}>
+              {searchQuery ? `No matches for "${searchQuery}". Try a different keyword.` : 'No claims currently available.'}
             </Text>
-            <Text style={[styles.modalBody, { color: colors.muted }]}>
-              The document file will be detached from this claim; its OCR text and parsed fields will be dropped.
-            </Text>
-            <View style={styles.modalBtnRow}>
+            {searchQuery ? (
               <TouchableOpacity
-                style={[styles.modalCancelBtn, { borderColor: colors.line }]}
-                onPress={() => setDocToDelete(null)}
+                style={[styles.clearBtn, { borderColor: colors.brand }]}
+                onPress={() => setSearchQuery('')}
               >
-                <Text style={[styles.modalCancelText, { color: colors.ink }]}>Cancel</Text>
+                <Text style={[styles.clearBtnText, { color: colors.brandDark }]}>Clear Search</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalDeleteBtn, { backgroundColor: colors.red }]}
-                onPress={handleConfirmDelete}
-              >
-                <Text style={styles.modalDeleteText}>Remove</Text>
-              </TouchableOpacity>
-            </View>
+            ) : null}
           </View>
-        </View>
-      </Modal>
+        ) : (
+          filteredClaims.map((claim, claimIdx) => {
+            const safeClaimId = claim.id || `claim_${claimIdx}`;
+            const docs = claimDocMap.get(safeClaimId) || claimDocMap.get(claim.id) || [];
+            const statusConfig = getStatusBadge(claim.status || 'complete');
+            const StatusIcon = statusConfig?.icon || CheckCircle2;
+            const statusLabel = statusConfig?.label || 'Complete';
+            const statusBg = statusConfig?.bg || '#ecfdf5';
+            const statusText = statusConfig?.text || '#059669';
+            const shortId = safeClaimId.length > 12 ? `${safeClaimId.slice(0, 8)}...` : safeClaimId;
 
-      {/* Toast Bar */}
-      {toastMsg && (
-        <View style={styles.toastContainer}>
-          <Text style={styles.toastMessage}>{toastMsg}</Text>
-        </View>
-      )}
+            return (
+              <View
+                key={`claim_card_${safeClaimId}_${claimIdx}`}
+                style={[
+                  styles.claimCard,
+                  { backgroundColor: colors.surface, borderColor: colors.line },
+                ]}
+              >
+                {/* 1. Claim Header - Tap to preview */}
+                <TouchableOpacity
+                  style={styles.claimHeader}
+                  onPress={() => handleOpenPreview(safeClaimId)}
+                  activeOpacity={0.75}
+                >
+                  <View style={styles.claimHeaderTop}>
+                    <View style={styles.patientInfo}>
+                      <View style={[styles.avatarCircle, { backgroundColor: colors.brandSoft }]}>
+                        <Text style={[styles.avatarText, { color: colors.brandDark }]}>
+                          {(claim.who || 'PT').slice(0, 2).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.patientNameRow}>
+                          <Text style={[styles.patientName, { color: colors.ink }]} numberOfLines={1}>
+                            {claim.who || 'Unknown Patient'}
+                          </Text>
+                          <View style={[styles.statusBadge, { backgroundColor: statusBg }]}>
+                            <StatusIcon size={12} color={statusText} strokeWidth={2.4} />
+                            <Text style={[styles.statusBadgeText, { color: statusText }]}>
+                              {statusLabel}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={[styles.claimIdText, styles.mono, { color: colors.muted }]}>
+                          ID: #{shortId}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Hospital & Department details */}
+                  <View style={styles.metaRow}>
+                    <View style={styles.metaItem}>
+                      <Building2 size={13} color={colors.muted} />
+                      <Text style={[styles.metaText, { color: colors.muted }]} numberOfLines={1}>
+                        {claim.hospital || 'Hospital'} {claim.dept ? `· ${claim.dept}` : ''}
+                      </Text>
+                    </View>
+                    <View style={styles.metaItem}>
+                      <CreditCard size={13} color={colors.brandDark} />
+                      <Text style={[styles.metaAmountText, { color: colors.ink }]}>
+                        {formatINR(claim.amt || 0)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Diagnosis & Dates if available */}
+                  {(claim.diagnosis || claim.admissionDate) && (
+                    <View style={styles.subMetaRow}>
+                      {claim.diagnosis ? (
+                        <Text style={[styles.diagnosisText, { color: colors.muted }]} numberOfLines={1}>
+                          <Text style={{ fontWeight: '600', color: colors.ink }}>Dx: </Text>
+                          {claim.diagnosis}
+                        </Text>
+                      ) : null}
+                      {claim.admissionDate ? (
+                        <View style={styles.dateBadge}>
+                          <Calendar size={11} color={colors.muted} />
+                          <Text style={[styles.dateBadgeText, { color: colors.muted }]}>
+                            {claim.admissionDate}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                {/* 2. Documents Section Header */}
+                <View style={[styles.docsSectionHeader, { borderTopColor: colors.line, borderBottomColor: colors.line }]}>
+                  <View style={styles.docsTitleRow}>
+                    <FileText size={14} color={colors.brandDark} strokeWidth={2.2} />
+                    <Text style={[styles.docsSectionTitle, { color: colors.ink }]}>
+                      UPLOADED DOCUMENTS ({docs.length})
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.previewAllBtn, { backgroundColor: colors.brandSoft }]}
+                    onPress={() => handleOpenPreview(safeClaimId)}
+                    activeOpacity={0.7}
+                  >
+                    <Eye size={13} color={colors.brandDark} strokeWidth={2.2} />
+                    <Text style={[styles.previewAllBtnText, { color: colors.brandDark }]}>
+                      Preview All
+                    </Text>
+                    <ChevronRight size={13} color={colors.brandDark} strokeWidth={2.2} />
+                  </TouchableOpacity>
+                </View>
+
+                {/* 3. Document Items List - Each document is clickable to preview that specific document */}
+                <View style={styles.docList}>
+                  {docs.map((doc, docIdx) => {
+                    const DocIcon = getDocIcon(doc.key);
+                    const isLast = docIdx === docs.length - 1;
+                    const docItemKey = `doc_${safeClaimId}_${doc.key || doc.name || docIdx}_${docIdx}`;
+
+                    return (
+                      <TouchableOpacity
+                        key={docItemKey}
+                        style={[
+                          styles.docRow,
+                          !isLast && { borderBottomColor: colors.line, borderBottomWidth: StyleSheet.hairlineWidth },
+                        ]}
+                        onPress={() => handleOpenPreview(safeClaimId, doc.key)}
+                        activeOpacity={0.65}
+                      >
+                        <View style={[styles.docIconWrap, { backgroundColor: colors.surface2 }]}>
+                          <DocIcon size={16} color={colors.brandDark} strokeWidth={2} />
+                        </View>
+
+                        <View style={styles.docInfo}>
+                          <Text style={[styles.docNameText, { color: colors.ink }]} numberOfLines={1}>
+                            {doc.name}
+                          </Text>
+                          <View style={styles.docBadgesRow}>
+                            <View style={[styles.pillBadge, { backgroundColor: colors.brandSoft }]}>
+                              <Text style={[styles.pillBadgeText, { color: colors.brandDark }]}>
+                                {doc.badge}
+                              </Text>
+                            </View>
+                            <Text style={[styles.docSizeText, { color: colors.muted }]}>
+                              {doc.size}
+                            </Text>
+                            {doc.conf ? (
+                              <Text style={[styles.docConfText, { color: '#059669' }]}>
+                                {Math.round(doc.conf * 100)}% OCR
+                              </Text>
+                            ) : null}
+                          </View>
+                        </View>
+
+                        <View style={styles.docActionWrap}>
+                          <View style={[styles.openPreviewChip, { backgroundColor: colors.surface2 }]}>
+                            <Text style={[styles.openPreviewChipText, { color: colors.muted }]}>
+                              View
+                            </Text>
+                            <ChevronRight size={13} color={colors.muted} />
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          })
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -1047,734 +689,333 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
+  appBar: {
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 19,
+  },
+  appBarTitleContainer: {
+    flex: 1,
+    marginLeft: 8,
+    justifyContent: 'center',
+  },
+  appBarTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    textAlign: 'left',
+  },
+  appBarSubtitle: {
+    fontSize: 11,
+    fontWeight: '400',
+    marginTop: 1,
+    textAlign: 'left',
+  },
+  headerRightBadge: {
+    paddingRight: 4,
+  },
+  docCountPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  docCountText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  searchFilterContainer: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 40,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    marginLeft: 8,
+    paddingVertical: 0,
+  },
+  filtersScroll: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    paddingBottom: 2,
+  },
+  filterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  filterPillText: {
+    fontSize: 12,
+  },
   container: {
     flex: 1,
   },
-  scrollInner: {
-    padding: 13,
-    paddingBottom: 20,
+  contentContainer: {
+    padding: 12,
+    gap: 12,
+    paddingBottom: 32,
   },
-  appBar: {
+  emptyContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 24,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  emptySub: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  clearBtn: {
+    marginTop: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  clearBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  claimCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 4,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  claimHeader: {
+    padding: 14,
+    gap: 8,
+  },
+  claimHeaderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  patientInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  avatarCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  patientNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  patientName: {
+    fontSize: 15,
+    fontWeight: '700',
+    flex: 1,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  claimIdText: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 2,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flex: 1,
+  },
+  metaText: {
+    fontSize: 12,
+  },
+  metaAmountText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  subMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingTop: 4,
+  },
+  diagnosisText: {
+    fontSize: 12,
+    flex: 1,
+  },
+  dateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  dateBadgeText: {
+    fontSize: 11,
+  },
+  docsSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  backBtn: {
-    padding: 4,
-  },
-  appBarTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
-
-  // Document Selector Chips
-  docChipsScroll: {
-    flexDirection: 'row',
-    gap: 7,
-    paddingBottom: 12,
-  },
-  docChip: {
+  docsTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: 99,
-    borderWidth: 1,
   },
-  docChipText: {
-    fontSize: 12,
-  },
-  docChipCountBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 99,
-  },
-  docChipCountText: {
-    fontSize: 10,
+  docsSectionTitle: {
+    fontSize: 11,
     fontWeight: '700',
+    letterSpacing: 0.5,
   },
-  addDocChip: {
+  previewAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingVertical: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  previewAllBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  docList: {
     paddingHorizontal: 12,
-    borderRadius: 99,
-    borderWidth: 1,
   },
-  addDocChipText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-
-  // Document Card
-  card: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 13,
-    marginBottom: 12,
-  },
-  cardHeaderRow: {
+  docRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 10,
     gap: 10,
-    marginBottom: 10,
   },
-  docIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  docCardTitle: {
-    fontSize: 13.5,
-    fontWeight: '700',
-  },
-  docCardSub: {
-    fontSize: 11,
-    marginTop: 2,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  statusBadgeText: {
-    fontSize: 10.5,
-    fontWeight: '800',
-  },
-
-  // 4-Metric Grid
-  statsGrid: {
-    flexDirection: 'row',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 6,
-    marginBottom: 10,
-  },
-  statCell: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 13.5,
-    fontWeight: '800',
-  },
-  statLabel: {
-    fontSize: 9.5,
-    marginTop: 2,
-  },
-
-  // Meta Pills
-  metaPillsRow: {
-    flexDirection: 'row',
-    gap: 6,
-    flexWrap: 'wrap',
-    marginBottom: 10,
-  },
-  pill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  pillText: {
-    fontSize: 10.5,
-    fontWeight: '600',
-  },
-  docActionsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 2,
-  },
-  docActionBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  docActionBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  // Scan Analysis
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  cardSectionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  severityPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  severityPillText: {
-    fontSize: 10.5,
-    fontWeight: '800',
-  },
-  modalityChipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 10,
-  },
-  modalityChip: {
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  modalityChipText: {
-    fontSize: 10.5,
-  },
-  findingsList: {
-    marginBottom: 10,
-  },
-  findingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 7,
-    borderBottomWidth: 1,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  findingTitle: {
-    flex: 1,
-    fontSize: 12,
-  },
-  findingBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 5,
-  },
-  findingBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  linkedCodesTitle: {
-    fontSize: 11,
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  codeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-  },
-  codeBox: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  codeBoxText: {
-    fontSize: 11,
-    fontWeight: '700',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  codeDescText: {
-    flex: 1,
-    fontSize: 11.5,
-  },
-  reviewCodingBtn: {
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  reviewCodingBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-
-  // Document Viewer Controls
-  viewerHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
-  viewerControlsRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  segmentedToggle: {
-    flexDirection: 'row',
-    borderRadius: 8,
-    padding: 2,
-  },
-  segmentBtn: {
-    paddingVertical: 5,
-    paddingHorizontal: 9,
-    borderRadius: 6,
-  },
-  segmentBtnActive: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  segmentBtnText: {
-    fontSize: 11.5,
-    fontWeight: '600',
-  },
-  zoomBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 7,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // Paper Canvas
-  paperCanvas: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 14,
-    minHeight: 220,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  paperHeading: {
-    fontWeight: '800',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-    marginBottom: 3,
-  },
-  paperSubheading: {
-    fontSize: 11,
-    marginBottom: 8,
-  },
-  paperDivider: {
-    height: 1,
-    marginVertical: 8,
-  },
-  paperParagraphRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  paperParagraph: {
-    lineHeight: 18,
-    marginBottom: 6,
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
-  },
-  paperBodyText: {
-    lineHeight: 20,
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
-  },
-  paperLabelText: {
-    color: '#6b7a8c',
-    fontWeight: '600',
-  },
-  highlightSpan: {
-    borderRadius: 3,
-    paddingHorizontal: 3,
-    marginHorizontal: 1,
-    position: 'relative',
-    marginVertical: 1,
-  },
-  highlightText: {
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
-  },
-  tagBadge: {
-    position: 'absolute',
-    top: -9,
-    right: -7,
-    width: 15,
-    height: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tagBadgeText: {
-    color: '#ffffff',
-    fontSize: 8.5,
-    fontWeight: '800',
-  },
-
-  // Raw OCR View
-  rawCanvas: {
-    backgroundColor: '#152238',
-    borderRadius: 12,
-    padding: 12,
-    minHeight: 220,
-    marginBottom: 8,
-  },
-  rawText: {
-    color: '#d7e2ec',
-    fontSize: 11,
-    lineHeight: 17,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-
-  // Page Switcher
-  pageNavRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  pageIndicatorText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  pageBtnGroup: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  pageNavBtn: {
+  docIconWrap: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
   },
-
-  // Legend
-  legendRow: {
+  docInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  docNameText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  docBadgesRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    flexWrap: 'wrap',
-    marginBottom: 14,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  legendBox: {
-    width: 10,
-    height: 10,
-    borderRadius: 2,
-    borderWidth: 1,
-  },
-  legendText: {
-    fontSize: 10.5,
-  },
-  legendHint: {
-    fontSize: 10,
-    marginLeft: 'auto',
-  },
-
-  // Fields Section
-  fieldsSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  claimTotalText: {
-    fontSize: 11.5,
-  },
-  filterChipsRow: {
-    flexDirection: 'row',
     gap: 6,
-    flexWrap: 'wrap',
-    marginBottom: 10,
   },
-  filterChip: {
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 20,
-    borderWidth: 1,
+  pillBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 4,
   },
-  filterChipText: {
-    fontSize: 11.5,
-  },
-
-  // Grouped Fields Card
-  fieldsGroupCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: 'hidden',
-    marginBottom: 10,
-  },
-  groupHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  groupHeaderTitle: {
-    fontSize: 10,
+  pillBadgeText: {
+    fontSize: 9,
     fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: 0.3,
   },
-  groupHeaderCount: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  docSizeText: {
+    fontSize: 11,
   },
-  fieldRowWrap: {},
-  fieldRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    gap: 8,
-  },
-  fieldKeyText: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  fieldValText: {
-    fontSize: 12.5,
-    marginTop: 2,
-  },
-  fieldMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 4,
-    flexWrap: 'wrap',
-  },
-  sourcePill: {
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  sourcePillText: {
-    fontSize: 9.5,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  pageMetaText: {
-    fontSize: 10.5,
-  },
-  badgePill: {
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  badgePillText: {
-    fontSize: 9.5,
-    fontWeight: '700',
-  },
-  noteText: {
-    fontSize: 10.5,
-    flex: 1,
-  },
-  confidenceBarCol: {
-    width: 44,
-    alignItems: 'flex-end',
-  },
-  confBarTrack: {
-    width: 42,
-    height: 4,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  confBarFill: {
-    height: 4,
-  },
-  confScoreText: {
-    fontSize: 10,
-    marginTop: 2,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  editIconBtn: {
-    padding: 6,
-  },
-
-  // Inline Editor
-  inlineEditBox: {
-    padding: 10,
-    borderTopWidth: 1,
-  },
-  editHintText: {
-    fontSize: 10.5,
-    marginBottom: 6,
-  },
-  editInput: {
-    height: 38,
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    fontSize: 13,
-    marginBottom: 8,
-  },
-  editActionRow: {
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'flex-end',
-  },
-  cancelBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  cancelBtnText: {
-    fontSize: 11.5,
+  docConfText: {
+    fontSize: 11,
     fontWeight: '600',
   },
-  saveBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
+  docActionWrap: {
+    justifyContent: 'center',
+  },
+  openPreviewChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 6,
   },
-  saveBtnText: {
-    color: '#ffffff',
-    fontSize: 11.5,
-    fontWeight: '700',
-  },
-
-  footerNoteText: {
-    fontSize: 10.5,
-    lineHeight: 15,
-    marginTop: 4,
-    marginBottom: 12,
-  },
-
-  // Sticky Footer
-  stickyFooter: {
-    flexDirection: 'row',
-    gap: 9,
-    paddingHorizontal: 13,
-    paddingTop: 10,
-    borderTopWidth: 1,
-  },
-  footerBtnOutline: {
-    flex: 0.42,
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  footerBtnOutlineText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  footerBtnFilled: {
-    flex: 0.58,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  footerBtnFilledText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-
-  // Modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalCard: {
-    width: '100%',
-    borderRadius: 16,
-    padding: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  modalBody: {
-    fontSize: 12.5,
-    lineHeight: 18,
-    marginBottom: 16,
-  },
-  modalBtnRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  modalCancelBtn: {
-    flex: 1,
-    height: 40,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalCancelText: {
-    fontSize: 13,
+  openPreviewChipText: {
+    fontSize: 11,
     fontWeight: '600',
   },
-  modalDeleteBtn: {
-    flex: 1,
-    height: 40,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalDeleteText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-
-  // Toast
-  toastContainer: {
-    position: 'absolute',
-    bottom: 85,
-    left: 14,
-    right: 14,
-    backgroundColor: '#152238',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  toastMessage: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '600',
+  mono: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
 });
+export default DocumentGridScreen;
