@@ -53,7 +53,7 @@ export const useAuthStore = create<AuthState>()(
       sumInsured: 500000,
       organization: 'ClaimsGuru Patient Portal',
       token: undefined,
-      isAuthenticated: true,
+      isAuthenticated: false,
       setRole: role => set({ role }),
       setUserDetails: details => set(state => ({ ...state, ...details })),
       signIn: (email = 'sample@gmail.com', name?: string, token?: string, extra?: UserExtraDetails) =>

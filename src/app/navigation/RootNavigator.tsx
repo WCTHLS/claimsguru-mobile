@@ -32,6 +32,24 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const NAVIGATION_STATE_KEY = 'cg_nav_state';
 
+const HOME_NAV_STATE = {
+  index: 0,
+  routes: [
+    {
+      name: 'MainTabs',
+      state: {
+        index: 0,
+        routes: [{ name: Routes.ChatTab }],
+      },
+    },
+  ],
+};
+
+const SIGNIN_NAV_STATE = {
+  index: 0,
+  routes: [{ name: Routes.SignIn }],
+};
+
 const linking: any = {
   prefixes: ['claimsguru://', 'http://localhost', 'https://*'],
   config: {
@@ -39,6 +57,7 @@ const linking: any = {
       [Routes.SignIn]: 'signin',
       [Routes.SignUp]: 'signup',
       MainTabs: {
+        path: '',
         screens: {
           [Routes.ChatTab]: 'chat',
           [Routes.ClaimsTab]: 'claims',
@@ -77,12 +96,25 @@ export const RootNavigator = () => {
 
     const restoreState = async () => {
       try {
-        const savedStateString = await appStorage.getItem(NAVIGATION_STATE_KEY);
-        if (savedStateString) {
-          const state = JSON.parse(savedStateString);
-          if (isMounted && state && state.routes && state.routes.length > 0) {
-            setInitialState(state);
+        // Clear any previous saved subscreen state so refresh always lands on Home (ChatTab)
+        appStorage.removeItem(NAVIGATION_STATE_KEY);
+
+        if (isAuthenticated) {
+          if (typeof window !== 'undefined' && window.history) {
+            window.history.replaceState(null, '', '/');
           }
+          if (isMounted) {
+            setInitialState(HOME_NAV_STATE);
+          }
+          return;
+        }
+
+        // If not authenticated, ensure we land on SignIn screen
+        if (typeof window !== 'undefined' && window.history) {
+          window.history.replaceState(null, '', '/signin');
+        }
+        if (isMounted) {
+          setInitialState(SIGNIN_NAV_STATE);
         }
       } catch (e) {
         console.warn('[RootNavigator] Failed to restore navigation state:', e);
@@ -99,14 +131,6 @@ export const RootNavigator = () => {
     };
   }, []);
 
-  const handleStateChange = (state: any) => {
-    if (state) {
-      try {
-        appStorage.setItem(NAVIGATION_STATE_KEY, JSON.stringify(state));
-      } catch {}
-    }
-  };
-
   if (!isReady) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }}>
@@ -119,7 +143,6 @@ export const RootNavigator = () => {
     <NavigationContainer
       linking={linking}
       initialState={initialState}
-      onStateChange={handleStateChange}
     >
       <Stack.Navigator
         initialRouteName={isAuthenticated ? "MainTabs" : Routes.SignIn}

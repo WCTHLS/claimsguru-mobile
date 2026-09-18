@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
@@ -27,7 +28,6 @@ import {
   ChevronRight,
   Upload,
   Pencil,
-  Sun,
   Moon,
   User,
   Clock,
@@ -467,6 +467,19 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       {/* Header Bar */}
       <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
         <View style={styles.headerLeft}>
+          <Image
+            source={
+              isDark
+                ? require('../../../../assets/ClaimsGuruWhite_txt.png')
+                : require('../../../../assets/ClaimsGuruBlack_txt.png')
+            }
+            style={styles.headerLogo}
+            resizeMode="contain"
+            accessibilityLabel="ClaimsGuru"
+          />
+        </View>
+
+        <View style={styles.headerRight}>
           <TouchableOpacity
             style={styles.avatarBtn}
             onPress={() => navigation.navigate(Routes.PatientProfile)}
@@ -475,43 +488,24 @@ export const ChatHomeScreen = ({ navigation }: any) => {
           >
             <UserAvatar size={34} name={userName} gender={gender} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.ink }]}>ClaimsGuru</Text>
-        </View>
-
-        <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => setShowFeaturesModal(true)}
-            accessibilityLabel="All features"
-          >
-            <LayoutGrid size={19} color={colors.ink} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn} onPress={toggleTheme}>
-            <Sun size={19} color={colors.ink} />
-          </TouchableOpacity>
         </View>
       </View>
 
       {/* Status & Context Bar */}
-      <View style={[styles.contextBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.contextScroll}>
-          {files.length > 0 && (
-            <>
-              <View style={[styles.contextBadge, { backgroundColor: '#e6f4f1' }]}>
-                <Text style={[styles.contextBadgeText, { color: '#0d9488' }]}>
-                  Context · claim a4f1c9e2 · {files.length} docs
-                </Text>
-              </View>
-              <View style={[styles.contextBadgePlain]}>
-                <Text style={[styles.contextBadgePlainText, { color: colors.muted }]}>ollama · llama-3</Text>
-              </View>
-            </>
-          )}
-          <View style={[styles.contextBadgeGreen, { backgroundColor: '#e6f7f0' }]}>
-            <Text style={[styles.contextBadgeGreenText, { color: '#059669' }]}>PHI scrub · always on</Text>
-          </View>
-        </ScrollView>
-      </View>
+      {files.length > 0 && (
+        <View style={[styles.contextBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.contextScroll}>
+            <View style={[styles.contextBadge, { backgroundColor: '#e6f4f1' }]}>
+              <Text style={[styles.contextBadgeText, { color: '#0d9488' }]}>
+                Context · claim a4f1c9e2 · {files.length} docs
+              </Text>
+            </View>
+            <View style={[styles.contextBadgePlain]}>
+              <Text style={[styles.contextBadgePlainText, { color: colors.muted }]}>ollama · llama-3</Text>
+            </View>
+          </ScrollView>
+        </View>
+      )}
 
       <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollInner} keyboardShouldPersistTaps="handled">
         {/* Upload Claim Documents Card */}
@@ -1033,7 +1027,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
-  avatarBtn: { marginRight: 10 },
+  avatarBtn: {},
   avatar: {
     width: 32,
     height: 32,
@@ -1042,8 +1036,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarText: { fontSize: 13, fontWeight: '700' },
-  headerTitle: { fontSize: 18, fontWeight: '700', letterSpacing: -0.3 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerLogo: {
+    width: 124,
+    height: 28,
+  },
+  headerRight: { flexDirection: 'row', alignItems: 'center' },
   iconBtn: { padding: 6 },
   contextBar: { paddingVertical: 8, paddingHorizontal: 14, borderBottomWidth: 1 },
   contextScroll: { flexDirection: 'row', alignItems: 'center', gap: 8 },

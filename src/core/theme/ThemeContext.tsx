@@ -18,7 +18,7 @@ const ThemeContext = createContext<ThemeContextValue>({
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const systemScheme = useColorScheme();
-  const [schemeOverride, setSchemeOverride] = useState<'light' | 'dark' | 'auto'>('auto');
+  const [schemeOverride, setSchemeOverride] = useState<'light' | 'dark' | 'auto'>('light');
 
   const isDark = schemeOverride === 'auto' ? systemScheme === 'dark' : schemeOverride === 'dark';
   const colors = isDark ? Colors.dark : Colors.light;
