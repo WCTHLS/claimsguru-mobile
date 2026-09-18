@@ -35,7 +35,7 @@ interface UploadState {
   setDocType: (id: string, docType: string) => void;
   setClaimType: (type: 'Reimbursement' | 'Cashless' | 'Pre-authorisation') => void;
   logEvent: (event: string, detail: string, isError?: boolean) => void;
-  uploadToBackend: (options?: { policyId?: string; patientId?: string; email?: string }) => Promise<{ claimId: string; taskId?: string }>;
+  uploadToBackend: (options?: { policyId?: string; patientId?: string; email?: string; force?: boolean }) => Promise<{ claimId: string; taskId?: string; isDuplicate?: boolean }>;
 }
 
 export const useUploadStore = create<UploadState>((set, get) => ({
@@ -225,13 +225,17 @@ export const useUploadStore = create<UploadState>((set, get) => ({
         policyId: options?.policyId || auth.policyNumber || undefined,
         patientId: options?.patientId || auth.userId || undefined,
         email: options?.email || auth.userEmail || undefined,
-        force: true,
+        force: options?.force ?? false,
       });
 
       const claimId = res.claim_id || res.id;
-      get().logEvent('UPLOAD_SUCCESS', `Claim ${claimId.slice(0, 8)} created · status: ${res.status}`);
+      const isDuplicate = Boolean(res.is_duplicate);
+      get().logEvent(
+        'UPLOAD_SUCCESS',
+        `Claim ${claimId ? claimId.slice(0, 8) : 'new'} created · status: ${res.status}${isDuplicate ? ' (DUPLICATE)' : ''}`
+      );
       set({ uploading: false });
-      return { claimId, taskId: res.task_id || undefined };
+      return { claimId, taskId: res.task_id || undefined, isDuplicate };
     } catch (err: any) {
       console.warn('[useUploadStore] Backend upload failed:', err);
       get().logEvent('UPLOAD_FAILURE', `Upload error: ${err?.message || 'Error'}`, true);

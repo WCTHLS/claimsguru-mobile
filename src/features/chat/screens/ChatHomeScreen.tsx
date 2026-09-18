@@ -64,6 +64,7 @@ import { useAuthStore } from '../../../state/useAuthStore';
 import { fetchUserProfile } from '../../../core/api/authApi';
 import { Routes } from '../../../app/navigation/routes';
 import { UserAvatar } from '../../../core/components/UserAvatar';
+import { DuplicateClaimModal } from '../../../core/components/DuplicateClaimModal';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(global as any).nativeFabricUIManager) {
   try {
@@ -158,6 +159,8 @@ export const ChatHomeScreen = ({ navigation }: any) => {
   const [isCardExpanded, setIsCardExpanded] = useState(true);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showFeaturesModal, setShowFeaturesModal] = useState(false);
+  const [duplicateClaimId, setDuplicateClaimId] = useState<string | null>(null);
+  const [isReprocessing, setIsReprocessing] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [pipelineStarting, setPipelineStarting] = useState(false);
 
@@ -197,7 +200,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
     } else {
       try {
         const result = await DocumentPicker.getDocumentAsync({
-          type: accept === 'image/*' ? ['image/*'] : ['*/*'],
+          type: '*/*',
           multiple: true,
           copyToCacheDirectory: true,
         });
@@ -214,7 +217,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
           showToast(`Attached ${result.assets.length} file${result.assets.length > 1 ? 's' : ''}`);
         }
       } catch (err) {
-        console.warn('[ChatHomeScreen] Document picker error:', err);
+        console.warn('[ChatHomeScreen] DocumentPicker error:', err);
       }
     }
   };
@@ -229,6 +232,12 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       return;
     }
     try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showToast('Media library permission required');
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
@@ -303,7 +312,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
           showToast('Attached photo from camera');
         }
       } catch (err) {
-        console.warn('[ChatHomeScreen] Camera picker error:', err);
+        console.warn('[ChatHomeScreen] Camera error:', err);
       }
     }
   };
@@ -320,14 +329,19 @@ export const ChatHomeScreen = ({ navigation }: any) => {
     }
   };
 
-  const handleStartPipeline = async () => {
+  const handleStartPipeline = async (force: boolean = false) => {
     if (files.length === 0) {
       showToast('Please upload claim documents first');
       return;
     }
-    if (pipelineStarting) return;
-    setPipelineStarting(true);
-    showToast('Connecting to backend pipeline...');
+    if (pipelineStarting && !force) return;
+
+    if (force) {
+      setIsReprocessing(true);
+    } else {
+      setPipelineStarting(true);
+      showToast('Connecting to backend pipeline...');
+    }
 
     try {
       const auth = useAuthStore.getState();
@@ -345,11 +359,22 @@ export const ChatHomeScreen = ({ navigation }: any) => {
           policyId: auth.policyNumber || undefined,
           patientId: auth.userId || undefined,
           email: auth.userEmail || undefined,
-          force: true,
+          force,
         }
       );
 
       const targetClaimId = uploadRes.claim_id || uploadRes.id;
+
+      // Check if backend detected an already completed duplicate claim
+      if (!force && uploadRes.is_duplicate) {
+        setPipelineStarting(false);
+        setIsReprocessing(false);
+        setDuplicateClaimId(targetClaimId);
+        return;
+      }
+
+      setDuplicateClaimId(null);
+      setIsReprocessing(false);
 
       // 2. Add or update claim in Claims store
       useClaimsStore.getState().addOrUpdateClaim({
@@ -380,6 +405,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
     } catch (err: any) {
       console.warn('[ChatHomeScreen] Pipeline upload failed:', err);
       setPipelineStarting(false);
+      setIsReprocessing(false);
       const errMsg = err?.message || 'Could not upload claim documents to backend.';
       Alert.alert('Upload Error', `${errMsg}\n\nPlease check connection or credentials and try again.`);
       sendMessage(`Upload failed: ${errMsg}`);
@@ -637,7 +663,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
                     },
                     (pipelineStarting || files.length === 0) && { opacity: files.length === 0 ? 0.7 : 0.8 },
                   ]}
-                  onPress={handleStartPipeline}
+                  onPress={() => handleStartPipeline(false)}
                   disabled={files.length === 0 || pipelineStarting}
                   activeOpacity={0.8}
                 >
@@ -1001,6 +1027,27 @@ export const ChatHomeScreen = ({ navigation }: any) => {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Duplicate Claim Modal */}
+      <DuplicateClaimModal
+        visible={!!duplicateClaimId}
+        onClose={() => {
+          setDuplicateClaimId(null);
+          setIsReprocessing(false);
+        }}
+        onViewExisting={() => {
+          const targetId = duplicateClaimId;
+          setDuplicateClaimId(null);
+          setIsReprocessing(false);
+          if (targetId) {
+            navigation.navigate(Routes.ClaimDetail, { claimId: targetId });
+          }
+        }}
+        onUploadAnyway={() => {
+          handleStartPipeline(true);
+        }}
+        isReprocessing={isReprocessing}
+      />
 
       {/* Floating Toast Notification */}
       {toastMsg && (

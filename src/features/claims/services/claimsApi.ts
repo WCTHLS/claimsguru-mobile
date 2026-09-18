@@ -412,7 +412,6 @@ export const claimsApi = {
     const effectivePolicyId = options?.policyId || authState.policyNumber || undefined;
     const effectivePatientId = options?.patientId || authState.userId || undefined;
     const effectiveEmail = options?.email || authState.userEmail || undefined;
-    const isForce = options?.force ? 'true' : 'false';
 
     if (Platform.OS === 'web') {
       const formData = new FormData();
@@ -431,11 +430,21 @@ export const claimsApi = {
       if (effectivePolicyId) formData.append('policy_id', String(effectivePolicyId));
       if (effectivePatientId) formData.append('patient_id', String(effectivePatientId));
       if (effectiveEmail) formData.append('email', String(effectiveEmail));
-      formData.append('force', isForce);
+      if (options?.force) {
+        formData.append('force', 'true');
+      }
 
-      return apiClient.upload<BackendUploadResponse>(API_ENDPOINTS.claimsUpload(), formData, {
+      const res = await apiClient.upload<BackendUploadResponse>(API_ENDPOINTS.claimsUpload(), formData, {
         headers: validToken ? { Authorization: `Bearer ${validToken}` } : undefined,
       });
+
+      const isDup = Boolean(res.is_duplicate || (res.status === 'COMPLETED' && res.task_id === null));
+      return {
+        ...res,
+        claim_id: res.claim_id || res.id,
+        id: res.id || res.claim_id,
+        is_duplicate: isDup,
+      };
     }
 
     // Native iOS & Android: Ensure file is in a guaranteed accessible cache location for Android 11+ scoped storage
@@ -481,9 +490,8 @@ export const claimsApi = {
     let resData: any = null;
 
     try {
-      const uploadParams: Record<string, string> = {
-        force: isForce,
-      };
+      const uploadParams: Record<string, string> = {};
+      if (options?.force) uploadParams.force = 'true';
       if (effectivePolicyId) uploadParams.policy_id = String(effectivePolicyId);
       if (effectivePatientId) uploadParams.patient_id = String(effectivePatientId);
       if (effectiveEmail) uploadParams.email = String(effectiveEmail);
@@ -526,16 +534,17 @@ export const claimsApi = {
       if (effectivePolicyId) formData.append('policy_id', String(effectivePolicyId));
       if (effectivePatientId) formData.append('patient_id', String(effectivePatientId));
       if (effectiveEmail) formData.append('email', String(effectiveEmail));
-      formData.append('force', isForce);
+      if (options?.force) formData.append('force', 'true');
 
       resData = await apiClient.upload<BackendUploadResponse>(uploadUrl, formData);
     }
 
     const claimResponse = resData as BackendUploadResponse;
+    const isDup = Boolean(claimResponse.is_duplicate || (claimResponse.status === 'COMPLETED' && claimResponse.task_id === null));
     const createdClaimId = claimResponse.claim_id || claimResponse.id;
 
-    // If there are additional files attached, upload them to the claim documents endpoint
-    if (files && files.length > 1 && createdClaimId) {
+    // If there are additional files attached, upload them to the claim documents endpoint (unless duplicate)
+    if (!isDup && files && files.length > 1 && createdClaimId) {
       const docUploadUrl = `${API_ENDPOINTS.claims()}/${createdClaimId}/documents`;
       for (let i = 1; i < files.length; i++) {
         const extra = files[i];
@@ -566,7 +575,12 @@ export const claimsApi = {
       }
     }
 
-    return claimResponse;
+    return {
+      ...claimResponse,
+      claim_id: createdClaimId,
+      id: createdClaimId,
+      is_duplicate: isDup,
+    };
   },
 
   indexClaim: async (claimId: string): Promise<any> => {

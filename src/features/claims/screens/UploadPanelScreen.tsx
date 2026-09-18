@@ -18,6 +18,7 @@ import { usePipelineStore } from '../../../state/usePipelineStore';
 import { useClaimsStore } from '../../../state/useClaimsStore';
 import { useAuthStore } from '../../../state/useAuthStore';
 import { Routes } from '../../../app/navigation/routes';
+import { DuplicateClaimModal } from '../../../core/components/DuplicateClaimModal';
 import {
   ArrowLeft,
   UploadCloud,
@@ -65,6 +66,8 @@ export const UploadPanelScreen = ({ navigation }: any) => {
   const { addOrUpdateClaim } = useClaimsStore();
 
   const [selectedDocTypePicker, setSelectedDocTypePicker] = useState<string | null>(null);
+  const [duplicateClaimId, setDuplicateClaimId] = useState<string | null>(null);
+  const [isReprocessing, setIsReprocessing] = useState(false);
 
   // If a previous claim pipeline has completed, automatically clear previous files so the panel is fresh
   useEffect(() => {
@@ -77,16 +80,29 @@ export const UploadPanelScreen = ({ navigation }: any) => {
   const hasFiles = files.length > 0;
   const isReady = hasFiles && files.every(f => f.status === 'ready') && !uploading;
 
-  const handleStartPipeline = async () => {
-    if (!hasFiles || uploading) return;
+  const handleStartPipeline = async (force: boolean = false) => {
+    if (!hasFiles || (uploading && !force)) return;
 
     try {
+      if (force) {
+        setIsReprocessing(true);
+      }
       const auth = useAuthStore.getState();
-      const { claimId } = await uploadToBackend({
+      const { claimId, isDuplicate } = await uploadToBackend({
         policyId: auth.policyNumber || undefined,
         patientId: auth.userId || undefined,
         email: auth.userEmail || undefined,
+        force,
       });
+
+      if (!force && isDuplicate) {
+        setIsReprocessing(false);
+        setDuplicateClaimId(claimId);
+        return;
+      }
+
+      setDuplicateClaimId(null);
+      setIsReprocessing(false);
 
       // Register active new claim in claims store
       addOrUpdateClaim({
@@ -111,6 +127,7 @@ export const UploadPanelScreen = ({ navigation }: any) => {
 
       navigation.navigate(Routes.WorkflowPipeline);
     } catch (err: any) {
+      setIsReprocessing(false);
       Alert.alert(
         'Upload Error',
         err?.message || 'Could not upload claim document to ClaimsGuru backend. Please check connection and try again.'
@@ -547,7 +564,7 @@ export const UploadPanelScreen = ({ navigation }: any) => {
               styles.primaryBtn,
               { backgroundColor: colors.brand, opacity: isReady ? 1 : 0.5 },
             ]}
-            onPress={handleStartPipeline}
+            onPress={() => handleStartPipeline(false)}
             disabled={!isReady}
             activeOpacity={0.85}
           >
@@ -555,6 +572,27 @@ export const UploadPanelScreen = ({ navigation }: any) => {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Duplicate Claim Modal */}
+      <DuplicateClaimModal
+        visible={!!duplicateClaimId}
+        onClose={() => {
+          setDuplicateClaimId(null);
+          setIsReprocessing(false);
+        }}
+        onViewExisting={() => {
+          const targetId = duplicateClaimId;
+          setDuplicateClaimId(null);
+          setIsReprocessing(false);
+          if (targetId) {
+            navigation.navigate(Routes.ClaimDetail, { claimId: targetId });
+          }
+        }}
+        onUploadAnyway={() => {
+          handleStartPipeline(true);
+        }}
+        isReprocessing={isReprocessing}
+      />
     </SafeAreaView>
   );
 };
