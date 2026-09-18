@@ -270,16 +270,11 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
         return;
       }
       try {
-        const fileUri = `${FileSystem.documentDirectory || ''}${BLANK_IRDA_PDF_FILENAME}`;
+        const fileUri = `${FileSystem.documentDirectory || FileSystem.cacheDirectory || ''}${BLANK_IRDA_PDF_FILENAME}`;
         await FileSystem.writeAsStringAsync(fileUri, BLANK_IRDA_PDF_BASE64, {
           encoding: FileSystem.EncodingType.Base64,
         });
-        await Share.share({
-          title: 'IRDAI Standard Blank Claim Form',
-          message: 'Official IRDAI Standard Blank Claim Form (Part A & B) for manual pen-fill.',
-          url: fileUri,
-        });
-        showToast('Blank IRDAI form PDF ready');
+        showToast('Blank IRDAI form saved to device');
       } catch {
         showToast('Blank form ready for printing');
       }
@@ -312,7 +307,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
       return claimsApi.getTpaPdfUrl(claim.id, 'modern', true);
     }
     if (renderStyle === 'blank') {
-      return pdfBlobUrl || `data:application/pdf;base64,${BLANK_IRDA_PDF_BASE64}`;
+      return '';
     }
     return claimsApi.getIrdaPdfUrl(claim.id, 'modern', false, true);
   };
@@ -323,6 +318,8 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
         window.open(pdfBlobUrl, '_blank');
         return;
       }
+      showToast('Viewing Blank IRDAI Claim Form');
+      return;
     }
 
     const directUrl = getDirectPdfUrl();
@@ -347,17 +344,12 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
         return;
       }
       try {
-        const fileUri = `${FileSystem.documentDirectory || ''}${BLANK_IRDA_PDF_FILENAME}`;
-        await FileSystem.writeAsStringAsync(fileUri, BLANK_IRDA_PDF_BASE64, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
         await Share.share({
-          title: 'IRDAI Standard Blank Claim Form',
-          message: 'Official IRDAI Standard Blank Claim Form (Part A & B) for manual pen-fill.',
-          url: fileUri,
+          title: 'Official IRDAI Blank Claim Form',
+          message: 'Official IRDAI Standard Blank Claim Form (Part A & B) for health insurance reimbursement.',
         });
       } catch {
-        showToast('Blank form ready for sharing');
+        showToast('Blank form ready');
       }
       return;
     }
@@ -1308,8 +1300,8 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                 <WebView
                   key={`${claim.id}_${renderStyle}`}
                   source={
-                    renderStyle === 'blank' && pdfBlobUrl
-                      ? { uri: pdfBlobUrl }
+                    renderStyle === 'blank'
+                      ? { html: getBlankIrdaFormHtml() }
                       : Platform.OS === 'android'
                       ? { uri: `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(getDirectPdfUrl())}` }
                       : { uri: getDirectPdfUrl() }

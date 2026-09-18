@@ -7,6 +7,7 @@ export const BLANK_IRDA_PDF_FILENAME = 'IRDAI_Standard_Blank_Claim_Form.pdf';
 /**
  * Returns a blob URL for Web environments (Chrome/Safari/Edge) to render
  * directly inside the native PDF viewer iframe.
+ * On Native Mobile (Android/iOS), returns empty url to prevent huge data URI crashes.
  */
 export const getBlankModernPdfBlob = (): { url: string; filename: string; blob?: Blob } => {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -26,7 +27,7 @@ export const getBlankModernPdfBlob = (): { url: string; filename: string; blob?:
   }
 
   return {
-    url: `data:application/pdf;base64,${BLANK_IRDA_PDF_BASE64}`,
+    url: '',
     filename: BLANK_IRDA_PDF_FILENAME,
   };
 };
@@ -56,7 +57,7 @@ export function getBlankIrdaFormHtml(): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=2.0" />
-  <title>IRDA Standard Health Insurance Claim Form (Blank)</title>
+  <title>IRDA Standard Health Insurance Claim Form (Blank 10-Page Template)</title>
   <style>
     * {
       box-sizing: border-box;
@@ -119,11 +120,6 @@ export function getBlankIrdaFormHtml(): string {
       align-items: center;
       justify-content: center;
       border-radius: 4px;
-      transition: background 0.15s, color 0.15s;
-    }
-    .pdf-bar-btn:hover {
-      background: #474b4e;
-      color: #ffffff;
     }
 
     /* Pages Container */
@@ -134,7 +130,7 @@ export function getBlankIrdaFormHtml(): string {
       padding: 10px 8px 30px 8px;
     }
 
-    /* Individual Page (A4 Aspect Ratio Sheet) */
+    /* Individual Page (A4 Sheet Card) */
     .page-sheet {
       width: 100%;
       background: #ffffff;
@@ -146,7 +142,7 @@ export function getBlankIrdaFormHtml(): string {
       overflow: hidden;
     }
     .page-content {
-      padding: 20px 18px 22px 18px;
+      padding: 18px 16px 20px 16px;
       min-height: 720px;
       display: flex;
       flex-direction: column;
@@ -161,8 +157,8 @@ export function getBlankIrdaFormHtml(): string {
       font-size: 7.5pt;
       color: #64748b;
       border-bottom: 1px solid #e2e8f0;
-      padding-bottom: 6px;
-      margin-bottom: 12px;
+      padding-bottom: 5px;
+      margin-bottom: 10px;
     }
     .doc-page-footer {
       display: flex;
@@ -171,28 +167,20 @@ export function getBlankIrdaFormHtml(): string {
       font-size: 7.5pt;
       color: #64748b;
       border-top: 1px solid #e2e8f0;
-      padding-top: 6px;
-      margin-top: 16px;
+      padding-top: 5px;
+      margin-top: 14px;
     }
 
-    /* ───────── Cover Page (Page 1) ───────── */
+    /* Cover Page */
     .cover-sheet {
       background: linear-gradient(155deg, #0c4a6e 0%, #0369a1 50%, #0284c7 100%);
       color: #ffffff;
-      padding: 26px 20px 22px 20px;
+      padding: 24px 18px 20px 18px;
       min-height: 640px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       position: relative;
-    }
-    .cover-sheet::after {
-      content: "";
-      position: absolute;
-      right: -60px; bottom: -60px;
-      width: 220px; height: 220px;
-      background: radial-gradient(circle, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 70%);
-      pointer-events: none;
     }
     .cover-brand {
       display: flex;
@@ -210,14 +198,10 @@ export function getBlankIrdaFormHtml(): string {
       line-height: 1;
       margin: 0 1px;
     }
-    .cover-brand-title {
-      font-weight: 600;
-      letter-spacing: 0.1em;
-    }
     .cover-title {
-      margin-top: 28px;
-      font-size: 24pt;
-      line-height: 1.1;
+      margin-top: 24px;
+      font-size: 22pt;
+      line-height: 1.15;
       font-weight: 700;
       letter-spacing: -0.02em;
     }
@@ -228,407 +212,294 @@ export function getBlankIrdaFormHtml(): string {
       margin-top: 10px;
       font-size: 9pt;
       line-height: 1.45;
-      opacity: 0.85;
+      opacity: 0.88;
       max-width: 95%;
     }
     .cover-summary {
-      margin-top: 26px;
-      background: rgba(255,255,255,0.08);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      margin-top: 24px;
+      background: rgba(255,255,255,0.09);
       border: 1px solid rgba(255,255,255,0.18);
-      border-radius: 12px;
-      padding: 16px 14px;
+      border-radius: 10px;
+      padding: 14px 12px;
     }
     .cover-summary h3 {
       font-size: 7.5pt;
       text-transform: uppercase;
       letter-spacing: 0.12em;
       color: #fde68a;
-      margin: 0 0 12px 0;
+      margin: 0 0 10px 0;
       font-weight: 700;
     }
     .cover-summary-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px 14px;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .cover-summary-item {
+      background: rgba(255,255,255,0.06);
+      border-radius: 6px;
+      padding: 6px 8px;
     }
     .cover-summary-item .k {
       font-size: 7pt;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
-      opacity: 0.72;
-      font-weight: 600;
+      letter-spacing: 0.06em;
+      opacity: 0.75;
     }
     .cover-summary-item .v {
-      font-size: 11pt;
+      font-size: 9pt;
       font-weight: 600;
       margin-top: 2px;
-      word-break: break-word;
     }
     .cover-footer {
-      margin-top: 30px;
       display: flex;
       justify-content: space-between;
-      align-items: flex-end;
+      align-items: center;
       font-size: 7.5pt;
-      opacity: 0.88;
-      border-top: 1px solid rgba(255,255,255,0.14);
+      opacity: 0.85;
+      border-top: 1px solid rgba(255,255,255,0.15);
       padding-top: 12px;
+      margin-top: 24px;
     }
     .cover-badge {
       display: inline-block;
-      padding: 3px 10px;
-      background: rgba(251,191,36,0.18);
-      border: 1px solid rgba(251,191,36,0.4);
-      border-radius: 999px;
-      color: #fde68a;
-      font-size: 7pt;
-      font-weight: 600;
-      letter-spacing: 0.05em;
+      background: #fde68a;
+      color: #0c4a6e;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 7.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
     }
 
-    /* ───────── Banners & Section Cards ───────── */
+    /* Part Banner */
     .part-banner {
-      margin: 0 0 12px 0;
-      padding: 10px 14px;
-      background: linear-gradient(90deg, #0369a1 0%, #0284c7 100%);
-      color: white;
-      border-radius: 8px;
+      background: #f8fafc;
+      border-left: 4px solid #0369a1;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      border-radius: 0 6px 6px 0;
       display: flex;
-      align-items: center;
       justify-content: space-between;
+      align-items: center;
     }
-    .part-banner.part-b {
-      background: linear-gradient(90deg, #134e4a 0%, #0d9488 100%);
+    .part-b-banner {
+      border-left-color: #059669;
     }
     .part-banner .label {
-      font-size: 7pt;
+      font-size: 7.5pt;
       text-transform: uppercase;
-      letter-spacing: 0.16em;
-      opacity: 0.85;
-      font-weight: 600;
+      letter-spacing: 0.08em;
+      color: #0369a1;
+      font-weight: 700;
+    }
+    .part-b-banner .label {
+      color: #059669;
     }
     .part-banner h2 {
-      font-size: 13pt;
+      font-size: 11pt;
+      color: #0f172a;
       margin: 2px 0 0 0;
-      letter-spacing: -0.01em;
       font-weight: 700;
     }
     .part-banner .right {
-      text-align: right;
       font-size: 7.5pt;
-      opacity: 0.9;
-    }
-    .part-banner .right strong {
-      font-size: 9.5pt;
-      display: block;
+      color: #64748b;
+      text-align: right;
     }
 
+    /* Notice Box */
     .notice {
-      margin: 0 0 10px 0;
-      padding: 6px 10px;
-      border-left: 3px solid #f59e0b;
-      background: #fffbeb;
-      color: #78350f;
+      background: #eff6ff;
+      border: 1px dashed #93c5fd;
+      border-radius: 6px;
+      padding: 7px 10px;
       font-size: 7.5pt;
-      border-radius: 4px;
+      color: #1e40af;
+      margin-bottom: 12px;
       line-height: 1.4;
     }
 
-    /* Section card */
+    /* Section Styles */
     .section {
+      margin-bottom: 12px;
       border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      margin-bottom: 10px;
+      border-radius: 6px;
       overflow: hidden;
-      background: white;
     }
     .section-head {
+      background: #f1f5f9;
+      padding: 6px 10px;
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 7px 10px;
-      background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
       border-bottom: 1px solid #e2e8f0;
     }
     .section-head .num {
-      width: 20px; height: 20px;
-      border-radius: 5px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
       background: #0369a1;
-      color: white;
+      color: #ffffff;
+      font-size: 7.5pt;
       font-weight: 700;
-      font-size: 8.5pt;
       display: flex;
       align-items: center;
       justify-content: center;
-      flex-shrink: 0;
     }
-    .section-head.part-b-head .num {
-      background: #0d9488;
+    .part-b-head .num {
+      background: #059669;
     }
     .section-head .title {
-      font-size: 9.5pt;
-      font-weight: 600;
+      font-size: 8.5pt;
+      font-weight: 700;
       color: #0f172a;
     }
     .section-head .sub {
       margin-left: auto;
       font-size: 7pt;
       color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      font-weight: 600;
     }
     .section-body {
-      padding: 10px 10px;
+      padding: 8px 10px;
     }
 
-    /* Multi-column grid */
+    /* Grids & Fields */
     .grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 8px;
+      display: grid;
+      gap: 7px 10px;
     }
-    .grid > .field {
-      box-sizing: border-box;
-      min-width: 0;
+    .cols-2 { grid-template-columns: repeat(2, 1fr); }
+    .cols-3 { grid-template-columns: repeat(3, 1fr); }
+    .cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+    .field {
       display: flex;
       flex-direction: column;
     }
-    .grid.cols-2 > .field { width: calc(50% - 4px); }
-    .grid.cols-3 > .field { width: calc(33.333% - 5.5px); }
-    .grid > .field.wide   { width: 100%; }
-    .grid > .field.wide-2 { width: calc(66.666% - 4px); }
-
     .field .k {
-      font-size: 7pt;
-      color: #475569;
+      font-size: 6.8pt;
+      font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
-      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #64748b;
       margin-bottom: 3px;
-      display: block;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
-    .field input.v,
-    .field textarea.v {
-      font-family: Helvetica, Arial, sans-serif;
-      font-size: 9.5pt;
-      font-weight: 500;
+    .field .v {
+      font-size: 8.5pt;
       color: #0f172a;
-      padding: 5px 7px;
-      background: #ffffff;
-      border: 1px solid #cbd5e1;
-      border-bottom: 2px solid #94a3b8;
-      border-radius: 3px;
-      width: 100%;
-      min-height: 28px;
-      box-sizing: border-box;
-      line-height: 1.3;
+      border-bottom: 1px dotted #cbd5e1;
+      min-height: 19px;
+      padding-bottom: 1px;
     }
-    .field textarea.v {
-      min-height: 48px;
-      resize: vertical;
+    input.v {
+      border: none;
+      border-bottom: 1px dotted #94a3b8;
+      background: transparent;
+      outline: none;
+      width: 100%;
+      font-family: inherit;
+      font-size: 8.5pt;
+      padding: 1px 0;
     }
 
-    /* Choice row */
+    /* Radio / Checkboxes */
     .choice-row {
       display: flex;
+      gap: 12px;
       align-items: center;
-      gap: 8px;
-      padding: 6px 8px;
-      margin-bottom: 5px;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-left: 3px solid #0369a1;
-      border-radius: 4px;
+      min-height: 19px;
     }
-    .choice-row .label {
-      flex: 1;
-      font-size: 8pt;
-      color: #1e293b;
-      font-weight: 500;
-    }
-    .choice-row .options {
-      display: inline-flex;
-      gap: 8px;
-      align-items: center;
-    }
-    .choice-row label.opt {
-      display: inline-flex;
+    .choice-item {
+      display: flex;
       align-items: center;
       gap: 4px;
-      font-size: 8pt;
-      font-weight: 600;
+      font-size: 7.5pt;
       color: #334155;
-      padding: 2px 8px;
-      background: white;
-      border: 1px solid #cbd5e1;
-      border-radius: 3px;
     }
-    .choice-row input[type=radio] {
-      width: 12px; height: 12px;
-      margin: 0;
+    .checkbox-box {
+      width: 12px;
+      height: 12px;
+      border: 1.2px solid #94a3b8;
+      border-radius: 2px;
+      display: inline-block;
+    }
+    .radio-circle {
+      width: 12px;
+      height: 12px;
+      border: 1.2px solid #94a3b8;
+      border-radius: 50%;
+      display: inline-block;
     }
 
-    /* Checklist */
-    .check-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 5px 8px;
-      padding: 8px 10px;
+    /* Write-in Lines */
+    .pen-line {
+      border-bottom: 1px dotted #cbd5e1;
+      height: 18px;
+      margin-bottom: 4px;
+    }
+
+    /* Table Styles */
+    table.form-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 7.5pt;
+    }
+    table.form-table th {
       background: #f8fafc;
       border: 1px solid #e2e8f0;
-      border-radius: 5px;
-    }
-    .check {
-      display: flex;
-      align-items: flex-start;
-      gap: 6px;
-      font-size: 7.5pt;
-      line-height: 1.3;
-      padding: 4px 6px;
-      background: white;
-      border: 1px solid #e2e8f0;
-      border-radius: 3px;
-      min-height: 26px;
-    }
-    .check input[type=checkbox] {
-      width: 13px; height: 13px;
-      flex-shrink: 0;
-      margin-top: 1px;
-    }
-    .check .label {
-      color: #334155;
-      font-weight: 500;
-    }
-
-    /* Tables */
-    table.modern {
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 0;
-      font-size: 8pt;
-      margin-top: 3px;
-    }
-    table.modern thead th {
-      background: #0f172a;
-      color: white;
-      font-weight: 600;
-      font-size: 7.5pt;
+      padding: 5px 6px;
+      font-size: 6.8pt;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      padding: 5px 8px;
+      color: #475569;
+      font-weight: 700;
       text-align: left;
     }
-    table.modern thead th:first-child { border-top-left-radius: 4px; }
-    table.modern thead th:last-child  { border-top-right-radius: 4px; text-align: right; }
-    table.modern tbody td {
-      padding: 5px 8px;
-      border-bottom: 1px solid #e2e8f0;
-      background: white;
+    table.form-table td {
+      border: 1px solid #e2e8f0;
+      padding: 6px;
+      color: #1e293b;
     }
-    table.modern tbody td.num,
-    table.modern thead th.num {
-      text-align: right;
-      font-variant-numeric: tabular-nums;
-    }
-    table.modern tbody tr:nth-child(even) td {
-      background: #f8fafc;
-    }
-    table.modern tfoot td {
-      padding: 6px 8px;
-      background: #f1f5f9;
-      font-weight: 700;
-      border-top: 2px solid #0369a1;
-    }
-    table.modern tfoot td.num {
-      text-align: right;
-      font-variant-numeric: tabular-nums;
-    }
-    table.modern .empty-row td {
-      color: #94a3b8;
-      font-style: italic;
-      text-align: center;
-      background: #fafafa;
-      padding: 8px;
+    .table-empty-row {
+      height: 26px;
     }
 
     /* Signatures */
     .sign-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
-      margin-top: 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 14px;
     }
     .sign-box {
-      background: #fafbfc;
-      border: 1px solid #e2e8f0;
-      border-top: 2px solid #0369a1;
-      border-radius: 0 0 5px 5px;
-      padding: 6px 10px 10px 10px;
+      flex: 1;
+      border-top: 1.5px dashed #0369a1;
+      padding-top: 4px;
+      text-align: center;
     }
-    .sign-box.part-b-sign {
-      border-top-color: #0d9488;
+    .part-b-sign {
+      border-top-color: #059669;
     }
-    .sign-box input {
-      width: 100%;
-      height: 28px;
-      border: none;
-      border-bottom: 1px dashed #94a3b8;
-      background: transparent;
-      padding: 2px 2px;
-      font-family: Helvetica, Arial, sans-serif;
-      font-size: 11pt;
-      font-style: italic;
-      color: #1e293b;
-      margin-bottom: 4px;
-    }
-    .sign-box .sign-label {
+    .sign-label {
       font-size: 7pt;
+      font-weight: 700;
       color: #475569;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
-      font-weight: 700;
-    }
-
-    @media print {
-      .pdf-viewer-bar {
-        display: none !important;
-      }
-      .pages-wrapper {
-        max-width: 100%;
-        padding: 0;
-      }
-      .page-sheet {
-        margin: 0;
-        box-shadow: none;
-        page-break-after: always;
-        break-after: page;
-        min-height: 100vh;
-      }
+      letter-spacing: 0.04em;
     }
   </style>
 </head>
 <body>
 
-  <!-- PDF Viewer Top Bar -->
+  <!-- Top PDF Toolbar -->
   <div class="pdf-viewer-bar">
     <div class="pdf-bar-left">
-      <span class="pdf-page-indicator">1 / 5</span>
-      <span style="opacity: 0.7; margin-left: 4px;">IRDAI Modern Blank Claim Form</span>
+      <span style="font-weight: 700; color: #fff;">IRDAI_Standard_Blank_Claim_Form.pdf</span>
+      <span class="pdf-page-indicator">1 / 10</span>
     </div>
     <div class="pdf-bar-actions">
-      <button class="pdf-bar-btn" onclick="window.print()" title="Print / Save as PDF">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="6 9 6 2 18 2 18 9"></polyline>
-          <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-          <rect x="6" y="14" width="12" height="8"></rect>
-        </svg>
-      </button>
+      <span style="font-size: 10px; color: #94a3b8; font-weight: 600;">OFFICIAL BLANK TEMPLATE (10 PAGES)</span>
     </div>
   </div>
 
@@ -644,18 +515,18 @@ export function getBlankIrdaFormHtml(): string {
           </svg>
           <span>ClaimsGuru</span>
           <span class="cover-brand-sep">·</span>
-          <span class="cover-brand-title">IRDAI Standard</span>
+          <span style="font-weight: 600; letter-spacing: 0.1em;">IRDAI Standard</span>
         </div>
 
         <h1 class="cover-title">Health Insurance<br /><span class="accent">Claim Form</span></h1>
 
         <p class="cover-subtitle">
-          A blank, print-ready rendition of the IRDAI Standard Reimbursement Claim Form (Part A &amp; Part B).
-          All fields are blank for manual entry. Verify each field before submission.
+          Official IRDAI Standard Health Insurance Reimbursement Claim Form (Part A &amp; Part B).
+          All 10 pages formatted with blank fields for manual pen-fill and physical submission.
         </p>
 
         <div class="cover-summary">
-          <h3>Claim Summary</h3>
+          <h3>Claim Summary (Blank)</h3>
           <div class="cover-summary-grid">
             <div class="cover-summary-item">
               <div class="k">Insured / Patient</div>
@@ -666,7 +537,7 @@ export function getBlankIrdaFormHtml(): string {
               <div class="v">—</div>
             </div>
             <div class="cover-summary-item">
-              <div class="k">Hospital</div>
+              <div class="k">Hospital Name</div>
               <div class="v">—</div>
             </div>
             <div class="cover-summary-item">
@@ -686,17 +557,86 @@ export function getBlankIrdaFormHtml(): string {
       </div>
 
       <div class="cover-footer">
+        <div>Generated ${currentDate} · Document ID: <strong>IRDAI-BLANK-10P</strong></div>
+        <div><span class="cover-badge">Page 1 of 10</span></div>
+      </div>
+    </div>
+
+
+    <!-- ================= PAGE 2: INSTRUCTIONS & GUIDELINES ================= -->
+    <div class="page-sheet">
+      <div class="page-content">
         <div>
-          Generated ${currentDate} · Document ID: <strong>IRDAI-BLANK</strong>
+          <div class="doc-page-header">
+            <span>IRDAI Standard Health Insurance Claim Form</span>
+            <span>General Guidelines &amp; Instructions</span>
+          </div>
+
+          <div class="part-banner">
+            <div>
+              <div class="label">Instructions</div>
+              <h2>Guidelines for Completion of Claim Form</h2>
+            </div>
+            <div class="right">IRDAI Standard<br /><strong>General Info</strong></div>
+          </div>
+
+          <div class="notice">
+            <strong>Important:</strong> Please read all instructions carefully before filling out this form. Incomplete or illegible submissions may lead to processing delays or query generation.
+          </div>
+
+          <section class="section">
+            <div class="section-head">
+              <div class="num">1</div>
+              <div class="title">General Instructions</div>
+            </div>
+            <div class="section-body" style="font-size: 7.8pt; line-height: 1.5; color: #334155;">
+              <p>• The form consists of two parts: <strong>Part A</strong> (to be completed and signed by the Insured) and <strong>Part B</strong> (to be completed, certified, and sealed by the Hospital).</p>
+              <p style="margin-top: 6px;">• Please write in capital letters using a black or blue ballpoint pen. Do not overwrite or use correction fluid.</p>
+              <p style="margin-top: 6px;">• A separate claim form must be submitted for each individual patient and each separate hospitalization episode.</p>
+              <p style="margin-top: 6px;">• All original bills, payment receipts, discharge summaries, and investigation reports must be annexed to this claim.</p>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <div class="num">2</div>
+              <div class="title">Mandatory Document Checklist for Reimbursement</div>
+            </div>
+            <div class="section-body">
+              <div class="grid cols-2" style="font-size: 7.5pt;">
+                <div class="choice-item"><span class="checkbox-box"></span> Duly filled and signed Claim Form (Part A &amp; B)</div>
+                <div class="choice-item"><span class="checkbox-box"></span> Original Discharge Summary / Card</div>
+                <div class="choice-item"><span class="checkbox-box"></span> Original Hospital Final Bill with breakup</div>
+                <div class="choice-item"><span class="checkbox-box"></span> Original Payment Receipts with receipt numbers</div>
+                <div class="choice-item"><span class="checkbox-box"></span> All Diagnostic &amp; Lab Investigation Reports</div>
+                <div class="choice-item"><span class="checkbox-box"></span> Doctor's prescriptions for medicines &amp; tests</div>
+                <div class="choice-item"><span class="checkbox-box"></span> Copy of Health Card / Policy Schedule</div>
+                <div class="choice-item"><span class="checkbox-box"></span> Cancelled Cheque / Bank Passbook Copy</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <div class="num">3</div>
+              <div class="title">Submission Deadlines</div>
+            </div>
+            <div class="section-body" style="font-size: 7.8pt; line-height: 1.5; color: #334155;">
+              <p>• <strong>Hospitalisation Claims:</strong> Within 15 to 30 days from date of discharge as per policy terms.</p>
+              <p style="margin-top: 4px;">• <strong>Post-hospitalisation Expenses:</strong> Within 15 days after completion of post-hospitalisation treatment window (typically 60 to 90 days).</p>
+            </div>
+          </section>
         </div>
-        <div>
-          <span class="cover-badge">Blank Template</span>
+
+        <div class="doc-page-footer">
+          <span>Blank Template</span>
+          <span>Page 2 of 10</span>
         </div>
       </div>
     </div>
 
 
-    <!-- ================= PAGE 2: PART A ================= -->
+    <!-- ================= PAGE 3: PART A - SECTION A & B ================= -->
     <div class="page-sheet">
       <div class="page-content">
         <div>
@@ -710,25 +650,25 @@ export function getBlankIrdaFormHtml(): string {
               <div class="label">Part A</div>
               <h2>To Be Filled by the Insured</h2>
             </div>
-            <div class="right">
-              Sections A – H<br />
-              <strong>Policy —</strong>
-            </div>
-          </div>
-
-          <div class="notice">
-            <strong>Blank Template:</strong> Duly complete each field, attach the required original bills and documents, and sign Section G before submitting to your insurer or TPA.
+            <div class="right">Sections A &amp; B<br /><strong>Policy &amp; History</strong></div>
           </div>
 
           <!-- Section A -->
           <section class="section">
             <div class="section-head">
               <div class="num">A</div>
-              <div class="title">Insurer / TPA Details</div>
-              <div class="sub">Insurer / TPA</div>
+              <div class="title">Details of Primary Insured</div>
             </div>
             <div class="section-body">
               <div class="grid cols-2">
+                <div class="field">
+                  <label class="k">Policy Number *</label>
+                  <input class="v" type="text" />
+                </div>
+                <div class="field">
+                  <label class="k">Certificate / Card No.</label>
+                  <input class="v" type="text" />
+                </div>
                 <div class="field">
                   <label class="k">Name of Insurance Company *</label>
                   <input class="v" type="text" />
@@ -737,12 +677,28 @@ export function getBlankIrdaFormHtml(): string {
                   <label class="k">TPA Name</label>
                   <input class="v" type="text" />
                 </div>
-                <div class="field">
-                  <label class="k">Policy / Health Card No. *</label>
+                <div class="field" style="grid-column: span 2;">
+                  <label class="k">Primary Insured Full Name *</label>
+                  <input class="v" type="text" />
+                </div>
+                <div class="field" style="grid-column: span 2;">
+                  <label class="k">Residential Address</label>
                   <input class="v" type="text" />
                 </div>
                 <div class="field">
-                  <label class="k">Member ID / UHID</label>
+                  <label class="k">City &amp; State</label>
+                  <input class="v" type="text" />
+                </div>
+                <div class="field">
+                  <label class="k">Pin Code</label>
+                  <input class="v" type="text" />
+                </div>
+                <div class="field">
+                  <label class="k">Mobile Number *</label>
+                  <input class="v" type="text" />
+                </div>
+                <div class="field">
+                  <label class="k">Email Address</label>
                   <input class="v" type="text" />
                 </div>
               </div>
@@ -753,198 +709,147 @@ export function getBlankIrdaFormHtml(): string {
           <section class="section">
             <div class="section-head">
               <div class="num">B</div>
-              <div class="title">Insured / Policyholder</div>
-              <div class="sub">Policy &amp; Insured</div>
+              <div class="title">Details of Insurance History</div>
             </div>
             <div class="section-body">
-              <div class="grid cols-3">
-                <div class="field">
-                  <label class="k">Name of Insured *</label>
-                  <input class="v" type="text" />
+              <div class="field" style="margin-bottom: 8px;">
+                <label class="k">Currently covered by any other Mediclaim / Health Insurance?</label>
+                <div class="choice-row">
+                  <div class="choice-item"><span class="radio-circle"></span> Yes</div>
+                  <div class="choice-item"><span class="radio-circle"></span> No</div>
                 </div>
+              </div>
+              <div class="grid cols-2">
                 <div class="field">
-                  <label class="k">Policy Period (From)</label>
-                  <input class="v" type="text" />
-                </div>
-                <div class="field">
-                  <label class="k">Policy Period (To)</label>
-                  <input class="v" type="text" />
-                </div>
-                <div class="field">
-                  <label class="k">Sum Insured</label>
+                  <label class="k">Other Company Name</label>
                   <input class="v" type="text" />
                 </div>
                 <div class="field">
-                  <label class="k">Cumulative Bonus</label>
+                  <label class="k">Other Policy No.</label>
                   <input class="v" type="text" />
                 </div>
                 <div class="field">
-                  <label class="k">Contact Phone</label>
+                  <label class="k">Sum Insured (₹)</label>
                   <input class="v" type="text" />
                 </div>
-                <div class="field wide-2">
-                  <label class="k">Email</label>
-                  <input class="v" type="text" />
-                </div>
-                <div class="field wide">
-                  <label class="k">Address</label>
-                  <textarea class="v" rows="2"></textarea>
+                <div class="field">
+                  <label class="k">Have you ever lodged a claim with them?</label>
+                  <div class="choice-row">
+                    <div class="choice-item"><span class="radio-circle"></span> Yes</div>
+                    <div class="choice-item"><span class="radio-circle"></span> No</div>
+                  </div>
                 </div>
               </div>
             </div>
           </section>
+        </div>
+
+        <div class="doc-page-footer">
+          <span>Blank Template</span>
+          <span>Page 3 of 10</span>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ================= PAGE 4: PART A - SECTION C & D ================= -->
+    <div class="page-sheet">
+      <div class="page-content">
+        <div>
+          <div class="doc-page-header">
+            <span>IRDAI Standard Health Insurance Claim Form</span>
+            <span>${currentDateTime}</span>
+          </div>
+
+          <div class="part-banner">
+            <div>
+              <div class="label">Part A</div>
+              <h2>To Be Filled by the Insured</h2>
+            </div>
+            <div class="right">Sections C &amp; D<br /><strong>Patient &amp; Hospitalisation</strong></div>
+          </div>
 
           <!-- Section C -->
           <section class="section">
             <div class="section-head">
               <div class="num">C</div>
-              <div class="title">Patient Details</div>
-              <div class="sub">Patient Details</div>
+              <div class="title">Details of Insured Person Hospitalized</div>
             </div>
             <div class="section-body">
-              <div class="grid cols-3">
-                <div class="field">
-                  <label class="k">Patient Name *</label>
+              <div class="grid cols-2">
+                <div class="field" style="grid-column: span 2;">
+                  <label class="k">Patient Full Name *</label>
                   <input class="v" type="text" />
                 </div>
                 <div class="field">
-                  <label class="k">Date of Birth</label>
-                  <input class="v" type="text" />
+                  <label class="k">Gender *</label>
+                  <div class="choice-row">
+                    <div class="choice-item"><span class="radio-circle"></span> Male</div>
+                    <div class="choice-item"><span class="radio-circle"></span> Female</div>
+                    <div class="choice-item"><span class="radio-circle"></span> Other</div>
+                  </div>
                 </div>
                 <div class="field">
-                  <label class="k">Gender</label>
-                  <input class="v" type="text" />
+                  <label class="k">Age &amp; Date of Birth</label>
+                  <input class="v" type="text" placeholder="DD / MM / YYYY" />
                 </div>
                 <div class="field">
-                  <label class="k">Relationship to Insured</label>
-                  <input class="v" type="text" />
+                  <label class="k">Relationship to Primary Insured *</label>
+                  <div class="choice-row">
+                    <div class="choice-item"><span class="radio-circle"></span> Self</div>
+                    <div class="choice-item"><span class="radio-circle"></span> Spouse</div>
+                    <div class="choice-item"><span class="radio-circle"></span> Child</div>
+                    <div class="choice-item"><span class="radio-circle"></span> Parent</div>
+                  </div>
                 </div>
                 <div class="field">
                   <label class="k">Occupation</label>
                   <input class="v" type="text" />
                 </div>
-                <div class="field">
-                  <label class="k">PAN</label>
-                  <input class="v" type="text" />
-                </div>
               </div>
             </div>
           </section>
-        </div>
-
-        <div class="doc-page-footer">
-          <span>Blank Template</span>
-          <span>Page 2 of 5</span>
-        </div>
-      </div>
-    </div>
-
-
-    <!-- ================= PAGE 3: PART A CONT. ================= -->
-    <div class="page-sheet">
-      <div class="page-content">
-        <div>
-          <div class="doc-page-header">
-            <span>IRDAI Standard Health Insurance Claim Form</span>
-            <span>${currentDateTime}</span>
-          </div>
 
           <!-- Section D -->
           <section class="section">
             <div class="section-head">
               <div class="num">D</div>
-              <div class="title">Hospitalisation Details</div>
-              <div class="sub">Hospitalisation</div>
+              <div class="title">Details of Hospitalization</div>
             </div>
             <div class="section-body">
-              <div class="grid cols-3">
-                <div class="field wide-2">
-                  <label class="k">Hospital Name *</label>
+              <div class="grid cols-2">
+                <div class="field" style="grid-column: span 2;">
+                  <label class="k">Name of Hospital where Admitted *</label>
                   <input class="v" type="text" />
                 </div>
                 <div class="field">
-                  <label class="k">Hospital City / State</label>
-                  <input class="v" type="text" />
+                  <label class="k">Room Category Occupied</label>
+                  <input class="v" type="text" placeholder="e.g. Twin Sharing / Single / ICU" />
                 </div>
                 <div class="field">
-                  <label class="k">Hospital Phone</label>
-                  <input class="v" type="text" />
+                  <label class="k">Hospitalization Reason</label>
+                  <div class="choice-row">
+                    <div class="choice-item"><span class="radio-circle"></span> Illness</div>
+                    <div class="choice-item"><span class="radio-circle"></span> Injury</div>
+                    <div class="choice-item"><span class="radio-circle"></span> Maternity</div>
+                  </div>
                 </div>
                 <div class="field">
-                  <label class="k">Date of Admission *</label>
+                  <label class="k">Date of Admission (DD/MM/YYYY) *</label>
                   <input class="v" type="text" />
                 </div>
                 <div class="field">
                   <label class="k">Time of Admission</label>
-                  <input class="v" type="text" />
+                  <input class="v" type="text" placeholder="HH : MM" />
                 </div>
                 <div class="field">
-                  <label class="k">Date of Discharge *</label>
+                  <label class="k">Date of Discharge (DD/MM/YYYY) *</label>
                   <input class="v" type="text" />
                 </div>
                 <div class="field">
                   <label class="k">Time of Discharge</label>
-                  <input class="v" type="text" />
+                  <input class="v" type="text" placeholder="HH : MM" />
                 </div>
-                <div class="field">
-                  <label class="k">Length of Stay (Days)</label>
-                  <input class="v" type="text" />
-                </div>
-                <div class="field">
-                  <label class="k">Room Category</label>
-                  <input class="v" type="text" />
-                </div>
-              </div>
-
-              <div style="margin-top: 10px; display: grid; gap: 6px;">
-                <div class="choice-row">
-                  <div class="label">Was hospitalisation due to an injury / accident?</div>
-                  <div class="options">
-                    <label class="opt"><input type="radio" name="d_is_accident" value="YES" /> Yes</label>
-                    <label class="opt"><input type="radio" name="d_is_accident" value="NO" /> No</label>
-                  </div>
-                </div>
-                <div class="choice-row">
-                  <div class="label">Was hospitalisation due to maternity?</div>
-                  <div class="options">
-                    <label class="opt"><input type="radio" name="d_is_maternity" value="YES" /> Yes</label>
-                    <label class="opt"><input type="radio" name="d_is_maternity" value="NO" /> No</label>
-                  </div>
-                </div>
-                <div class="choice-row">
-                  <div class="label">Did the patient undergo any surgical procedure?</div>
-                  <div class="options">
-                    <label class="opt"><input type="radio" name="d_is_surgery" value="YES" /> Yes</label>
-                    <label class="opt"><input type="radio" name="d_is_surgery" value="NO" /> No</label>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Section E -->
-          <section class="section">
-            <div class="section-head">
-              <div class="num">E</div>
-              <div class="title">Claim Documents Submitted</div>
-              <div class="sub">Checklist</div>
-            </div>
-            <div class="section-body">
-              <div class="check-grid">
-                <label class="check"><input type="checkbox" /><span class="label">Duly completed claim form</span></label>
-                <label class="check"><input type="checkbox" /><span class="label">Original main hospital bill</span></label>
-                <label class="check"><input type="checkbox" /><span class="label">Itemised hospital bill / break-up</span></label>
-                <label class="check"><input type="checkbox" /><span class="label">Original payment receipts</span></label>
-                <label class="check"><input type="checkbox" /><span class="label">Discharge / Death summary</span></label>
-                <label class="check"><input type="checkbox" /><span class="label">Investigation reports</span></label>
-                <label class="check"><input type="checkbox" /><span class="label">Pharmacy bills</span></label>
-                <label class="check"><input type="checkbox" /><span class="label">Treating doctor's prescription</span></label>
-                <label class="check"><input type="checkbox" /><span class="label">Indoor case papers</span></label>
-                <label class="check"><input type="checkbox" /><span class="label">KYC documents (PAN / Aadhaar)</span></label>
-                <label class="check"><input type="checkbox" /><span class="label">Cancelled cheque (NEFT)</span></label>
-                <label class="check"><input type="checkbox" /><span class="label">FIR / MLC report (if applicable)</span></label>
-                <label class="check"><input type="checkbox" /><span class="label">Implant invoice / sticker</span></label>
-                <label class="check"><input type="checkbox" /><span class="label">Pre-authorisation letter (if cashless)</span></label>
               </div>
             </div>
           </section>
@@ -952,13 +857,13 @@ export function getBlankIrdaFormHtml(): string {
 
         <div class="doc-page-footer">
           <span>Blank Template</span>
-          <span>Page 3 of 5</span>
+          <span>Page 4 of 10</span>
         </div>
       </div>
     </div>
 
 
-    <!-- ================= PAGE 4: BANK & DECLARATION ================= -->
+    <!-- ================= PAGE 5: PART A - SECTION E, F, G ================= -->
     <div class="page-sheet">
       <div class="page-content">
         <div>
@@ -967,44 +872,70 @@ export function getBlankIrdaFormHtml(): string {
             <span>${currentDateTime}</span>
           </div>
 
-          <!-- Section F -->
+          <div class="part-banner">
+            <div>
+              <div class="label">Part A</div>
+              <h2>To Be Filled by the Insured</h2>
+            </div>
+            <div class="right">Sections E, F &amp; G<br /><strong>Claim, Bills &amp; Bank</strong></div>
+          </div>
+
+          <!-- Section E -->
           <section class="section">
             <div class="section-head">
-              <div class="num">F</div>
-              <div class="title">Bank Details for NEFT Payment</div>
-              <div class="sub">Bank Details for NEFT</div>
+              <div class="num">E</div>
+              <div class="title">Details of Claimed Expenses</div>
             </div>
             <div class="section-body">
               <div class="grid cols-2">
                 <div class="field">
-                  <label class="k">Account Holder Name</label>
-                  <input class="v" type="text" />
+                  <label class="k">Pre-Hospitalization Expenses</label>
+                  <input class="v" type="text" placeholder="₹ —" />
                 </div>
                 <div class="field">
-                  <label class="k">Bank Name</label>
-                  <input class="v" type="text" />
+                  <label class="k">Hospitalization Expenses</label>
+                  <input class="v" type="text" placeholder="₹ —" />
                 </div>
                 <div class="field">
-                  <label class="k">Branch</label>
-                  <input class="v" type="text" />
+                  <label class="k">Post-Hospitalization Expenses</label>
+                  <input class="v" type="text" placeholder="₹ —" />
                 </div>
                 <div class="field">
-                  <label class="k">Account Number</label>
-                  <input class="v" type="text" />
+                  <label class="k">Ambulance Charges</label>
+                  <input class="v" type="text" placeholder="₹ —" />
                 </div>
-                <div class="field">
-                  <label class="k">IFSC Code</label>
-                  <input class="v" type="text" />
-                </div>
-                <div class="field">
-                  <label class="k">MICR Code</label>
-                  <input class="v" type="text" />
-                </div>
-                <div class="field wide">
-                  <label class="k">PAN of Account Holder</label>
-                  <input class="v" type="text" />
+                <div class="field" style="grid-column: span 2;">
+                  <label class="k">Total Claim Amount Claimed (in INR) *</label>
+                  <input class="v" type="text" placeholder="₹ —" style="font-weight: 700; font-size: 10pt;" />
                 </div>
               </div>
+            </div>
+          </section>
+
+          <!-- Section F -->
+          <section class="section">
+            <div class="section-head">
+              <div class="num">F</div>
+              <div class="title">Details of Bills Enclosed (Summary)</div>
+            </div>
+            <div class="section-body">
+              <table class="form-table">
+                <thead>
+                  <tr>
+                    <th style="width: 25px;">#</th>
+                    <th>Bill Number</th>
+                    <th>Bill Date</th>
+                    <th>Issued By</th>
+                    <th style="text-align: right;">Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="table-empty-row"><td>1.</td><td></td><td></td><td></td><td style="text-align: right;">—</td></tr>
+                  <tr class="table-empty-row"><td>2.</td><td></td><td></td><td></td><td style="text-align: right;">—</td></tr>
+                  <tr class="table-empty-row"><td>3.</td><td></td><td></td><td></td><td style="text-align: right;">—</td></tr>
+                  <tr class="table-empty-row"><td>4.</td><td></td><td></td><td></td><td style="text-align: right;">—</td></tr>
+                </tbody>
+              </table>
             </div>
           </section>
 
@@ -1012,24 +943,92 @@ export function getBlankIrdaFormHtml(): string {
           <section class="section">
             <div class="section-head">
               <div class="num">G</div>
+              <div class="title">Details of Primary Insured's Bank Account</div>
+            </div>
+            <div class="section-body">
+              <div class="grid cols-2">
+                <div class="field">
+                  <label class="k">Bank Name *</label>
+                  <input class="v" type="text" />
+                </div>
+                <div class="field">
+                  <label class="k">Branch Name</label>
+                  <input class="v" type="text" />
+                </div>
+                <div class="field">
+                  <label class="k">Bank Account Number *</label>
+                  <input class="v" type="text" />
+                </div>
+                <div class="field">
+                  <label class="k">IFSC Code *</label>
+                  <input class="v" type="text" />
+                </div>
+                <div class="field">
+                  <label class="k">Account Type</label>
+                  <div class="choice-row">
+                    <div class="choice-item"><span class="radio-circle"></span> Savings</div>
+                    <div class="choice-item"><span class="radio-circle"></span> Current</div>
+                  </div>
+                </div>
+                <div class="field">
+                  <label class="k">PAN Number</label>
+                  <input class="v" type="text" />
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="doc-page-footer">
+          <span>Blank Template</span>
+          <span>Page 5 of 10</span>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ================= PAGE 6: PART A - SECTION H (DECLARATION) ================= -->
+    <div class="page-sheet">
+      <div class="page-content">
+        <div>
+          <div class="doc-page-header">
+            <span>IRDAI Standard Health Insurance Claim Form</span>
+            <span>${currentDateTime}</span>
+          </div>
+
+          <div class="part-banner">
+            <div>
+              <div class="label">Part A</div>
+              <h2>To Be Filled by the Insured</h2>
+            </div>
+            <div class="right">Section H<br /><strong>Declaration</strong></div>
+          </div>
+
+          <!-- Section H -->
+          <section class="section">
+            <div class="section-head">
+              <div class="num">H</div>
               <div class="title">Declaration by the Insured</div>
             </div>
             <div class="section-body">
-              <p style="font-size: 8pt; color: #334155; line-height: 1.45; text-align: justify; margin: 0 0 8px 0;">
-                I hereby declare that the information furnished above is true and correct to the best of
-                my knowledge and belief. I understand that any false statement or concealment of material
-                fact may render this claim inadmissible. I authorise the Company / TPA to seek any further
-                medical or financial information necessary for processing this claim. I agree to receive
-                the claim settlement amount through electronic fund transfer (NEFT) into the bank account
-                provided in Section F.
+              <p style="font-size: 8pt; color: #334155; line-height: 1.5; text-align: justify; margin: 0 0 10px 0;">
+                I hereby declare that the details given in this claim form are true and correct to the best of my knowledge and belief.
+                If I have made any false or untrue statement, suppression or concealment of any material fact, my right to claim
+                reimbursement shall be completely forfeited.
               </p>
-              <div class="sign-row">
+              <p style="font-size: 8pt; color: #334155; line-height: 1.5; text-align: justify; margin: 0 0 10px 0;">
+                I also consent and authorise the TPA / insurance company to seek necessary medical information / records from any hospital /
+                medical practitioner who has attended on the person against whom this claim is made. I confirm having read and understood
+                the terms and conditions governing the claim submission.
+              </p>
+
+              <div class="sign-row" style="margin-top: 50px;">
                 <div class="sign-box">
-                  <input name="insured_signature" />
-                  <div class="sign-label">Signature of Insured</div>
+                  <div class="pen-line" style="height: 28px;"></div>
+                  <div class="sign-label">Signature of the Insured / Claimant</div>
                 </div>
                 <div class="sign-box">
-                  <input name="insured_place_date" />
+                  <div class="pen-line" style="height: 28px;"></div>
                   <div class="sign-label">Place &amp; Date</div>
                 </div>
               </div>
@@ -1039,13 +1038,13 @@ export function getBlankIrdaFormHtml(): string {
 
         <div class="doc-page-footer">
           <span>Blank Template</span>
-          <span>Page 4 of 5</span>
+          <span>Page 6 of 10</span>
         </div>
       </div>
     </div>
 
 
-    <!-- ================= PAGE 5: PART B (HOSPITAL) ================= -->
+    <!-- ================= PAGE 7: PART B - SECTION A & B ================= -->
     <div class="page-sheet">
       <div class="page-content">
         <div>
@@ -1054,129 +1053,188 @@ export function getBlankIrdaFormHtml(): string {
             <span>${currentDateTime}</span>
           </div>
 
-          <div class="part-banner part-b">
+          <div class="part-banner part-b-banner">
             <div>
               <div class="label">Part B</div>
               <h2>To Be Filled by the Hospital</h2>
             </div>
-            <div class="right">
-              Sections A – E<br />
-              <strong>Hospital —</strong>
-            </div>
+            <div class="right">Sections A &amp; B<br /><strong>Hospital &amp; Patient</strong></div>
           </div>
 
-          <!-- Section A (Part B) -->
+          <!-- Section A (Hospital) -->
           <section class="section">
             <div class="section-head part-b-head">
               <div class="num">A</div>
-              <div class="title">Hospital Identification</div>
-              <div class="sub">Provider Identification</div>
+              <div class="title">Details of Hospital</div>
             </div>
             <div class="section-body">
               <div class="grid cols-2">
-                <div class="field">
-                  <label class="k">Hospital Name *</label>
+                <div class="field" style="grid-column: span 2;">
+                  <label class="k">Name of Hospital *</label>
                   <input class="v" type="text" />
                 </div>
                 <div class="field">
-                  <label class="k">Hospital Registration No.</label>
+                  <label class="k">Hospital ID / ROHINI Code</label>
                   <input class="v" type="text" />
                 </div>
                 <div class="field">
-                  <label class="k">Phone</label>
+                  <label class="k">Hospital Type</label>
+                  <div class="choice-row">
+                    <div class="choice-item"><span class="radio-circle"></span> Network</div>
+                    <div class="choice-item"><span class="radio-circle"></span> Non-Network</div>
+                  </div>
+                </div>
+                <div class="field">
+                  <label class="k">Registration No. with State Authority</label>
                   <input class="v" type="text" />
                 </div>
                 <div class="field">
-                  <label class="k">Email</label>
+                  <label class="k">Hospital PAN</label>
                   <input class="v" type="text" />
                 </div>
-                <div class="field wide">
-                  <label class="k">Address</label>
-                  <textarea class="v" rows="2"></textarea>
+                <div class="field" style="grid-column: span 2;">
+                  <label class="k">Address &amp; Location</label>
+                  <input class="v" type="text" />
                 </div>
               </div>
             </div>
           </section>
 
-          <!-- Section B (Part B) -->
+          <!-- Section B (Patient Admitted) -->
           <section class="section">
             <div class="section-head part-b-head">
               <div class="num">B</div>
-              <div class="title">Patient Clinical Details</div>
-              <div class="sub">Clinical Information</div>
+              <div class="title">Details of Patient Admitted</div>
             </div>
             <div class="section-body">
               <div class="grid cols-2">
                 <div class="field">
-                  <label class="k">Treating Doctor</label>
+                  <label class="k">Patient Name *</label>
                   <input class="v" type="text" />
                 </div>
                 <div class="field">
-                  <label class="k">Doctor Registration No.</label>
+                  <label class="k">IP / Admission Registration No. *</label>
                   <input class="v" type="text" />
                 </div>
-                <div class="field wide">
-                  <label class="k">Department / Speciality</label>
+                <div class="field">
+                  <label class="k">Date of Admission (DD/MM/YYYY) *</label>
                   <input class="v" type="text" />
                 </div>
-                <div class="field wide">
-                  <label class="k">Provisional Diagnosis</label>
-                  <textarea class="v" rows="2"></textarea>
+                <div class="field">
+                  <label class="k">Time of Admission</label>
+                  <input class="v" type="text" placeholder="HH : MM" />
                 </div>
-                <div class="field wide">
-                  <label class="k">Final Diagnosis</label>
-                  <textarea class="v" rows="2"></textarea>
+                <div class="field">
+                  <label class="k">Date of Discharge (DD/MM/YYYY) *</label>
+                  <input class="v" type="text" />
+                </div>
+                <div class="field">
+                  <label class="k">Time of Discharge</label>
+                  <input class="v" type="text" placeholder="HH : MM" />
+                </div>
+                <div class="field">
+                  <label class="k">Type of Admission</label>
+                  <div class="choice-row">
+                    <div class="choice-item"><span class="radio-circle"></span> Emergency</div>
+                    <div class="choice-item"><span class="radio-circle"></span> Planned</div>
+                    <div class="choice-item"><span class="radio-circle"></span> Day Care</div>
+                  </div>
+                </div>
+                <div class="field">
+                  <label class="k">Status at Discharge</label>
+                  <div class="choice-row">
+                    <div class="choice-item"><span class="radio-circle"></span> Cured</div>
+                    <div class="choice-item"><span class="radio-circle"></span> Relieved</div>
+                    <div class="choice-item"><span class="radio-circle"></span> LAMA</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="doc-page-footer">
+          <span>Blank Template</span>
+          <span>Page 7 of 10</span>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ================= PAGE 8: PART B - SECTION C, D, E (AILMENT & DECLARATION) ================= -->
+    <div class="page-sheet">
+      <div class="page-content">
+        <div>
+          <div class="doc-page-header">
+            <span>IRDAI Standard Health Insurance Claim Form</span>
+            <span>${currentDateTime}</span>
+          </div>
+
+          <div class="part-banner part-b-banner">
+            <div>
+              <div class="label">Part B</div>
+              <h2>To Be Filled by the Hospital</h2>
+            </div>
+            <div class="right">Sections C, D &amp; E<br /><strong>Diagnosis &amp; Cert</strong></div>
+          </div>
+
+          <!-- Section C -->
+          <section class="section">
+            <div class="section-head part-b-head">
+              <div class="num">C</div>
+              <div class="title">Details of Ailment Diagnosed (Primary &amp; Additional)</div>
+            </div>
+            <div class="section-body">
+              <div class="field" style="margin-bottom: 6px;">
+                <label class="k">Primary Diagnosis with ICD-10 Code *</label>
+                <input class="v" type="text" placeholder="Diagnosis description / ICD-10 Code" />
+              </div>
+              <div class="field" style="margin-bottom: 6px;">
+                <label class="k">Secondary / Additional Diagnosis</label>
+                <input class="v" type="text" />
+              </div>
+              <div class="field">
+                <label class="k">Procedures Performed with ICD-10 PCS Codes</label>
+                <input class="v" type="text" />
+              </div>
+            </div>
+          </section>
+
+          <!-- Section D -->
+          <section class="section">
+            <div class="section-head part-b-head">
+              <div class="num">D</div>
+              <div class="title">Treating Doctor &amp; Surgery Details</div>
+            </div>
+            <div class="section-body">
+              <div class="grid cols-2">
+                <div class="field">
+                  <label class="k">Name of Treating Doctor *</label>
+                  <input class="v" type="text" />
+                </div>
+                <div class="field">
+                  <label class="k">Doctor Medical Reg. No. *</label>
+                  <input class="v" type="text" />
+                </div>
+                <div class="field">
+                  <label class="k">Was Surgery Performed?</label>
+                  <div class="choice-row">
+                    <div class="choice-item"><span class="radio-circle"></span> Yes</div>
+                    <div class="choice-item"><span class="radio-circle"></span> No</div>
+                  </div>
+                </div>
+                <div class="field">
+                  <label class="k">Pre-Authorization Obtained?</label>
+                  <div class="choice-row">
+                    <div class="choice-item"><span class="radio-circle"></span> Yes</div>
+                    <div class="choice-item"><span class="radio-circle"></span> No</div>
+                  </div>
                 </div>
               </div>
             </div>
           </section>
 
-          <!-- Section C (Part B) -->
-          <section class="section">
-            <div class="section-head part-b-head">
-              <div class="num">C</div>
-              <div class="title">Diagnosis &amp; Expense Breakdown</div>
-              <div class="sub">ICD-10 / Bill</div>
-            </div>
-            <div class="section-body">
-              <table class="modern" style="margin-bottom: 8px;">
-                <thead>
-                  <tr>
-                    <th>ICD-10 / CPT Code</th>
-                    <th>Clinical Description</th>
-                    <th class="num" style="width: 25%;">Confidence</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr class="empty-row">
-                    <td colspan="3">No ICD-10 diagnosis codes recorded.</td>
-                  </tr>
-                </tbody>
-              </table>
-
-              <table class="modern">
-                <thead>
-                  <tr>
-                    <th>Itemised Expense Head</th>
-                    <th class="num" style="width: 38%;">Amount Claimed (₹)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr class="empty-row">
-                    <td colspan="2">No itemised expense lines available.</td>
-                  </tr>
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td>Total Claimed Amount</td>
-                    <td class="num">₹ —</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </section>
-
-          <!-- Section E (Part B) -->
+          <!-- Section E -->
           <section class="section">
             <div class="section-head part-b-head">
               <div class="num">E</div>
@@ -1189,13 +1247,13 @@ export function getBlankIrdaFormHtml(): string {
                 named above was admitted to and treated at our facility for the period stated, and the
                 charges levied are in accordance with our standard tariff applicable to all patients.
               </p>
-              <div class="sign-row">
+              <div class="sign-row" style="margin-top: 30px;">
                 <div class="sign-box part-b-sign">
-                  <input name="hospital_signature" />
-                  <div class="sign-label">Signature &amp; Seal of Authorised Hospital Official</div>
+                  <div class="pen-line" style="height: 24px;"></div>
+                  <div class="sign-label">Signature &amp; Seal of Hospital Authority</div>
                 </div>
                 <div class="sign-box part-b-sign">
-                  <input name="hospital_place_date" />
+                  <div class="pen-line" style="height: 24px;"></div>
                   <div class="sign-label">Place &amp; Date</div>
                 </div>
               </div>
@@ -1205,11 +1263,149 @@ export function getBlankIrdaFormHtml(): string {
 
         <div class="doc-page-footer">
           <span>Blank Template</span>
-          <span>Page 5 of 5</span>
+          <span>Page 8 of 10</span>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ================= PAGE 9: HOSPITAL EXPENSE SCHEDULE (PART 1 - ROWS 1-22) ================= -->
+    <div class="page-sheet">
+      <div class="page-content">
+        <div>
+          <div class="doc-page-header">
+            <span>IRDAI Standard Health Insurance Claim Form</span>
+            <span>Hospital Expense Schedule (Part 1)</span>
+          </div>
+
+          <div class="part-banner part-b-banner">
+            <div>
+              <div class="label">Itemized Bills</div>
+              <h2>Hospital Expenses Schedule (Rows 1 – 22)</h2>
+            </div>
+            <div class="right">Pen-Fill Table<br /><strong>Page 9 of 10</strong></div>
+          </div>
+
+          <table class="form-table" style="font-size: 7pt;">
+            <thead>
+              <tr style="background: #f1f5f9;">
+                <th style="width: 28px; text-align: center;">#</th>
+                <th style="width: 70px;">Bill Date</th>
+                <th style="width: 80px;">Bill / Inv No.</th>
+                <th>Item Description / Expense Head</th>
+                <th style="width: 85px; text-align: right;">Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">1.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">2.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">3.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">4.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">5.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">6.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">7.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">8.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">9.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">10.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">11.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">12.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">13.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">14.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">15.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">16.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">17.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">18.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">19.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">20.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">21.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">22.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="doc-page-footer">
+          <span>Blank Template · Schedule Part 1</span>
+          <span>Page 9 of 10</span>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ================= PAGE 10: HOSPITAL EXPENSE SCHEDULE (PART 2 - ROWS 23-31) & TOTALS ================= -->
+    <div class="page-sheet">
+      <div class="page-content">
+        <div>
+          <div class="doc-page-header">
+            <span>IRDAI Standard Health Insurance Claim Form</span>
+            <span>Hospital Expense Schedule (Part 2) &amp; Summary</span>
+          </div>
+
+          <div class="part-banner part-b-banner">
+            <div>
+              <div class="label">Itemized Bills</div>
+              <h2>Hospital Expenses Schedule (Rows 23 – 31) &amp; Totals</h2>
+            </div>
+            <div class="right">Final Page<br /><strong>Page 10 of 10</strong></div>
+          </div>
+
+          <table class="form-table" style="font-size: 7pt; margin-bottom: 12px;">
+            <thead>
+              <tr style="background: #f1f5f9;">
+                <th style="width: 28px; text-align: center;">#</th>
+                <th style="width: 70px;">Bill Date</th>
+                <th style="width: 80px;">Bill / Inv No.</th>
+                <th>Item Description / Expense Head</th>
+                <th style="width: 85px; text-align: right;">Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">23.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">24.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">25.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">26.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">27.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">28.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">29.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">30.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+<tr class="table-empty-row"><td style="text-align: center; color: #94a3b8;">31.</td><td></td><td></td><td></td><td style="text-align: right; color: #94a3b8;">Rs.</td></tr>
+              <tr style="background: #f8fafc; font-weight: 700; border-top: 2px solid #cbd5e1;">
+                <td colspan="4" style="text-align: right; font-size: 8pt; padding: 7px;">TOTAL HOSPITAL EXPENSES CLAIMED:</td>
+                <td style="text-align: right; font-size: 9pt; color: #0f172a; padding: 7px;">₹ —</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <section class="section">
+            <div class="section-head part-b-head">
+              <div class="num">✓</div>
+              <div class="title">Hospital Verification &amp; Final Certification</div>
+            </div>
+            <div class="section-body">
+              <p style="font-size: 7.5pt; color: #334155; line-height: 1.4; margin: 0 0 8px 0;">
+                Certified that the hospital bill items detailed in Rows 1 through 31 above reflect the actual services rendered and medications administered to the patient during the hospitalisation period.
+              </p>
+              <div class="sign-row" style="margin-top: 24px;">
+                <div class="sign-box part-b-sign">
+                  <div class="pen-line" style="height: 24px;"></div>
+                  <div class="sign-label">Hospital Billing In-Charge</div>
+                </div>
+                <div class="sign-box part-b-sign">
+                  <div class="pen-line" style="height: 24px;"></div>
+                  <div class="sign-label">Medical Superintendent / Seal</div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="doc-page-footer">
+          <span>Blank Template · Schedule Part 2</span>
+          <span>Page 10 of 10</span>
         </div>
       </div>
     </div>
 
   </div>
+</body>
 </html>`;
 }
