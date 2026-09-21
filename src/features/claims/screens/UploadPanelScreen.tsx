@@ -579,11 +579,13 @@ export const UploadPanelScreen = ({ navigation }: any) => {
         onClose={() => {
           setDuplicateClaimId(null);
           setIsReprocessing(false);
+          clearFiles();
         }}
         onViewExisting={() => {
           const targetId = duplicateClaimId;
           setDuplicateClaimId(null);
           setIsReprocessing(false);
+          clearFiles();
           if (targetId) {
             navigation.navigate(Routes.ClaimDetail, { claimId: targetId });
           }
