@@ -117,6 +117,13 @@ export const ClaimsListScreen = ({ navigation }: any) => {
         label: 'RUNNING',
       };
     }
+    if (st === 'documents_requested' || raw === 'DOCUMENTS_REQUESTED' || raw === 'MODIFICATION_REQUESTED') {
+      return {
+        bg: colors.amberSoft,
+        text: colors.amber,
+        label: 'DOCS REQUESTED',
+      };
+    }
     if (st === 'failed' || st === 'FAILED' || raw.includes('FAIL')) {
       return {
         bg: colors.redSoft,
