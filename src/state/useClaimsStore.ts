@@ -22,6 +22,7 @@ interface ClaimsState {
   getClaim: (id: string) => ClaimItem | undefined;
   setClaimPreview: (id: string, preview: BackendClaimPreview) => void;
   fetchClaimPreview: (id: string) => Promise<BackendClaimPreview | null>;
+  clearClaims: () => void;
 }
 
 export const useClaimsStore = create<ClaimsState>((set, get) => ({
@@ -33,6 +34,14 @@ export const useClaimsStore = create<ClaimsState>((set, get) => ({
   backendConnected: false,
   error: null,
   claimPreviews: {},
+
+  clearClaims: () =>
+    set({
+      claims: [],
+      selectedClaimId: '',
+      claimPreviews: {},
+      error: null,
+    }),
 
   setFilter: filter => set({ filter }),
   selectClaim: id => set({ selectedClaimId: id }),

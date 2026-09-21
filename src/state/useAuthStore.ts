@@ -74,6 +74,21 @@ export const useAuthStore = create<AuthState>()(
           const isSampleUser = cleanEmail === 'sample@gmail.com' || resolvedName.toLowerCase() === 'jhon doe';
           const isSameUser = state.userEmail === cleanEmail;
 
+          if (!isSameUser) {
+            try {
+              const { useUploadStore } = require('./useUploadStore');
+              useUploadStore.getState().resetUploadState?.();
+            } catch {}
+            try {
+              const { usePipelineStore } = require('./usePipelineStore');
+              usePipelineStore.getState().resetPipeline?.();
+            } catch {}
+            try {
+              const { useClaimsStore } = require('./useClaimsStore');
+              useClaimsStore.getState().clearClaims?.();
+            } catch {}
+          }
+
           const first = extra?.firstName || (isSampleUser ? 'Jhon' : (isSameUser ? state.firstName : resolvedName.split(' ')[0])) || '';
           const last = extra?.lastName || (isSampleUser ? 'Doe' : (isSameUser ? state.lastName : resolvedName.split(' ').slice(1).join(' '))) || '';
           const uid = extra?.userId || (isSampleUser ? 'ec78998a-0228-434a-84f4-e08b4b7417e2' : (isSameUser ? state.userId : undefined));
@@ -103,6 +118,18 @@ export const useAuthStore = create<AuthState>()(
       signOut: () => {
         try {
           appStorage.removeItem('cg_nav_state');
+        } catch {}
+        try {
+          const { useUploadStore } = require('./useUploadStore');
+          useUploadStore.getState().resetUploadState?.();
+        } catch {}
+        try {
+          const { usePipelineStore } = require('./usePipelineStore');
+          usePipelineStore.getState().resetPipeline?.();
+        } catch {}
+        try {
+          const { useClaimsStore } = require('./useClaimsStore');
+          useClaimsStore.getState().clearClaims?.();
         } catch {}
         set({
           isAuthenticated: false,

@@ -23,6 +23,7 @@ export interface UploadEventLogItem {
 }
 
 interface UploadState {
+  userId?: string | null;
   files: UploadFileItem[];
   eventLogs: UploadEventLogItem[];
   claimType: 'Reimbursement' | 'Cashless' | 'Pre-authorisation';
@@ -32,6 +33,9 @@ interface UploadState {
   addRealFile: (file: { name: string; size?: number; type?: string; blob?: any; uri?: string }) => void;
   removeFile: (id: string) => void;
   clearFiles: () => void;
+  clearLogs: () => void;
+  resetUploadState: () => void;
+  checkUserSession: (currentUserId?: string | null) => void;
   setDocType: (id: string, docType: string) => void;
   setClaimType: (type: 'Reimbursement' | 'Cashless' | 'Pre-authorisation') => void;
   logEvent: (event: string, detail: string, isError?: boolean) => void;
@@ -39,6 +43,7 @@ interface UploadState {
 }
 
 export const useUploadStore = create<UploadState>((set, get) => ({
+  userId: null,
   files: [],
   eventLogs: [],
   claimType: 'Reimbursement',
@@ -183,6 +188,31 @@ export const useUploadStore = create<UploadState>((set, get) => ({
 
   clearFiles: () => set({ files: [] }),
 
+  clearLogs: () => set({ eventLogs: [] }),
+
+  resetUploadState: () =>
+    set({
+      files: [],
+      eventLogs: [],
+      uploading: false,
+      userId: null,
+    }),
+
+  checkUserSession: (currentUserId?: string | null) => {
+    const prevUserId = get().userId;
+    const normalized = currentUserId ? currentUserId.trim().toLowerCase() : null;
+    if (normalized && prevUserId && prevUserId !== normalized) {
+      set({
+        files: [],
+        eventLogs: [],
+        uploading: false,
+        userId: normalized,
+      });
+    } else if (normalized && !prevUserId) {
+      set({ userId: normalized });
+    }
+  },
+
   setDocType: (id, docType) =>
     set(state => ({
       files: state.files.map(f => (f.id === id ? { ...f, docType, conf: 1.0 } : f)),
@@ -191,9 +221,27 @@ export const useUploadStore = create<UploadState>((set, get) => ({
   setClaimType: claimType => set({ claimType }),
 
   logEvent: (event, detail, isError) => {
+    let currentUser: string | null = null;
+    try {
+      const auth = useAuthStore.getState();
+      currentUser = auth.userEmail ? auth.userEmail.trim().toLowerCase() : auth.userId || null;
+    } catch {}
+
+    const prevUser = get().userId;
     const d = new Date();
     const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+
+    if (currentUser && prevUser && prevUser !== currentUser) {
+      set({
+        userId: currentUser,
+        eventLogs: [{ time, event, detail, isError }],
+        files: [],
+      });
+      return;
+    }
+
     set(state => ({
+      userId: currentUser || state.userId,
       eventLogs: [{ time, event, detail, isError }, ...state.eventLogs],
     }));
   },

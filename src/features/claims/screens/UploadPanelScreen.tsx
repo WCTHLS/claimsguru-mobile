@@ -58,16 +58,24 @@ export const UploadPanelScreen = ({ navigation }: any) => {
     addRealFile,
     removeFile,
     clearFiles,
+    clearLogs,
+    checkUserSession,
     setDocType,
     setClaimType,
     uploadToBackend,
   } = useUploadStore();
   const { startPipeline, complete: pipelineComplete, resetPipeline } = usePipelineStore();
   const { addOrUpdateClaim } = useClaimsStore();
+  const auth = useAuthStore();
 
   const [selectedDocTypePicker, setSelectedDocTypePicker] = useState<string | null>(null);
   const [duplicateClaimId, setDuplicateClaimId] = useState<string | null>(null);
   const [isReprocessing, setIsReprocessing] = useState(false);
+
+  // Sync user session to ensure upload activity log & attached files belong to the active user
+  useEffect(() => {
+    checkUserSession(auth.userId || auth.userEmail);
+  }, [auth.userId, auth.userEmail]);
 
   // If a previous claim pipeline has completed, automatically clear previous files so the panel is fresh
   useEffect(() => {
@@ -474,7 +482,14 @@ export const UploadPanelScreen = ({ navigation }: any) => {
           {/* Activity Log Section */}
           <View style={styles.secRow}>
             <Text style={[styles.secTitle, { color: colors.ink }]}>Upload activity log</Text>
-            <Text style={[styles.logFileName, { color: colors.muted }]}>claim_uploads.txt</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Text style={[styles.logFileName, { color: colors.muted }]}>claim_uploads.txt</Text>
+              {eventLogs.length > 0 && (
+                <TouchableOpacity onPress={clearLogs} activeOpacity={0.7}>
+                  <Text style={[styles.clearBtn, { color: colors.brandDark }]}>Clear</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
           <View style={[styles.card, styles.logCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
