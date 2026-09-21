@@ -1,0 +1,886 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  StatusBar,
+  Platform,
+  Alert,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import { useTheme } from '../../../core/theme/ThemeContext';
+import { useUploadStore, UploadFileItem } from '../../../state/useUploadStore';
+import { usePipelineStore } from '../../../state/usePipelineStore';
+import { useClaimsStore } from '../../../state/useClaimsStore';
+import { useAuthStore } from '../../../state/useAuthStore';
+import { Routes } from '../../../app/navigation/routes';
+import { DuplicateClaimModal } from '../../../core/components/DuplicateClaimModal';
+import {
+  ArrowLeft,
+  UploadCloud,
+  Camera,
+  Image as ImageIcon,
+  FileText,
+  Smartphone,
+  X,
+  FileCode,
+} from 'lucide-react-native';
+
+const DOCTYPES = [
+  'discharge_summary',
+  'hospital_bill',
+  'pharmacy_bill',
+  'scan_report',
+  'policy_card',
+  'id_proof',
+  'other',
+];
+
+const LAT: Record<string, string> = {
+  digital: '2–5 s',
+  scanned: '15–30 s',
+  jpg: '5–15 s',
+  docx: '1–2 s',
+};
+
+export const UploadPanelScreen = ({ navigation }: any) => {
+  const { colors } = useTheme();
+  const {
+    files,
+    eventLogs,
+    claimType,
+    uploading,
+    addFile,
+    addRealFile,
+    removeFile,
+    clearFiles,
+    clearLogs,
+    checkUserSession,
+    setDocType,
+    setClaimType,
+    uploadToBackend,
+  } = useUploadStore();
+  const { startPipeline, complete: pipelineComplete, resetPipeline } = usePipelineStore();
+  const { addOrUpdateClaim } = useClaimsStore();
+  const auth = useAuthStore();
+
+  const [selectedDocTypePicker, setSelectedDocTypePicker] = useState<string | null>(null);
+  const [duplicateClaimId, setDuplicateClaimId] = useState<string | null>(null);
+  const [isReprocessing, setIsReprocessing] = useState(false);
+
+  // Sync user session to ensure upload activity log & attached files belong to the active user
+  useEffect(() => {
+    checkUserSession(auth.userId || auth.userEmail);
+  }, [auth.userId, auth.userEmail]);
+
+  // If a previous claim pipeline has completed, automatically clear previous files so the panel is fresh
+  useEffect(() => {
+    if (pipelineComplete && files.length > 0) {
+      clearFiles();
+      resetPipeline();
+    }
+  }, [pipelineComplete]);
+
+  const hasFiles = files.length > 0;
+  const isReady = hasFiles && files.every(f => f.status === 'ready') && !uploading;
+
+  const handleStartPipeline = async (force: boolean = false) => {
+    if (!hasFiles || (uploading && !force)) return;
+
+    try {
+      if (force) {
+        setIsReprocessing(true);
+      }
+      const auth = useAuthStore.getState();
+      const { claimId, isDuplicate } = await uploadToBackend({
+        policyId: auth.policyNumber || undefined,
+        patientId: auth.userId || undefined,
+        email: auth.userEmail || undefined,
+        force,
+      });
+
+      if (!force && isDuplicate) {
+        setIsReprocessing(false);
+        setDuplicateClaimId(claimId);
+        return;
+      }
+
+      setDuplicateClaimId(null);
+      setIsReprocessing(false);
+
+      // Register active new claim in claims store
+      addOrUpdateClaim({
+        id: claimId,
+        who: files[0]?.name ? `Processing ${files[0].name}...` : 'Processing claim...',
+        dept: 'General Medicine',
+        amt: 184500,
+        status: 'running',
+        step: 'ocr',
+        indexed: false,
+        claimType: claimType,
+      });
+
+      startPipeline(
+        files.map(f => ({
+          name: f.name,
+          docType: f.docType,
+          kind: f.kind,
+        })),
+        claimId
+      );
+
+      navigation.navigate(Routes.WorkflowPipeline);
+    } catch (err: any) {
+      setIsReprocessing(false);
+      Alert.alert(
+        'Upload Error',
+        err?.message || 'Could not upload claim document to ClaimsGuru backend. Please check connection and try again.'
+      );
+    }
+  };
+
+  const handlePickFiles = async (accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx') => {
+    if (pipelineComplete) {
+      resetPipeline();
+      clearFiles();
+    }
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.multiple = true;
+      input.accept = accept;
+      input.onchange = (e: any) => {
+        const selected = e.target.files;
+        if (selected && selected.length > 0) {
+          for (let i = 0; i < selected.length; i++) {
+            const f = selected[i];
+            addRealFile({
+              name: f.name,
+              size: f.size,
+              type: f.type,
+              blob: f,
+            });
+          }
+        }
+      };
+      input.click();
+    } else {
+      try {
+        const result = await DocumentPicker.getDocumentAsync({
+          type: ['*/*'],
+          multiple: true,
+          copyToCacheDirectory: true,
+        });
+
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          for (const asset of result.assets) {
+            addRealFile({
+              name: asset.name,
+              size: asset.size,
+              type: asset.mimeType || 'application/pdf',
+              uri: asset.uri,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Document picker error:', err);
+      }
+    }
+  };
+
+  const handlePickGallery = async () => {
+    if (pipelineComplete) {
+      resetPipeline();
+      clearFiles();
+    }
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        for (const asset of result.assets) {
+          const name = asset.fileName || `Photo_${Date.now()}.jpg`;
+          addRealFile({
+            name,
+            size: asset.fileSize || 1024 * 1024,
+            type: asset.mimeType || 'image/jpeg',
+            uri: asset.uri,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Image picker error:', err);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    if (pipelineComplete) {
+      resetPipeline();
+      clearFiles();
+    }
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Camera permission is required to capture documents.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const name = asset.fileName || `Camera_Scan_${Date.now()}.jpg`;
+        addRealFile({
+          name,
+          size: asset.fileSize || 1024 * 1024,
+          type: asset.mimeType || 'image/jpeg',
+          uri: asset.uri,
+        });
+      }
+    } catch (err) {
+      console.warn('Camera error:', err);
+    }
+  };
+
+  const handleDropZonePress = () => {
+    handlePickFiles();
+  };
+
+  return (
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
+
+      {/* App Bar */}
+      <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
+        >
+          <ArrowLeft size={20} color={colors.ink} />
+        </TouchableOpacity>
+        <Text style={[styles.title, { color: colors.ink }]}>Upload panel</Text>
+        <View style={{ width: 32 }} />
+      </View>
+
+      <View style={[styles.container, { backgroundColor: colors.bg }]}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Dropzone Card */}
+          <TouchableOpacity
+            style={[styles.dropZone, { backgroundColor: colors.surface, borderColor: colors.line }]}
+            onPress={handleDropZonePress}
+            activeOpacity={0.8}
+          >
+            <UploadCloud size={34} color={colors.muted} strokeWidth={1.7} />
+            <Text style={[styles.dropTitle, { color: colors.ink }]}>Drop claim documents here</Text>
+            <Text style={[styles.dropSubtitle, { color: colors.muted }]}>
+              {Platform.OS === 'web' ? 'Click to browse files · PDF, images, docs' : 'Tap to browse phone files · PDF, images, docs'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* 4 Source Buttons Grid */}
+          <View style={styles.srcGrid}>
+            <TouchableOpacity
+              style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
+              onPress={handleTakePhoto}
+              activeOpacity={0.75}
+            >
+              <Camera size={18} color={colors.muted} strokeWidth={1.8} />
+              <Text style={[styles.srcText, { color: colors.muted }]}>Camera</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
+              onPress={handlePickGallery}
+              activeOpacity={0.75}
+            >
+              <ImageIcon size={18} color={colors.muted} strokeWidth={1.8} />
+              <Text style={[styles.srcText, { color: colors.muted }]}>Gallery</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
+              onPress={() => handlePickFiles('.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx')}
+              activeOpacity={0.75}
+            >
+              <FileText size={18} color={colors.muted} strokeWidth={1.8} />
+              <Text style={[styles.srcText, { color: colors.muted }]}>Files</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
+              onPress={handlePickGallery}
+              activeOpacity={0.75}
+            >
+              <Smartphone size={18} color={colors.muted} strokeWidth={1.8} />
+              <Text style={[styles.srcText, { color: colors.muted }]}>Screenshot</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Attached Header */}
+          <View style={styles.secRow}>
+            <Text style={[styles.secTitle, { color: colors.ink }]}>
+              Attached <Text style={[styles.secCount, { color: colors.muted }]}>({files.length})</Text>
+            </Text>
+            {hasFiles && (
+              <TouchableOpacity onPress={clearFiles} activeOpacity={0.7}>
+                <Text style={[styles.clearBtn, { color: colors.brandDark }]}>Clear</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Attached Files List */}
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            {!hasFiles ? (
+              <View style={styles.emptyFiles}>
+                <Text style={[styles.emptyText, { color: colors.muted }]}>
+                  No documents yet — tap a source above.
+                </Text>
+              </View>
+            ) : (
+              files.map((file, idx) => {
+                const isLast = idx === files.length - 1;
+                const isPickerOpen = selectedDocTypePicker === file.id;
+
+                return (
+                  <View
+                    key={file.id}
+                    style={[
+                      styles.fileItem,
+                      !isLast && { borderBottomWidth: 1, borderBottomColor: colors.line2 },
+                    ]}
+                  >
+                    <View style={styles.fileRowMain}>
+                      <View style={[styles.thumb, { backgroundColor: colors.brandSoft }]}>
+                        <FileCode size={18} color={colors.brandDark} />
+                      </View>
+
+                      <View style={styles.fileDetails}>
+                        <Text style={[styles.fileName, { color: colors.ink }]} numberOfLines={1}>
+                          {file.name}
+                        </Text>
+                        <Text style={[styles.fileMeta, { color: colors.muted }]}>
+                          {file.size} · est. {LAT[file.kind] || '5 s'} ·{' '}
+                          <Text
+                            style={{
+                              color:
+                                file.status === 'ready'
+                                  ? colors.green
+                                  : file.status === 'failed'
+                                  ? colors.red
+                                  : colors.brandDark,
+                              fontWeight: '600',
+                            }}
+                          >
+                            {file.status}
+                          </Text>
+                        </Text>
+
+                        {/* Doc Type Selector */}
+                        <View style={styles.docTypeRow}>
+                          <Text style={[styles.docTypeLabel, { color: colors.muted }]}>doc_type</Text>
+                          <TouchableOpacity
+                            style={[
+                              styles.docTypeBadge,
+                              { backgroundColor: colors.surface2, borderColor: colors.line },
+                            ]}
+                            onPress={() =>
+                              setSelectedDocTypePicker(isPickerOpen ? null : file.id)
+                            }
+                            activeOpacity={0.7}
+                          >
+                            <Text style={[styles.docTypeText, { color: colors.brandDark }]}>
+                              {file.docType}
+                            </Text>
+                          </TouchableOpacity>
+                          <Text style={[styles.docTypeConf, { color: colors.muted }]}>
+                            {file.conf.toFixed(2)}
+                          </Text>
+                        </View>
+
+                        {/* Progress Bar */}
+                        <View style={[styles.progTrack, { backgroundColor: colors.line }]}>
+                          <View
+                            style={[
+                              styles.progFill,
+                              {
+                                width: `${file.pct}%`,
+                                backgroundColor:
+                                  file.status === 'failed' ? colors.red : colors.brand,
+                              },
+                            ]}
+                          />
+                        </View>
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.rmBtn}
+                        onPress={() => removeFile(file.id)}
+                        activeOpacity={0.7}
+                      >
+                        <X size={16} color={colors.muted} />
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Doc Type Picker Dropdown Chips */}
+                    {isPickerOpen && (
+                      <View style={styles.pickerGrid}>
+                        {DOCTYPES.map(dt => (
+                          <TouchableOpacity
+                            key={dt}
+                            style={[
+                              styles.pickerChip,
+                              {
+                                backgroundColor:
+                                  file.docType === dt ? colors.brandSoft : colors.surface2,
+                                borderColor: file.docType === dt ? colors.brand : colors.line,
+                              },
+                            ]}
+                            onPress={() => {
+                              setDocType(file.id, dt);
+                              setSelectedDocTypePicker(null);
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.pickerChipText,
+                                {
+                                  color: file.docType === dt ? colors.brandDark : colors.ink,
+                                  fontWeight: file.docType === dt ? '700' : '500',
+                                },
+                              ]}
+                            >
+                              {dt}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                );
+              })
+            )}
+          </View>
+
+          <Text style={[styles.noteText, { color: colors.muted }]}>
+            Each file gets an auto-detected <Text style={styles.mono}>doc_type</Text> with confidence — override it if the router got it wrong.
+          </Text>
+
+          {/* Activity Log Section */}
+          <View style={styles.secRow}>
+            <Text style={[styles.secTitle, { color: colors.ink }]}>Upload activity log</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Text style={[styles.logFileName, { color: colors.muted }]}>claim_uploads.txt</Text>
+              {eventLogs.length > 0 && (
+                <TouchableOpacity onPress={clearLogs} activeOpacity={0.7}>
+                  <Text style={[styles.clearBtn, { color: colors.brandDark }]}>Clear</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          <View style={[styles.card, styles.logCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            {eventLogs.length === 0 ? (
+              <Text style={[styles.emptyLogText, { color: colors.muted }]}>
+                Events appear as files are received.
+              </Text>
+            ) : (
+              eventLogs.slice(0, 5).map((log, idx) => (
+                <View
+                  key={idx}
+                  style={[
+                    styles.logRow,
+                    idx < Math.min(eventLogs.length, 5) - 1 && {
+                      borderBottomWidth: 1,
+                      borderBottomColor: colors.line2,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.logTime, { color: colors.muted }]}>{log.time}</Text>
+                  <Text
+                    style={[
+                      styles.logEvent,
+                      { color: log.isError ? colors.red : colors.brandDark },
+                    ]}
+                  >
+                    {log.event}
+                  </Text>
+                  <Text style={[styles.logDetail, { color: colors.muted }]} numberOfLines={1}>
+                    {log.detail}
+                  </Text>
+                </View>
+              ))
+            )}
+          </View>
+
+          {/* Claim Type Section */}
+          <View style={styles.secRow}>
+            <Text style={[styles.secTitle, { color: colors.ink }]}>Claim type</Text>
+          </View>
+
+          <View style={styles.claimTypeRow}>
+            {(['Reimbursement', 'Cashless', 'Pre-authorisation'] as const).map(type => {
+              const isSelected = claimType === type;
+              return (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.typeChip,
+                    {
+                      backgroundColor: isSelected ? colors.brandSoft : colors.surface,
+                      borderColor: isSelected ? colors.brand : colors.line,
+                    },
+                  ]}
+                  onPress={() => setClaimType(type)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.typeChipText,
+                      {
+                        color: isSelected ? colors.brandDark : colors.ink,
+                        fontWeight: isSelected ? '700' : '500',
+                      },
+                    ]}
+                  >
+                    {type}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </ScrollView>
+
+        {/* Sticky Bottom Actions Bar */}
+        <View style={[styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
+          <TouchableOpacity
+            style={[styles.outlineBtn, { borderColor: colors.line }]}
+            onPress={() => navigation.navigate(Routes.ChatTab)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>Back to chat</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.primaryBtn,
+              { backgroundColor: colors.brand, opacity: isReady ? 1 : 0.5 },
+            ]}
+            onPress={() => handleStartPipeline(false)}
+            disabled={!isReady}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.primaryBtnText}>{uploading ? 'Uploading…' : 'Start pipeline'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Duplicate Claim Modal */}
+      <DuplicateClaimModal
+        visible={!!duplicateClaimId}
+        onClose={() => {
+          setDuplicateClaimId(null);
+          setIsReprocessing(false);
+          clearFiles();
+        }}
+        onViewExisting={() => {
+          const targetId = duplicateClaimId;
+          setDuplicateClaimId(null);
+          setIsReprocessing(false);
+          clearFiles();
+          if (targetId) {
+            navigation.navigate(Routes.ClaimDetail, { claimId: targetId });
+          }
+        }}
+        onUploadAnyway={() => {
+          handleStartPipeline(true);
+        }}
+        isReprocessing={isReprocessing}
+      />
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+  },
+  appBar: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+  },
+  backBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 16.5,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  scrollContent: {
+    padding: 13,
+    paddingBottom: 24,
+  },
+  dropZone: {
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    paddingVertical: 22,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  dropTitle: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    marginTop: 8,
+  },
+  dropSubtitle: {
+    fontSize: 11.5,
+    marginTop: 2,
+  },
+  srcGrid: {
+    flexDirection: 'row',
+    gap: 7,
+    marginBottom: 14,
+  },
+  srcBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 11,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  srcText: {
+    fontSize: 10.5,
+    fontWeight: '500',
+  },
+  secRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  secTitle: {
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  secCount: {
+    fontSize: 11.5,
+    fontWeight: '400',
+  },
+  clearBtn: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  logFileName: {
+    fontFamily: 'monospace',
+    fontSize: 10.5,
+  },
+  card: {
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  emptyFiles: {
+    paddingVertical: 22,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 12,
+  },
+  fileItem: {
+    padding: 11,
+  },
+  fileRowMain: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  thumb: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fileDetails: {
+    flex: 1,
+  },
+  fileName: {
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  fileMeta: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  docTypeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+  },
+  docTypeLabel: {
+    fontSize: 11,
+  },
+  docTypeBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  docTypeText: {
+    fontFamily: 'monospace',
+    fontSize: 10.5,
+    fontWeight: '600',
+  },
+  docTypeConf: {
+    fontSize: 10.5,
+  },
+  progTrack: {
+    height: 4,
+    borderRadius: 99,
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  progFill: {
+    height: '100%',
+    borderRadius: 99,
+  },
+  rmBtn: {
+    padding: 4,
+  },
+  pickerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#eef2f6',
+  },
+  pickerChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 99,
+    borderWidth: 1,
+  },
+  pickerChipText: {
+    fontSize: 10.5,
+  },
+  noteText: {
+    fontSize: 11,
+    lineHeight: 15,
+    marginBottom: 12,
+    marginHorizontal: 2,
+  },
+  mono: {
+    fontFamily: 'monospace',
+  },
+  logCard: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    maxHeight: 130,
+  },
+  emptyLogText: {
+    fontSize: 11.5,
+    paddingVertical: 10,
+    textAlign: 'center',
+  },
+  logRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingVertical: 5,
+  },
+  logTime: {
+    fontFamily: 'monospace',
+    fontSize: 9.5,
+  },
+  logEvent: {
+    fontFamily: 'monospace',
+    fontSize: 9.5,
+    fontWeight: '700',
+  },
+  logDetail: {
+    fontFamily: 'monospace',
+    fontSize: 9.5,
+    flex: 1,
+  },
+  claimTypeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  typeChip: {
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 99,
+    borderWidth: 1,
+  },
+  typeChipText: {
+    fontSize: 11.5,
+  },
+  bottomBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    gap: 9,
+  },
+  outlineBtn: {
+    flex: 0.38,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  outlineBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  primaryBtn: {
+    flex: 0.62,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryBtnText: {
+    color: '#ffffff',
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+});

@@ -1,77 +1,397 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Switch,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Lock,
+  Shield,
+  Bell,
+  MessageSquare,
+  FileText,
+  Search,
+  Clock,
+  Moon,
+  LogOut,
+} from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useAuthStore } from '../../../state/useAuthStore';
-import { UserRole } from '../../../core/rbac/permissions';
+import { Routes } from '../../../app/navigation/routes';
+import { GlobalBottomTabBar } from '../../../app/navigation/GlobalBottomTabBar';
+import { UserAvatar } from '../../../core/components/UserAvatar';
 
 export const ProfileSettingsScreen = ({ navigation }: any) => {
+  const insets = useSafeAreaInsets();
   const { colors, isDark, toggleTheme } = useTheme();
-  const { role, setRole, userName, userEmail } = useAuthStore();
-  const [biometric, setBiometric] = React.useState(true);
+  const { role, userName, userEmail, policyNumber, organization, gender, setUserDetails } = useAuthStore();
 
-  const roles: UserRole[] = ['viewer', 'submitter', 'reviewer', 'admin'];
+  const [biometric, setBiometric] = useState(true);
+  const [pushNotifications, setPushNotifications] = useState(true);
+
+
+  // Active single role (default submitter)
+  const currentRole = role || 'submitter';
+
+  const handleSignOut = () => {
+    useAuthStore.getState().signOut();
+    navigation.reset({
+      index: 0,
+      routes: [{ name: Routes.SignIn }],
+    });
+  };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.bg }]}>
-      {/* Profile Card */}
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line, alignItems: 'center' }]}>
-        <View style={[styles.avatar, { backgroundColor: colors.brandSoft }]}>
-          <Text style={[styles.avatarText, { color: colors.brandDark }]}>SA</Text>
-        </View>
-        <Text style={[styles.userName, { color: colors.ink }]}>{userName}</Text>
-        <Text style={[styles.userEmail, { color: colors.muted }]}>{userEmail}</Text>
-
-        {/* Role Switcher */}
-        <Text style={[styles.sectionLabel, { color: colors.muted, marginTop: 14 }]}>Switch Active Role (RBAC)</Text>
-        <View style={[styles.roleSeg, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
-          {roles.map(r => (
-            <TouchableOpacity
-              key={r}
-              style={[styles.roleBtn, role === r && { backgroundColor: colors.brand }]}
-              onPress={() => setRole(r)}
-            >
-              <Text style={[styles.roleBtnText, { color: role === r ? '#fff' : colors.muted }]}>{r}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+    <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
+      {/* Header Bar */}
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <ChevronLeft size={24} color={colors.ink} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.ink }]}>Profile & settings</Text>
       </View>
 
-      {/* Settings Options */}
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line, gap: 14 }]}>
-        <View style={styles.rowBetween}>
-          <Text style={[styles.settingLabel, { color: colors.ink }]}>Dark Theme</Text>
-          <Switch value={isDark} onValueChange={toggleTheme} trackColor={{ true: colors.brand }} />
-        </View>
+      {/* Main Content */}
+      <ScrollView
+        style={styles.scrollContent}
+        contentContainerStyle={styles.scrollInner}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Profile Card */}
+        <View style={[styles.profileCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+          {/* Illustrated SVG Avatar (Automatically matches registered gender) */}
+          <UserAvatar
+            size={68}
+            name={userName}
+            gender={gender}
+            style={{ marginBottom: 12 }}
+          />
 
-        <View style={styles.rowBetween}>
-          <Text style={[styles.settingLabel, { color: colors.ink }]}>Biometric Unlock</Text>
-          <Switch value={biometric} onValueChange={setBiometric} trackColor={{ true: colors.brand }} />
-        </View>
+          {/* User Name & Department */}
+          <Text style={[styles.userName, { color: colors.ink }]}>{userName}</Text>
+          <Text style={[styles.userDepartment, { color: colors.muted }]}>
+            {userEmail}{policyNumber ? ` · Policy ${policyNumber}` : ''}
+          </Text>
 
-        <View style={styles.rowBetween}>
-          <Text style={[styles.settingLabel, { color: colors.ink }]}>Scrub PHI before LLM</Text>
-          <View style={[styles.pill, { backgroundColor: colors.greenSoft }]}>
-            <Text style={[styles.pillText, { color: colors.green }]}>Always on</Text>
+          {/* Role Badge - Single Role */}
+          <View style={styles.rolesRow}>
+            <View
+              style={[
+                styles.rolePill,
+                { backgroundColor: isDark ? '#123028' : '#e6f7f0' },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.rolePillText,
+                  { color: isDark ? '#34d399' : '#047857', fontWeight: '700' },
+                ]}
+              >
+                {currentRole}
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
-    </ScrollView>
+
+        {/* Section: Privacy */}
+        <Text style={[styles.sectionHeading, { color: colors.ink }]}>Privacy</Text>
+        <View style={[styles.settingsCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+          {/* Item 1: Scrub PHI before LLM */}
+          <View style={[styles.settingRow, { borderBottomColor: colors.line, borderBottomWidth: 1 }]}>
+            <View style={styles.iconContainer}>
+              <Lock size={18} color={colors.ink} />
+            </View>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingTitle, { color: colors.ink }]}>Scrub PHI before LLM</Text>
+              <Text style={[styles.settingSubtitle, { color: colors.muted }]}>
+                SSN · phone · email · MRN · DOB · policy ·{'\n'}enforced server-side
+              </Text>
+            </View>
+            <View style={[styles.badgeAlwaysOn, { backgroundColor: isDark ? '#123028' : '#e6f7f0' }]}>
+              <Text style={[styles.badgeAlwaysOnText, { color: isDark ? '#34d399' : '#047857' }]}>Always on</Text>
+            </View>
+          </View>
+
+          {/* Item 2: Biometric Unlock */}
+          <View style={[styles.settingRow, { borderBottomColor: colors.line, borderBottomWidth: 1 }]}>
+            <View style={styles.iconContainer}>
+              <Shield size={18} color={colors.ink} />
+            </View>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingTitle, { color: colors.ink }]}>Biometric unlock</Text>
+            </View>
+            <Switch
+              value={biometric}
+              onValueChange={setBiometric}
+              trackColor={{ true: '#0d9488', false: '#cbd5e1' }}
+              thumbColor="#ffffff"
+            />
+          </View>
+
+          {/* Item 3: Push Notifications */}
+          <View style={styles.settingRow}>
+            <View style={styles.iconContainer}>
+              <Bell size={18} color={colors.ink} />
+            </View>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingTitle, { color: colors.ink }]}>Push notifications</Text>
+            </View>
+            <Switch
+              value={pushNotifications}
+              onValueChange={setPushNotifications}
+              trackColor={{ true: '#0d9488', false: '#cbd5e1' }}
+              thumbColor="#ffffff"
+            />
+          </View>
+        </View>
+
+        {/* Section: Appearance (Dark mode toggle) */}
+        <Text style={[styles.sectionHeading, { color: colors.ink }]}>Appearance</Text>
+        <View style={[styles.settingsCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+          <View style={styles.settingRow}>
+            <View style={styles.iconContainer}>
+              <Moon size={18} color={colors.ink} />
+            </View>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingTitle, { color: colors.ink }]}>Dark mode</Text>
+              <Text style={[styles.settingSubtitle, { color: colors.muted }]}>
+                {isDark ? 'Dark theme enabled' : 'Light theme enabled'}
+              </Text>
+            </View>
+            <Switch
+              value={isDark}
+              onValueChange={toggleTheme}
+              trackColor={{ true: '#0d9488', false: '#cbd5e1' }}
+              thumbColor="#ffffff"
+            />
+          </View>
+        </View>
+
+        {/* Links Card: Conversation history */}
+        <View style={[styles.settingsCard, { backgroundColor: colors.surface, borderColor: colors.line, marginTop: 12 }]}>
+          <TouchableOpacity
+            style={styles.linkRow}
+            onPress={() => navigation.navigate('MainTabs', { screen: Routes.SessionsTab })}
+            activeOpacity={0.7}
+          >
+            <View style={styles.iconContainer}>
+              <Clock size={18} color={colors.ink} />
+            </View>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingTitle, { color: colors.ink }]}>Conversation history</Text>
+              <Text style={[styles.codeSubtitle, { color: colors.muted }]}>
+                /chat/{'{session_id}'}/history
+              </Text>
+            </View>
+            <ChevronRight size={16} color={colors.muted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Prototype Disclaimer */}
+        <Text style={[styles.prototypeNote, { color: colors.muted }]}>
+          ClaimsGuru prototype · sample data only
+        </Text>
+
+        {/* Sign out button matching prototype button.btn.out */}
+        <TouchableOpacity
+          style={[styles.signOutBtn, { borderColor: colors.line, backgroundColor: colors.surface }]}
+          onPress={handleSignOut}
+          activeOpacity={0.7}
+        >
+          <LogOut size={16} color={colors.red} style={{ marginRight: 8 }} />
+          <Text style={[styles.signOutText, { color: colors.red }]}>Sign out</Text>
+        </TouchableOpacity>
+      </ScrollView>
+
+      {/* Global Bottom Tab Bar matching app standard */}
+      <GlobalBottomTabBar navigation={navigation} activeTab="all" />
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 14 },
-  card: { padding: 16, borderRadius: 14, borderWidth: 1, marginBottom: 12 },
-  avatar: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  avatarText: { fontSize: 20, fontWeight: '700' },
-  userName: { fontSize: 16, fontWeight: '700' },
-  userEmail: { fontSize: 12 },
-  sectionLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  roleSeg: { flexDirection: 'row', borderRadius: 10, padding: 3, borderWidth: 1, marginTop: 6, width: '100%' },
-  roleBtn: { flex: 1, paddingVertical: 7, alignItems: 'center', borderRadius: 8 },
-  roleBtnText: { fontSize: 11, fontWeight: '700' },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  settingLabel: { fontSize: 13.5, fontWeight: '600' },
-  pill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 99 },
-  pillText: { fontSize: 10.5, fontWeight: '700' },
+  container: {
+    flex: 1,
+  },
+  header: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+  },
+  backBtn: {
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  scrollContent: {
+    flex: 1,
+  },
+  scrollInner: {
+    padding: 16,
+    paddingBottom: 24,
+  },
+  profileCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  avatarSwitcherRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 3,
+    borderRadius: 20,
+    marginBottom: 12,
+    gap: 4,
+  },
+  avatarSwitchBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  avatarSwitchText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  userName: {
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  userDepartment: {
+    fontSize: 13,
+    marginBottom: 14,
+  },
+  rolesRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rolePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  rolePillText: {
+    fontSize: 11.5,
+  },
+  sectionHeadingRow: {
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  sectionHeading: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  settingsCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    justifyContent: 'space-between',
+  },
+  iconContainer: {
+    marginRight: 12,
+  },
+  settingInfo: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  settingInfoNoIcon: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  settingTitle: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  settingSubtitle: {
+    fontSize: 11.5,
+    lineHeight: 16,
+  },
+  codeSubtitle: {
+    fontSize: 10.5,
+    fontFamily: 'monospace',
+    marginTop: 2,
+  },
+  badgeAlwaysOn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  badgeAlwaysOnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  dpiBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  dpiBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  roleBadgeSmall: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  roleBadgeSmallText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  prototypeNote: {
+    textAlign: 'center',
+    fontSize: 11.5,
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  signOutBtn: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  signOutText: {
+    fontSize: 13.5,
+    fontWeight: '650' as any,
+  },
 });

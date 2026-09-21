@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { claimsApi } from '../features/claims/services/claimsApi';
+import { useAuthStore } from './useAuthStore';
 
 export interface UploadFileItem {
   id: string;
@@ -9,6 +11,8 @@ export interface UploadFileItem {
   size: string;
   status: 'uploading' | 'ready' | 'failed';
   pct: number;
+  fileBlob?: any;
+  uri?: string;
 }
 
 export interface UploadEventLogItem {
@@ -19,22 +23,41 @@ export interface UploadEventLogItem {
 }
 
 interface UploadState {
+  userId?: string | null;
   files: UploadFileItem[];
   eventLogs: UploadEventLogItem[];
   claimType: 'Reimbursement' | 'Cashless' | 'Pre-authorisation';
+  uploading: boolean;
+
   addFile: (spec: string) => void;
+  addRealFile: (file: { name: string; size?: number; type?: string; blob?: any; uri?: string }) => void;
   removeFile: (id: string) => void;
   clearFiles: () => void;
+  clearLogs: () => void;
+  resetUploadState: () => void;
+  checkUserSession: (currentUserId?: string | null) => void;
   setDocType: (id: string, docType: string) => void;
   setClaimType: (type: 'Reimbursement' | 'Cashless' | 'Pre-authorisation') => void;
   logEvent: (event: string, detail: string, isError?: boolean) => void;
+  uploadToBackend: (options?: { policyId?: string; patientId?: string; email?: string; force?: boolean }) => Promise<{ claimId: string; taskId?: string; isDuplicate?: boolean }>;
 }
 
 export const useUploadStore = create<UploadState>((set, get) => ({
+  userId: null,
   files: [],
   eventLogs: [],
   claimType: 'Reimbursement',
+  uploading: false,
+
   addFile: (spec: string) => {
+    try {
+      const { usePipelineStore } = require('./usePipelineStore');
+      if (usePipelineStore.getState().complete) {
+        usePipelineStore.getState().resetPipeline();
+        set({ files: [] });
+      }
+    } catch {}
+
     const [name, kind, docType, confStr] = spec.split('|');
     const existing = get().files.find(f => f.name === name);
     if (existing) return;
@@ -68,8 +91,93 @@ export const useUploadStore = create<UploadState>((set, get) => ({
           files: state.files.map(f => (f.name === name ? { ...f, pct: p } : f)),
         }));
       }
-    }, 200);
+    }, 150);
   },
+
+  addRealFile: file => {
+    try {
+      const { usePipelineStore } = require('./usePipelineStore');
+      if (usePipelineStore.getState().complete) {
+        usePipelineStore.getState().resetPipeline();
+        set({ files: [] });
+      }
+    } catch {}
+
+    let docType = 'discharge_summary';
+    const lower = file.name.toLowerCase();
+    if (lower.includes('bill') || lower.includes('invoice') || lower.includes('receipt')) docType = 'hospital_bill';
+    else if (lower.includes('card') || lower.includes('policy') || lower.includes('insurance')) docType = 'policy_card';
+    else if (lower.includes('lab') || lower.includes('test') || lower.includes('report') || lower.includes('pathology')) docType = 'lab_report';
+    else if (lower.includes('presc') || lower.includes('rx') || lower.includes('med')) docType = 'prescription';
+    else if (lower.includes('discharge') || lower.includes('summary')) docType = 'discharge_summary';
+    else if (lower.includes('scan') || lower.includes('xray') || lower.includes('mri') || lower.includes('ct')) docType = 'scan_report';
+    else if (lower.includes('id') || lower.includes('aadhaar') || lower.includes('pan') || lower.includes('passport')) docType = 'id_proof';
+    else docType = 'other';
+
+    const sizeStr = file.size
+      ? file.size < 1024 * 1024
+        ? `${Math.max(1, Math.round(file.size / 1024))} KB`
+        : `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+      : '1.2 MB';
+
+    let kind: 'digital' | 'scanned' | 'jpg' | 'docx' = 'digital';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.webp')) {
+      kind = 'jpg';
+    } else if (lower.endsWith('.doc') || lower.endsWith('.docx')) {
+      kind = 'docx';
+    } else if (lower.includes('scan')) {
+      kind = 'scanned';
+    } else {
+      kind = 'digital';
+    }
+
+    const existing = get().files.find(f => f.name === file.name);
+    if (existing) {
+      set(state => ({
+        files: state.files.map(f =>
+          f.id === existing.id
+            ? { ...f, fileBlob: file.blob, uri: file.uri, size: sizeStr, status: 'ready', pct: 100 }
+            : f
+        ),
+      }));
+      get().logEvent('FILE_UPDATED', `${file.name} replaced`);
+      return;
+    }
+
+    const newFile: UploadFileItem = {
+      id: Math.random().toString(36).substring(7),
+      name: file.name,
+      kind,
+      docType,
+      conf: 0.94,
+      size: sizeStr,
+      status: 'uploading',
+      pct: 0,
+      fileBlob: file.blob,
+      uri: file.uri,
+    };
+
+    get().logEvent('UPLOAD_START', file.name);
+    set(state => ({ files: [...state.files, newFile] }));
+    get().logEvent('FILE_RECEIVED', `${file.name} · routed → ${newFile.docType}`);
+
+    let p = 0;
+    const interval = setInterval(() => {
+      p += 35;
+      if (p >= 100) {
+        clearInterval(interval);
+        set(state => ({
+          files: state.files.map(f => (f.name === file.name ? { ...f, pct: 100, status: 'ready' } : f)),
+        }));
+        get().logEvent('UPLOAD_SUCCESS', file.name);
+      } else {
+        set(state => ({
+          files: state.files.map(f => (f.name === file.name ? { ...f, pct: p } : f)),
+        }));
+      }
+    }, 100);
+  },
+
   removeFile: id => {
     const file = get().files.find(f => f.id === id);
     if (file) {
@@ -77,17 +185,110 @@ export const useUploadStore = create<UploadState>((set, get) => ({
     }
     set(state => ({ files: state.files.filter(f => f.id !== id) }));
   },
+
   clearFiles: () => set({ files: [] }),
+
+  clearLogs: () => set({ eventLogs: [] }),
+
+  resetUploadState: () =>
+    set({
+      files: [],
+      eventLogs: [],
+      uploading: false,
+      userId: null,
+    }),
+
+  checkUserSession: (currentUserId?: string | null) => {
+    const prevUserId = get().userId;
+    const normalized = currentUserId ? currentUserId.trim().toLowerCase() : null;
+    if (normalized && prevUserId && prevUserId !== normalized) {
+      set({
+        files: [],
+        eventLogs: [],
+        uploading: false,
+        userId: normalized,
+      });
+    } else if (normalized && !prevUserId) {
+      set({ userId: normalized });
+    }
+  },
+
   setDocType: (id, docType) =>
     set(state => ({
       files: state.files.map(f => (f.id === id ? { ...f, docType, conf: 1.0 } : f)),
     })),
+
   setClaimType: claimType => set({ claimType }),
+
   logEvent: (event, detail, isError) => {
+    let currentUser: string | null = null;
+    try {
+      const auth = useAuthStore.getState();
+      currentUser = auth.userEmail ? auth.userEmail.trim().toLowerCase() : auth.userId || null;
+    } catch {}
+
+    const prevUser = get().userId;
     const d = new Date();
     const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+
+    if (currentUser && prevUser && prevUser !== currentUser) {
+      set({
+        userId: currentUser,
+        eventLogs: [{ time, event, detail, isError }],
+        files: [],
+      });
+      return;
+    }
+
     set(state => ({
+      userId: currentUser || state.userId,
       eventLogs: [{ time, event, detail, isError }, ...state.eventLogs],
     }));
+  },
+
+  uploadToBackend: async options => {
+    const { files, claimType } = get();
+    set({ uploading: true });
+    get().logEvent('UPLOAD_START', `Initiating claim with ${files.length} documents...`);
+
+    const filePayloads = files.map(f => {
+      let resolvedType = f.fileBlob?.type;
+      if (!resolvedType) {
+        const lower = f.name.toLowerCase();
+        if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) resolvedType = 'image/jpeg';
+        else if (lower.endsWith('.png')) resolvedType = 'image/png';
+        else resolvedType = 'application/pdf';
+      }
+      return {
+        name: f.name,
+        type: resolvedType,
+        blob: f.fileBlob,
+        uri: f.uri,
+      };
+    });
+
+    try {
+      const auth = useAuthStore.getState();
+      const res = await claimsApi.uploadClaim(filePayloads, {
+        policyId: options?.policyId || auth.policyNumber || undefined,
+        patientId: options?.patientId || auth.userId || undefined,
+        email: options?.email || auth.userEmail || undefined,
+        force: options?.force ?? false,
+      });
+
+      const claimId = res.claim_id || res.id;
+      const isDuplicate = Boolean(res.is_duplicate);
+      get().logEvent(
+        'UPLOAD_SUCCESS',
+        `Claim ${claimId ? claimId.slice(0, 8) : 'new'} created · status: ${res.status}${isDuplicate ? ' (DUPLICATE)' : ''}`
+      );
+      set({ uploading: false });
+      return { claimId, taskId: res.task_id || undefined, isDuplicate };
+    } catch (err: any) {
+      console.warn('[useUploadStore] Backend upload failed:', err);
+      get().logEvent('UPLOAD_FAILURE', `Upload error: ${err?.message || 'Error'}`, true);
+      set({ uploading: false });
+      throw err;
+    }
   },
 }));

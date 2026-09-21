@@ -2,18 +2,63 @@
   "expo": {
     "name": "Claims Guru",
     "slug": "claimsguru-mobile",
+    "scheme": "claimsguru",
     "version": "1.0.0",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.claimsguru.ios"
+      "bundleIdentifier": "com.claimsguru.ios",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "ClaimsGuru needs access to your camera to capture and attach medical bills and discharge summaries.",
+        "NSPhotoLibraryUsageDescription": "ClaimsGuru needs access to your photos to attach existing medical documents and reports."
+      }
     },
     "android": {
-      "package": "com.claimsguru.app"
+      "package": "com.claimsguru.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.INTERNET",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you upload claim documents.",
+          "cameraPermission": "The app accesses your camera to let you take photos of medical receipts and claim documents."
+        }
+      ],
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ]
+    ],
     "web": {
       "bundler": "metro"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "088d723b-aa62-4311-82ea-58457db0bb97"
+      }
+    },
+    "owner": "swagathreddy"
   }
 }

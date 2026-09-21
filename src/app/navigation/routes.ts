@@ -8,6 +8,7 @@ export const Routes = {
   ClaimsTab: 'ClaimsTab',
   SearchTab: 'SearchTab',
   SessionsTab: 'SessionsTab',
+  AllFeaturesTab: 'AllFeaturesTab',
 
   // Detail / Feature Screens
   ClaimDetail: 'ClaimDetail',
@@ -18,13 +19,11 @@ export const Routes = {
   FraudDetail: 'FraudDetail',
   ValidationRules: 'ValidationRules',
   MedicalCoding: 'MedicalCoding',
-  OcrParsedFields: 'OcrParsedFields',
-  ScanAnalyzer: 'ScanAnalyzer',
   DocumentGrid: 'DocumentGrid',
+  PreviewDocuments: 'PreviewDocuments',
   PatientProfile: 'PatientProfile',
   PatientActivity: 'PatientActivity',
   Submission: 'Submission',
-  AuditTrail: 'AuditTrail',
   ProfileSettings: 'ProfileSettings',
   OpsConsole: 'OpsConsole',
 } as const;

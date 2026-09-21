@@ -1,515 +1,1157 @@
-﻿import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   TextInput,
+  LayoutAnimation,
+  Platform,
+  UIManager,
   Modal,
+  Switch,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import {
+  Camera,
+  Image as ImageIcon,
+  FileText,
+  Smartphone,
+  ChevronDown,
+  ChevronUp,
+  ChevronRight,
+  Upload,
+  Pencil,
+  Moon,
+  User,
+  Clock,
+  LogOut,
+  Paperclip,
+  Send,
+  LayoutGrid,
+  Lock,
+  UserPlus,
+  MessageSquare,
+  Layers,
+  Cpu,
+  Activity,
+  ShieldAlert,
+  CheckSquare,
+  Code,
+  Folder,
+  Scan,
+  FileSearch,
+  Search,
+  ListFilter,
+  Settings,
+  Terminal,
+  Check,
+  X,
+} from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useChatStore } from '../../../state/useChatStore';
-import { useUploadStore } from '../../../state/useUploadStore';
+import { useUploadStore, UploadFileItem } from '../../../state/useUploadStore';
 import { usePipelineStore } from '../../../state/usePipelineStore';
+import { useClaimsStore } from '../../../state/useClaimsStore';
+import { claimsApi } from '../../claims/services/claimsApi';
 import { useAuthStore } from '../../../state/useAuthStore';
-import { UserRole, RoleDescriptions } from '../../../core/rbac/permissions';
+import { fetchUserProfile } from '../../../core/api/authApi';
+import { Routes } from '../../../app/navigation/routes';
+import { UserAvatar } from '../../../core/components/UserAvatar';
+import { DuplicateClaimModal } from '../../../core/components/DuplicateClaimModal';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(global as any).nativeFabricUIManager) {
+  try {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  } catch {}
+}
+
+export interface FeatureDef {
+  id: string;
+  g: string; // group
+  nav: string; // route name in Routes
+  n: string; // display name
+  d: string; // description
+  iconName: string;
+  perm?: 'ops' | 'upload' | 'submit' | 'review' | 'delete' | 'settings' | 'index';
+  params?: Record<string, any>;
+}
+
+export const ALL_FEATURES: FeatureDef[] = [
+  { id: 'signin', g: 'Access', nav: Routes.SignIn, n: 'Sign in', d: 'Patient portal sign in · local & Entra', iconName: 'lock' },
+  { id: 'signup', g: 'Access', nav: Routes.SignUp, n: 'Register', d: 'Patient account creation · insurance profile', iconName: 'user-plus' },
+  { id: 'chat', g: 'Chat', nav: Routes.ChatTab, n: 'Chat', d: 'AI claims assistant & document Q&A', iconName: 'message-square' },
+  { id: 'sessions', g: 'Chat', nav: Routes.SessionsTab, n: 'History', d: 'Conversation history & saved sessions', iconName: 'clock' },
+  { id: 'claims', g: 'Claims', nav: Routes.ClaimsTab, n: 'Claims', d: 'Active & processed claims list', iconName: 'file-text' },
+  { id: 'upload', g: 'Claims', nav: Routes.UploadPanel, n: 'Upload', d: 'Camera · gallery · files · screenshot', iconName: 'upload' },
+  { id: 'processing', g: 'Claims', nav: Routes.WorkflowPipeline, n: 'Workflow', d: 'OCR → Parse → Code → Predict → Validate', iconName: 'layers' },
+  { id: 'detail', g: 'Claims', nav: Routes.ClaimDetail, n: 'Claim detail', d: 'Summary, policy info & diagnosis', iconName: 'file-text', params: { claimId: 'a4f1c9e2' } },
+  { id: 'brainpreview', g: 'AI Brain', nav: Routes.BrainPreview, n: 'AI Brain', d: 'KPI strip, expenses, risk & readiness', iconName: 'cpu', params: { claimId: 'a4f1c9e2' } },
+  { id: 'risk', g: 'AI Brain', nav: Routes.RiskDetail, n: 'Risk', d: 'Rejection probability & top risk drivers', iconName: 'activity', params: { claimId: 'a4f1c9e2' } },
+  { id: 'fraud', g: 'AI Brain', nav: Routes.FraudDetail, n: 'Fraud', d: '6 signal families · hybrid risk score', iconName: 'shield-alert', params: { claimId: 'a4f1c9e2' } },
+  { id: 'validation', g: 'AI Brain', nav: Routes.ValidationRules, n: 'Validation', d: 'R001–R011 deterministic rules checklist', iconName: 'check-square', params: { claimId: 'a4f1c9e2' } },
+  { id: 'coding', g: 'AI Brain', nav: Routes.MedicalCoding, n: 'Coding', d: 'ICD-10 & CPT procedure code review', iconName: 'code', params: { claimId: 'a4f1c9e2' } },
+  { id: 'docs', g: 'Documents', nav: Routes.DocumentGrid, n: 'Documents', d: 'Manage & inspect attached files', iconName: 'folder', params: { claimId: 'a4f1c9e2' } },
+  { id: 'patient', g: 'Patient', nav: Routes.PatientProfile, n: 'Patient', d: 'Demographics, policy & KYC details', iconName: 'user' },
+  { id: 'activity', g: 'Patient', nav: Routes.PatientActivity, n: 'Activity', d: 'Audit history & state change diffs', iconName: 'clock' },
+  { id: 'search', g: 'Other', nav: Routes.SearchTab, n: 'Search', d: 'Full-text & semantic vector search', iconName: 'search' },
+  { id: 'submit', g: 'Other', nav: Routes.Submission, n: 'Submission', d: 'Payer submission & IRDAI claim forms', iconName: 'send' },
+  { id: 'profile', g: 'Other', nav: Routes.ProfileSettings, n: 'Profile', d: 'User roles, preferences & settings', iconName: 'settings' },
+];
 
 export const ChatHomeScreen = ({ navigation }: any) => {
-  const { colors } = useTheme();
-  const { messages, isStreaming, sendMessage, provider, setProvider } = useChatStore();
-  const { files, addFile } = useUploadStore();
-  const { active, running, complete, stepStates, startPipeline } = usePipelineStore();
-  const { role, setRole, userName, userEmail } = useAuthStore();
+  const insets = useSafeAreaInsets();
+  const { colors, isDark, toggleTheme } = useTheme();
+  const { messages, sendMessage } = useChatStore();
+  const { files, addFile, addRealFile, removeFile, clearFiles, uploadToBackend } = useUploadStore();
+  const {
+    active: pipelineActive,
+    running: pipelineRunning,
+    complete: pipelineComplete,
+    stepStates: pipelineStepStates,
+    claimId: pipelineClaimId,
+    progressPercentage: pipelineProgress,
+    totalSeconds: pipelineSeconds,
+    claimWho: pipelineClaimWho,
+    startPipeline,
+  } = usePipelineStore();
+  const { role, userName, userEmail, userId, signOut, gender, setUserDetails } = useAuthStore();
+
+  useEffect(() => {
+    if (userEmail || userId) {
+      fetchUserProfile(userId || userEmail).catch(() => {});
+    }
+  }, [userEmail, userId]);
+
+  // Once claim processing completes, clear the upload section of the previous claim's files
+  useEffect(() => {
+    if (pipelineComplete && files.length > 0) {
+      clearFiles();
+    }
+  }, [pipelineComplete]);
+
+  const getInitials = (name?: string) => {
+    if (
+      !name ||
+      !name.trim() ||
+      name.toLowerCase() === 'sample' ||
+      name.toLowerCase() === 'unknown' ||
+      name.toLowerCase().includes('sample@')
+    ) {
+      return 'JD';
+    }
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
+  const userInitials = getInitials(userName);
+  const firstName = userName && userName.toLowerCase() !== 'sample' ? userName.split(' ')[0] : 'Jhon';
 
   const [input, setInput] = useState('');
-  const [isUploadOpen, setIsUploadOpen] = useState(true);
-  const [isAccountSheetOpen, setIsAccountSheetOpen] = useState(false);
-  const [isProviderSheetOpen, setIsProviderSheetOpen] = useState(false);
+  const [isCardExpanded, setIsCardExpanded] = useState(true);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showFeaturesModal, setShowFeaturesModal] = useState(false);
+  const [duplicateClaimId, setDuplicateClaimId] = useState<string | null>(null);
+  const [isReprocessing, setIsReprocessing] = useState(false);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [pipelineStarting, setPipelineStarting] = useState(false);
 
-  const handleSend = (textToSend?: string) => {
-    const q = textToSend || input;
-    if (q && q.trim()) {
-      sendMessage(q.trim());
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => {
+      setToastMsg(null);
+    }, 2800);
+  };
+
+  const handlePickFiles = async (accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx') => {
+    if (pipelineComplete) {
+      usePipelineStore.getState().resetPipeline();
+      clearFiles();
+    }
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.multiple = true;
+      input.accept = accept;
+      input.onchange = (e: any) => {
+        const selected = e.target.files;
+        if (selected && selected.length > 0) {
+          for (let i = 0; i < selected.length; i++) {
+            const f = selected[i];
+            addRealFile({
+              name: f.name,
+              size: f.size,
+              type: f.type,
+              blob: f,
+            });
+          }
+          showToast(`Attached ${selected.length} file${selected.length > 1 ? 's' : ''}`);
+        }
+      };
+      input.click();
+    } else {
+      try {
+        const result = await DocumentPicker.getDocumentAsync({
+          type: '*/*',
+          multiple: true,
+          copyToCacheDirectory: true,
+        });
+
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          for (const asset of result.assets) {
+            addRealFile({
+              name: asset.name,
+              size: asset.size,
+              type: asset.mimeType || 'application/pdf',
+              uri: asset.uri,
+            });
+          }
+          showToast(`Attached ${result.assets.length} file${result.assets.length > 1 ? 's' : ''}`);
+        }
+      } catch (err) {
+        console.warn('[ChatHomeScreen] DocumentPicker error:', err);
+      }
+    }
+  };
+
+  const handlePickGallery = async () => {
+    if (pipelineComplete) {
+      usePipelineStore.getState().resetPipeline();
+      clearFiles();
+    }
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      handlePickFiles('image/*');
+      return;
+    }
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showToast('Media library permission required');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        for (const asset of result.assets) {
+          const name = asset.fileName || `Photo_${Date.now()}.jpg`;
+          addRealFile({
+            name,
+            size: asset.fileSize || 1024 * 1024,
+            type: asset.mimeType || 'image/jpeg',
+            uri: asset.uri,
+          });
+        }
+        showToast(`Attached ${result.assets.length} photo${result.assets.length > 1 ? 's' : ''}`);
+      }
+    } catch (err) {
+      console.warn('[ChatHomeScreen] Gallery picker error:', err);
+    }
+  };
+
+  const handleCameraPick = async () => {
+    if (pipelineComplete) {
+      usePipelineStore.getState().resetPipeline();
+      clearFiles();
+    }
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.setAttribute('capture', 'environment');
+      input.onchange = (e: any) => {
+        const selected = e.target.files;
+        if (selected && selected.length > 0) {
+          for (let i = 0; i < selected.length; i++) {
+            const f = selected[i];
+            addRealFile({
+              name: f.name || `camera_${Date.now()}.jpg`,
+              size: f.size,
+              type: f.type || 'image/jpeg',
+              blob: f,
+            });
+          }
+          showToast('Attached photo from camera');
+        }
+      };
+      input.click();
+    } else {
+      try {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          showToast('Camera permission required');
+          return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          const asset = result.assets[0];
+          const name = asset.fileName || `Camera_Scan_${Date.now()}.jpg`;
+          addRealFile({
+            name,
+            size: asset.fileSize || 1024 * 1024,
+            type: asset.mimeType || 'image/jpeg',
+            uri: asset.uri,
+          });
+          showToast('Attached photo from camera');
+        }
+      } catch (err) {
+        console.warn('[ChatHomeScreen] Camera error:', err);
+      }
+    }
+  };
+
+  const toggleCard = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsCardExpanded(!isCardExpanded);
+  };
+
+  const handleSend = () => {
+    if (input.trim()) {
+      sendMessage(input.trim());
       setInput('');
     }
   };
 
-  const handleStartPipeline = () => {
-    if (files.length > 0) {
-      startPipeline(files);
-      navigation.navigate('WorkflowPipeline');
+  const handleStartPipeline = async (force: boolean = false) => {
+    if (files.length === 0) {
+      showToast('Please upload claim documents first');
+      return;
+    }
+    if (pipelineStarting && !force) return;
+
+    if (force) {
+      setIsReprocessing(true);
+    } else {
+      setPipelineStarting(true);
+      showToast('Connecting to backend pipeline...');
+    }
+
+    try {
+      const auth = useAuthStore.getState();
+      const filesToProcess = files;
+
+      // 1. Upload to backend /ingress/claims/ to get a real PostgreSQL claim
+      const uploadRes = await claimsApi.uploadClaim(
+        filesToProcess.map(f => ({
+          name: f.name,
+          type: f.fileBlob?.type || (f.kind === 'jpg' ? 'image/jpeg' : 'application/pdf'),
+          blob: f.fileBlob,
+          uri: f.uri,
+        })),
+        {
+          policyId: auth.policyNumber || undefined,
+          patientId: auth.userId || undefined,
+          email: auth.userEmail || undefined,
+          force,
+        }
+      );
+
+      const targetClaimId = uploadRes.claim_id || uploadRes.id;
+
+      // Check if backend detected an already completed duplicate claim
+      if (!force && uploadRes.is_duplicate) {
+        setPipelineStarting(false);
+        setIsReprocessing(false);
+        setDuplicateClaimId(targetClaimId);
+        return;
+      }
+
+      setDuplicateClaimId(null);
+      setIsReprocessing(false);
+
+      // 2. Add or update claim in Claims store
+      useClaimsStore.getState().addOrUpdateClaim({
+        id: targetClaimId,
+        who: 'Processing claim...',
+        dept: 'General Medicine',
+        amt: 184500,
+        status: 'running',
+        step: 'ocr',
+        indexed: false,
+        claimType: 'Reimbursement',
+        policyNo: auth.policyNumber || 'P-0007401',
+      });
+
+      // 3. Start the real workflow on the backend and initiate pipeline store polling
+      startPipeline(
+        filesToProcess.map(f => ({
+          name: f.name,
+          docType: f.docType,
+          kind: f.kind,
+        })),
+        targetClaimId
+      );
+
+      sendMessage(`Uploaded ${filesToProcess.length} documents — running backend pipeline for claim ${targetClaimId.slice(0, 8)}`);
+      setPipelineStarting(false);
+      navigation.navigate(Routes.WorkflowPipeline);
+    } catch (err: any) {
+      console.warn('[ChatHomeScreen] Pipeline upload failed:', err);
+      setPipelineStarting(false);
+      setIsReprocessing(false);
+      const errMsg = err?.message || 'Could not upload claim documents to backend.';
+      Alert.alert('Upload Error', `${errMsg}\n\nPlease check connection or credentials and try again.`);
+      sendMessage(`Upload failed: ${errMsg}`);
     }
   };
 
+  const handleNavigateFeature = (feat: FeatureDef) => {
+    if (feat.perm === 'ops' && role !== 'admin') {
+      showToast(`Requires the admin role — you are signed in as ${role}`);
+      return;
+    }
+    if (feat.nav === Routes.ChatTab) {
+      showToast('Already on Chat Home');
+      return;
+    }
+    if (showFeaturesModal) {
+      setShowFeaturesModal(false);
+    }
+    navigation.navigate(feat.nav, feat.params);
+  };
+
+  const renderFeatureIcon = (name: string, color: string, size = 16) => {
+    switch (name) {
+      case 'lock':
+        return <Lock size={size} color={color} />;
+      case 'user-plus':
+        return <UserPlus size={size} color={color} />;
+      case 'message-square':
+        return <MessageSquare size={size} color={color} />;
+      case 'clock':
+        return <Clock size={size} color={color} />;
+      case 'file-text':
+        return <FileText size={size} color={color} />;
+      case 'upload':
+        return <Upload size={size} color={color} />;
+      case 'layers':
+        return <Layers size={size} color={color} />;
+      case 'cpu':
+        return <Cpu size={size} color={color} />;
+      case 'activity':
+        return <Activity size={size} color={color} />;
+      case 'shield-alert':
+        return <ShieldAlert size={size} color={color} />;
+      case 'check-square':
+        return <CheckSquare size={size} color={color} />;
+      case 'code':
+        return <Code size={size} color={color} />;
+      case 'folder':
+        return <Folder size={size} color={color} />;
+      case 'scan':
+        return <Scan size={size} color={color} />;
+      case 'file-search':
+        return <FileSearch size={size} color={color} />;
+      case 'user':
+        return <User size={size} color={color} />;
+      case 'search':
+        return <Search size={size} color={color} />;
+      case 'send':
+        return <Send size={size} color={color} />;
+      case 'list-filter':
+        return <ListFilter size={size} color={color} />;
+      case 'settings':
+        return <Settings size={size} color={color} />;
+      case 'terminal':
+        return <Terminal size={size} color={color} />;
+      default:
+        return <LayoutGrid size={size} color={color} />;
+    }
+  };
+
+  // Group features for the All Features Menu modal
+  const featureGroups: { title: string; items: FeatureDef[] }[] = [];
+  ALL_FEATURES.forEach(f => {
+    let grp = featureGroups.find(g => g.title === f.g);
+    if (!grp) {
+      grp = { title: f.g, items: [] };
+      featureGroups.push(grp);
+    }
+    grp.items.push(f);
+  });
+
   return (
-    <View style={[styles.container, { backgroundColor: colors.bg }]}>
-      {/* Top App Bar */}
-      <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
-        <TouchableOpacity
-          style={[styles.avatarCircle, { backgroundColor: colors.brandSoft }]}
-          onPress={() => setIsAccountSheetOpen(true)}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.avatarText, { color: colors.brandDark }]}>SA</Text>
-        </TouchableOpacity>
+    <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
+      {/* Header Bar */}
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
+        <View style={styles.headerLeft}>
+          <Image
+            source={
+              isDark
+                ? require('../../../../assets/ClaimsGuruWhite_txt.png')
+                : require('../../../../assets/ClaimsGuruBlack_txt.png')
+            }
+            style={styles.headerLogo}
+            resizeMode="contain"
+            accessibilityLabel="ClaimsGuru"
+          />
+        </View>
 
-        <Text style={[styles.appTitle, { color: colors.ink }]}>ClaimsGuru</Text>
-
-        <View style={styles.appBarActions}>
+        <View style={styles.headerRight}>
           <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => {
-              useChatStore.getState().clearMessages();
-            }}
-          >
-            <Text style={{ fontSize: 18, color: colors.ink }}>✎</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => setIsProviderSheetOpen(true)}
-          >
-            <Text style={{ fontSize: 18, color: colors.ink }}>⚙</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Context Strip */}
-      <View style={styles.contextStrip}>
-        <View style={[styles.pill, { backgroundColor: colors.brandSoft }]}>
-          <Text style={[styles.pillText, { color: colors.brandDark }]}>
-            Context · claim a4f1c9e2 · 6 docs
-          </Text>
-        </View>
-        <View style={[styles.pill, { backgroundColor: colors.surface2 }]}>
-          <Text style={[styles.pillText, { color: colors.muted }]}>{provider}</Text>
-        </View>
-        <View style={[styles.pill, { backgroundColor: colors.greenSoft }]}>
-          <Text style={[styles.pillText, { color: colors.green }]}>PHI scrub · always on</Text>
-        </View>
-      </View>
-
-      {/* Main Content Area */}
-      <ScrollView
-        style={styles.scrollArea}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* 1. Collapsible Upload Claim Documents Accordion */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <TouchableOpacity
-            style={styles.accordionHeader}
-            onPress={() => setIsUploadOpen(!isUploadOpen)}
+            style={styles.avatarBtn}
+            onPress={() => navigation.navigate(Routes.PatientProfile)}
+            accessibilityLabel="Patient profile"
             activeOpacity={0.7}
           >
-            <Text style={{ fontSize: 18, marginRight: 8 }}>☁️</Text>
-            <Text style={[styles.accordionTitle, { color: colors.ink }]}>
-              Upload claim documents
-            </Text>
-            <View style={[styles.countBadge, { backgroundColor: colors.surface2 }]}>
-              <Text style={[styles.countBadgeText, { color: colors.muted }]}>
-                {files.length} file{files.length === 1 ? '' : 's'}
+            <UserAvatar size={34} name={userName} gender={gender} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Status & Context Bar */}
+      {files.length > 0 && (
+        <View style={[styles.contextBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.contextScroll}>
+            <View style={[styles.contextBadge, { backgroundColor: '#e6f4f1' }]}>
+              <Text style={[styles.contextBadgeText, { color: '#0d9488' }]}>
+                Context · {pipelineClaimId ? `claim ${pipelineClaimId.slice(0, 8)}` : 'new claim'} · {files.length} doc{files.length === 1 ? '' : 's'}
               </Text>
             </View>
-            <Text style={[styles.chevron, { color: colors.muted }]}>
-              {isUploadOpen ? '▲' : '▼'}
-            </Text>
+            <View style={[styles.contextBadgePlain]}>
+              <Text style={[styles.contextBadgePlainText, { color: colors.muted }]}>ollama · llama-3</Text>
+            </View>
+          </ScrollView>
+        </View>
+      )}
+
+      <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollInner} keyboardShouldPersistTaps="handled">
+        {/* Upload Claim Documents Card */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+          <TouchableOpacity style={styles.cardHeader} onPress={toggleCard} activeOpacity={0.7}>
+            <View style={styles.cardHeaderLeft}>
+              <Upload size={18} color={colors.ink} style={{ marginRight: 8 }} />
+              <Text style={[styles.cardTitle, { color: colors.ink }]}>Upload claim documents</Text>
+              <View style={[styles.fileBadge, { backgroundColor: colors.surface2 }]}>
+                <Text style={[styles.fileBadgeText, { color: colors.muted }]}>{files.length} {files.length === 1 ? 'file' : 'files'}</Text>
+              </View>
+              {files.length > 0 && (
+                <TouchableOpacity
+                  onPress={clearFiles}
+                  style={{ marginLeft: 10, paddingHorizontal: 6, paddingVertical: 2 }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={{ fontSize: 11.5, color: colors.muted, textDecorationLine: 'underline' }}>Clear</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            {isCardExpanded ? <ChevronUp size={18} color={colors.muted} /> : <ChevronDown size={18} color={colors.muted} />}
           </TouchableOpacity>
 
-          {isUploadOpen && (
-            <View style={styles.accordionBody}>
-              {/* 4 Source Buttons Grid */}
-              <View style={styles.srcGrid}>
+          {isCardExpanded && (
+            <View style={styles.cardContent}>
+              {/* 4 Action Buttons Grid */}
+              <View style={styles.actionGrid}>
                 <TouchableOpacity
-                  style={[styles.srcCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                  onPress={() => addFile('Discharge_Summary.pdf|digital|discharge_summary|0.96')}
+                  style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
+                  onPress={handleCameraPick}
+                  activeOpacity={0.75}
                 >
-                  <Text style={styles.srcIcon}>📷</Text>
-                  <Text style={[styles.srcLabel, { color: colors.ink }]}>Camera</Text>
+                  <Camera size={18} color={colors.muted} style={{ marginBottom: 4 }} />
+                  <Text style={[styles.srcBtnText, { color: colors.ink }]}>Camera</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.srcCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                  onPress={() => addFile('Hospital_Bill.jpg|jpg|hospital_bill|0.93')}
+                  style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
+                  onPress={handlePickGallery}
+                  activeOpacity={0.75}
                 >
-                  <Text style={styles.srcIcon}>🖼️</Text>
-                  <Text style={[styles.srcLabel, { color: colors.ink }]}>Gallery</Text>
+                  <ImageIcon size={18} color={colors.muted} style={{ marginBottom: 4 }} />
+                  <Text style={[styles.srcBtnText, { color: colors.ink }]}>Gallery</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.srcCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                  onPress={() => addFile('Policy_Card.pdf|scanned|policy_card|0.90')}
+                  style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
+                  onPress={() => handlePickFiles('.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx')}
+                  activeOpacity={0.75}
                 >
-                  <Text style={styles.srcIcon}>📄</Text>
-                  <Text style={[styles.srcLabel, { color: colors.ink }]}>Files</Text>
+                  <FileText size={18} color={colors.muted} style={{ marginBottom: 4 }} />
+                  <Text style={[styles.srcBtnText, { color: colors.ink }]}>Files</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.srcCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                  onPress={() => addFile('Screenshot_2026-09-07.png|jpg|pharmacy_bill|0.81')}
+                  style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
+                  onPress={handlePickGallery}
+                  activeOpacity={0.75}
                 >
-                  <Text style={styles.srcIcon}>📱</Text>
-                  <Text style={[styles.srcLabel, { color: colors.ink }]}>Screenshot</Text>
+                  <Smartphone size={18} color={colors.muted} style={{ marginBottom: 4 }} />
+                  <Text style={[styles.srcBtnText, { color: colors.ink }]}>Screenshot</Text>
                 </TouchableOpacity>
               </View>
 
-              <Text style={[styles.helperNote, { color: colors.muted }]}>
-                Camera · Gallery · Files · Screenshot — documents are routed to a doc_type automatically.
-              </Text>
+              {/* Uploaded File List or Helper Subtitle */}
+              {files.length > 0 ? (
+                files.map((file: UploadFileItem) => {
+                  const name = file.name;
+                  const docType = file.docType || 'policy_card';
+                  const score = file.conf ? file.conf.toFixed(2) : '0.90';
+                  const status = file.status || 'ready';
 
-              {/* Upload Action Buttons */}
-              <View style={styles.uploadBtnRow}>
+                  return (
+                    <View key={file.id} style={[styles.fileRow, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
+                      <View style={styles.fileRowLeft}>
+                        <View style={styles.docIconBox}>
+                          <FileText size={16} color="#0d9488" />
+                        </View>
+                        <Text style={[styles.fileNameText, { color: colors.ink }]} numberOfLines={1} ellipsizeMode="middle">
+                          {name}
+                        </Text>
+                      </View>
+
+                      <View style={styles.fileRowRight}>
+                        <View style={[styles.purpleTag, { backgroundColor: '#f3e8ff' }]}>
+                          <Text style={[styles.purpleTagText, { color: '#7e22ce' }]}>{`${docType} - ${score}`}</Text>
+                        </View>
+
+                        <View style={[styles.readyTag, { backgroundColor: '#e6f7f0' }]}>
+                          <Text style={[styles.readyTagText, { color: '#047857' }]}>{status}</Text>
+                        </View>
+
+                        <TouchableOpacity
+                          onPress={() => removeFile(file.id)}
+                          style={styles.fileRemoveBtn}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityLabel="Remove file"
+                        >
+                          <X size={14} color={colors.muted} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })
+              ) : (
+                <Text style={[styles.uploadHelperText, { color: colors.muted }]}>
+                  Camera · Gallery · Files · Screenshot — upload claim documents to enable pipeline.
+                </Text>
+              )}
+
+              {/* Bottom Card Actions */}
+              <View style={styles.cardActions}>
                 <TouchableOpacity
                   style={[styles.outlineBtn, { borderColor: colors.line }]}
-                  onPress={() => navigation.navigate('UploadPanel')}
+                  onPress={() => navigation.navigate(Routes.WorkflowPipeline)}
                 >
-                  <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>
-                    Expand panel
-                  </Text>
+                  <Text style={[styles.outlineBtnText, { color: '#0d9488' }]}>Expand panel</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[
-                    styles.fillBtn,
+                    styles.solidTealBtn,
                     {
-                      backgroundColor: files.length > 0 ? colors.brand : colors.line,
-                      opacity: files.length > 0 ? 1 : 0.6,
+                      backgroundColor: files.length > 0 ? '#0d9488' : isDark ? '#1e293b' : '#e2e8f0',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
                     },
+                    (pipelineStarting || files.length === 0) && { opacity: files.length === 0 ? 0.7 : 0.8 },
                   ]}
-                  disabled={files.length === 0}
-                  onPress={handleStartPipeline}
+                  onPress={() => handleStartPipeline(false)}
+                  disabled={files.length === 0 || pipelineStarting}
+                  activeOpacity={0.8}
                 >
-                  <Text style={[styles.fillBtnText, { color: files.length > 0 ? '#fff' : colors.muted }]}>
-                    Start pipeline {files.length > 0 ? `(${files.length})` : ''}
-                  </Text>
+                  {pipelineStarting ? (
+                    <>
+                      <ActivityIndicator size="small" color="#ffffff" />
+                      <Text style={styles.solidTealBtnText}>Starting pipeline…</Text>
+                    </>
+                  ) : (
+                    <Text
+                      style={[
+                        styles.solidTealBtnText,
+                        files.length === 0 && { color: isDark ? '#64748b' : '#94a3b8' },
+                      ]}
+                    >
+                      Start pipeline
+                    </Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
           )}
         </View>
 
-        {/* 2. Live Workflow Runner Card (If active) */}
-        {active && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-            <View style={styles.rowBetween}>
-              <Text style={[styles.cardHeading, { color: colors.ink }]}>Workflow Runner</Text>
-              <View
-                style={[
-                  styles.pill,
-                  { backgroundColor: complete ? colors.greenSoft : colors.brandSoft },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.pillText,
-                    { color: complete ? colors.green : colors.brandDark },
-                  ]}
-                >
-                  {complete ? 'COMPLETE' : 'RUNNING'}
-                </Text>
-              </View>
-            </View>
-            <Text style={[styles.subNote, { color: colors.muted }]}>
-              5-Step: OCR → Parse → Code → Predict → Validate
-            </Text>
-            <TouchableOpacity
-              style={[styles.fullOutlineBtn, { borderColor: colors.brand }]}
-              onPress={() => navigation.navigate('BrainPreview', { claimId: 'a4f1c9e2' })}
-            >
-              <Text style={[styles.fullOutlineBtnText, { color: colors.brandDark }]}>
-                Open AI Brain Preview ›
+        {/* Pipeline Run Output Card */}
+        {(pipelineActive || pipelineRunning || pipelineComplete || messages.some(m => m.text.includes('pipeline'))) && (
+          <TouchableOpacity
+            style={[styles.pipelineCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
+            onPress={() => navigation.navigate(Routes.WorkflowPipeline)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.pipelineHeader}>
+              <Text style={[styles.pipelineTitle, { color: colors.ink }]}>
+                {pipelineRunning ? 'Pipeline · claim ' : 'Latest claim processed · claim '}
+                <Text style={{ fontWeight: '700' }}>{pipelineClaimId ? pipelineClaimId.slice(0, 8) : 'running'}</Text>
               </Text>
+              <Text style={[styles.pipelineSub, { color: colors.muted }]}>
+                {pipelineRunning ? `Running live backend pipeline (${pipelineProgress}%)` : 'OCR → Parse → Code → Predict → Validate'}
+              </Text>
+            </View>
+
+            {/* 5-Step Progress Indicators */}
+            <View style={styles.progressSegments}>
+              {pipelineStepStates.map((st, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.segment,
+                    {
+                      backgroundColor: st === 'd' ? '#0d9488' : st === 'r' ? '#f59e0b' : colors.line,
+                    },
+                  ]}
+                />
+              ))}
+            </View>
+
+            <Text style={[styles.pipelineDoneText, { color: colors.ink }]}>
+              {pipelineComplete
+                ? `Done in ${pipelineSeconds ? `${pipelineSeconds} s` : ''} · ${pipelineClaimWho || 'Completed'}`
+                : `Processing backend pipeline (${pipelineSeconds ? `${pipelineSeconds}s · ` : ''}${pipelineProgress}%)`}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+
+        {/* Welcome Starter Card */}
+        <View style={[styles.welcomeCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+          <Text style={[styles.welcomeText, { color: colors.ink }]}>
+            <Text style={{ fontWeight: '700' }}>Hi {firstName}</Text> — ask about any claim, or upload documents above to start a new one. Answers stream from the claim's indexed documents.
+          </Text>
+
+          {/* 2x2 Grid of Starter Prompt Boxes */}
+          <View style={styles.promptGrid}>
+            <TouchableOpacity
+              style={[styles.promptGridBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}
+              onPress={() => sendMessage('Summarise this claim')}
+            >
+              <Text style={[styles.promptGridText, { color: colors.ink }]}>Summarise this claim</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.promptGridBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}
+              onPress={() => sendMessage('What documents are missing?')}
+            >
+              <Text style={[styles.promptGridText, { color: colors.ink }]}>What documents are missing?</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.promptGridBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}
+              onPress={() => sendMessage('Why is the risk medium?')}
+            >
+              <Text style={[styles.promptGridText, { color: colors.ink }]}>Why is the risk medium?</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.promptGridBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}
+              onPress={() => sendMessage('Which rules failed?')}
+            >
+              <Text style={[styles.promptGridText, { color: colors.ink }]}>Which rules failed?</Text>
             </TouchableOpacity>
           </View>
-        )}
-
-        {/* 3. Welcome / Chat Starters Box */}
-        {messages.length === 0 && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-            <Text style={[styles.welcomeGreeting, { color: colors.ink }]}>
-              <Text style={{ fontWeight: '700' }}>Hi Shaikh — </Text>
-              ask about any claim, or upload documents above to start a new one. Answers stream from the claim's indexed documents.
-            </Text>
-
-            {/* 2x2 Grid of Starters */}
-            <View style={styles.startersGrid}>
-              <TouchableOpacity
-                style={[styles.starterBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}
-                onPress={() => handleSend('Summarise this claim')}
-              >
-                <Text style={[styles.starterBoxText, { color: colors.ink }]}>
-                  Summarise this claim
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.starterBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}
-                onPress={() => handleSend('What documents are missing?')}
-              >
-                <Text style={[styles.starterBoxText, { color: colors.ink }]}>
-                  What documents are missing?
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.starterBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}
-                onPress={() => handleSend('Why is the risk medium?')}
-              >
-                <Text style={[styles.starterBoxText, { color: colors.ink }]}>
-                  Why is the risk medium?
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.starterBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}
-                onPress={() => handleSend('Which rules failed?')}
-              >
-                <Text style={[styles.starterBoxText, { color: colors.ink }]}>
-                  Which rules failed?
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Quick Suggestion Chips */}
-        <View style={styles.chipsRow}>
-          {['Summarise this claim', 'What documents are missing?', 'Why is the risk medium?'].map(
-            (chip, i) => (
-              <TouchableOpacity
-                key={i}
-                style={[styles.chipPill, { borderColor: colors.line, backgroundColor: colors.surface }]}
-                onPress={() => handleSend(chip)}
-              >
-                <Text style={[styles.chipText, { color: colors.ink }]}>{chip}</Text>
-              </TouchableOpacity>
-            )
-          )}
         </View>
 
-        {/* Chat History Stream */}
+        {/* User Message Bubbles */}
         {messages.map(msg => (
-          <View
-            key={msg.id}
-            style={[
-              styles.chatBubble,
-              msg.sender === 'user'
-                ? [styles.userBubble, { backgroundColor: colors.brand }]
-                : [styles.assistantBubble, { backgroundColor: colors.surface, borderColor: colors.line }],
-            ]}
-          >
-            <Text style={[styles.bubbleText, { color: msg.sender === 'user' ? '#fff' : colors.ink }]}>
-              {msg.text}
-            </Text>
-            {msg.scrubbedHits && (
-              <Text style={styles.scrubLabel}>
-                PHI scrubbed: {msg.scrubbedHits.join(', ')}
-              </Text>
+          <React.Fragment key={msg.id}>
+            {msg.sender === 'user' ? (
+              <View style={styles.userBubbleWrapper}>
+                <View style={[styles.userBubble, { backgroundColor: '#0d9488' }]}>
+                  <Text style={styles.userBubbleText}>{msg.text}</Text>
+                </View>
+              </View>
+            ) : (
+              <View style={[styles.assistantCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                <Text style={[styles.assistantTitle, { color: colors.ink }]}>{msg.text}</Text>
+                {msg.sources && <Text style={[styles.sourceText, { color: colors.muted }]}>Sources: {msg.sources}</Text>}
+              </View>
             )}
-            {msg.sources && (
-              <Text style={[styles.sourceLabel, { color: colors.muted }]}>
-                Sources: {msg.sources}
-              </Text>
-            )}
-          </View>
+          </React.Fragment>
         ))}
       </ScrollView>
 
-      {/* Floating Bottom Composer */}
+      {/* Composer Input Area */}
       <View style={[styles.composerContainer, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.composerPillRow}
+        >
+          <TouchableOpacity
+            style={[styles.suggestionChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
+            onPress={() => sendMessage('Summarise this claim')}
+          >
+            <Text style={[styles.suggestionChipText, { color: colors.ink }]}>Summarise this claim</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.suggestionChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
+            onPress={() => sendMessage('What documents are missing?')}
+          >
+            <Text style={[styles.suggestionChipText, { color: colors.ink }]}>What documents are missing?</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.suggestionChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
+            onPress={() => sendMessage('Why is the risk medium?')}
+          >
+            <Text style={[styles.suggestionChipText, { color: colors.ink }]}>Why is the risk medium?</Text>
+          </TouchableOpacity>
+        </ScrollView>
+
         <View style={styles.inputRow}>
           <TouchableOpacity
             style={styles.attachBtn}
-            onPress={() => setIsUploadOpen(true)}
+            onPress={() => {
+              setIsCardExpanded(true);
+              handlePickFiles();
+            }}
           >
-            <Text style={{ fontSize: 20, color: colors.muted }}>📎</Text>
+            <Paperclip size={20} color={colors.muted} />
           </TouchableOpacity>
 
           <TextInput
-            style={[
-              styles.textInput,
-              { backgroundColor: colors.surface2, borderColor: colors.line, color: colors.ink },
-            ]}
+            style={[styles.composerInput, { backgroundColor: colors.surface2, color: colors.ink, borderColor: colors.line }]}
             placeholder="Ask about this claim..."
             placeholderTextColor={colors.muted}
             value={input}
             onChangeText={setInput}
-            onSubmitEditing={() => handleSend()}
+            onSubmitEditing={handleSend}
           />
 
           <TouchableOpacity
-            style={[styles.sendButton, { backgroundColor: colors.brand }]}
-            onPress={() => handleSend()}
-            activeOpacity={0.8}
+            style={[styles.sendCircleBtn, { backgroundColor: '#0d9488' }]}
+            onPress={handleSend}
           >
-            <Text style={styles.sendIcon}>➤</Text>
+            <Send size={16} color="#ffffff" style={{ marginLeft: 2 }} />
           </TouchableOpacity>
         </View>
 
-        <Text style={[styles.phiFooterNote, { color: colors.muted }]}>
-          PHI (SSN · phone · email · MRN · DOB · policy) is scrubbed before anything reaches an LLM — try typing an email address.
+        <Text style={[styles.phiNoticeText, { color: colors.muted }]}>
+          PHI (SSN · phone · email · MRN · DOB · policy) is scrubbed before anything reaches an LLM.
         </Text>
       </View>
 
-      {/* Account / RBAC Bottom Sheet */}
-      <Modal visible={isAccountSheetOpen} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.bottomSheet, { backgroundColor: colors.surface }]}>
-            <View style={[styles.sheetHandle, { backgroundColor: colors.line }]} />
-            <Text style={[styles.sheetTitle, { color: colors.ink }]}>User Account & RBAC</Text>
-            <Text style={[styles.subNote, { color: colors.muted, marginBottom: 12 }]}>
-              Signed in as {userName} ({userEmail})
+      {/* ALL FEATURES MODAL SHEET */}
+      <Modal
+        transparent
+        visible={showFeaturesModal}
+        animationType="slide"
+        onRequestClose={() => setShowFeaturesModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowFeaturesModal(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[
+              styles.sheetContainer,
+              { backgroundColor: colors.surface, maxHeight: '82%', paddingBottom: Math.max(insets.bottom + 16, 24) },
+            ]}
+          >
+            <View style={styles.sheetHandle} />
+            <Text style={[styles.sheetModalTitle, { color: colors.ink }]}>All Features ({ALL_FEATURES.length} screens)</Text>
+            <Text style={[styles.sheetModalSub, { color: colors.muted }]}>
+              Tap any feature to navigate directly. Active role: <Text style={{ fontWeight: '700', color: colors.brandDark }}>{role}</Text>
             </Text>
 
-            <Text style={[styles.sectionHeading, { color: colors.muted }]}>Select Active Role</Text>
-            <View style={[styles.roleSelectRow, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
-              {(['viewer', 'submitter', 'reviewer', 'admin'] as UserRole[]).map(r => (
-                <TouchableOpacity
-                  key={r}
-                  style={[styles.roleSelectBtn, role === r && { backgroundColor: colors.brand }]}
-                  onPress={() => {
-                    setRole(r);
-                    setIsAccountSheetOpen(false);
-                  }}
-                >
-                  <Text style={[styles.roleSelectBtnText, { color: role === r ? '#fff' : colors.muted }]}>
-                    {r}
-                  </Text>
-                </TouchableOpacity>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 8 }}>
+              {featureGroups.map(grp => (
+                <View key={grp.title} style={styles.modalGroup}>
+                  <Text style={[styles.modalGroupTitle, { color: colors.muted }]}>{grp.title}</Text>
+                  <View style={[styles.modalGroupCard, { borderColor: colors.line, backgroundColor: colors.surface }]}>
+                    {grp.items.map((feat, fIdx) => {
+                      const isLocked = feat.perm === 'ops' && role !== 'admin';
+                      return (
+                        <TouchableOpacity
+                          key={feat.id}
+                          style={[
+                            styles.modalFeatItem,
+                            fIdx < grp.items.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.line2 },
+                          ]}
+                          onPress={() => handleNavigateFeature(feat)}
+                        >
+                          <View
+                            style={[
+                              styles.modalFeatIconBox,
+                              { backgroundColor: isLocked ? colors.surface2 : colors.brandSoft },
+                            ]}
+                          >
+                            {renderFeatureIcon(feat.iconName, isLocked ? colors.muted : colors.brandDark, 16)}
+                          </View>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <Text style={[styles.modalFeatName, { color: colors.ink }]}>{feat.n}</Text>
+                            </View>
+                            <Text style={[styles.modalFeatDesc, { color: colors.muted }]} numberOfLines={1}>
+                              {feat.d}
+                            </Text>
+                          </View>
+                          {isLocked ? (
+                            <View style={[styles.pillBad, { backgroundColor: colors.redSoft }]}>
+                              <Text style={[styles.pillBadText, { color: colors.red }]}>admin</Text>
+                            </View>
+                          ) : (
+                            <ChevronRight size={16} color={colors.muted} />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
               ))}
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Profile Modal */}
+      <Modal
+        transparent={true}
+        visible={showProfileModal}
+        animationType="fade"
+        onRequestClose={() => setShowProfileModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowProfileModal(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[
+              styles.sheetContainer,
+              { backgroundColor: colors.surface, paddingBottom: Math.max(insets.bottom + 16, 24) },
+            ]}
+          >
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.sheetProfileHeader}>
+              <UserAvatar
+                size={46}
+                name={userName}
+                gender={gender}
+                style={{ marginRight: 14 }}
+              />
+              <View style={styles.sheetProfileInfo}>
+                <Text style={[styles.sheetUserName, { color: colors.ink }]}>{userName}</Text>
+                <Text style={[styles.sheetUserEmail, { color: colors.muted }]}>
+                  {userEmail} · realm claimgpt
+                </Text>
+              </View>
             </View>
 
-            <Text style={[styles.roleExplain, { color: colors.muted }]}>
-              {RoleDescriptions[role]}
-            </Text>
+            <View style={styles.sheetRoleRow}>
+              <Text style={[styles.sheetRoleLabel, { color: colors.muted }]}>Active Role</Text>
+              <View style={[styles.singleRoleBadge, { backgroundColor: isDark ? '#123028' : '#e6f7f0' }]}>
+                <Text style={[styles.singleRoleText, { color: isDark ? '#34d399' : '#047857' }]}>
+                  {role || 'reviewer'}
+                </Text>
+              </View>
+            </View>
 
-            <TouchableOpacity
-              style={[styles.sheetCloseBtn, { backgroundColor: colors.surface2 }]}
-              onPress={() => setIsAccountSheetOpen(false)}
-            >
-              <Text style={[styles.sheetCloseBtnText, { color: colors.ink }]}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+            <View style={[styles.sheetMenuCard, { borderColor: colors.line, backgroundColor: colors.surface }]}>
+              <View style={[styles.sheetMenuItem, { borderBottomWidth: 1, borderBottomColor: colors.line }]}>
+                <View style={styles.sheetMenuLeft}>
+                  <Moon size={18} color={colors.ink} style={{ marginRight: 10 }} />
+                  <Text style={[styles.sheetMenuText, { color: colors.ink }]}>Dark mode</Text>
+                </View>
+                <Switch
+                  value={isDark}
+                  onValueChange={toggleTheme}
+                  trackColor={{ true: '#0d9488', false: '#cbd5e1' }}
+                  thumbColor="#ffffff"
+                />
+              </View>
 
-      {/* Provider Switcher Bottom Sheet */}
-      <Modal visible={isProviderSheetOpen} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.bottomSheet, { backgroundColor: colors.surface }]}>
-            <View style={[styles.sheetHandle, { backgroundColor: colors.line }]} />
-            <Text style={[styles.sheetTitle, { color: colors.ink }]}>LLM Provider</Text>
-            <Text style={[styles.subNote, { color: colors.muted, marginBottom: 12 }]}>
-              Switch active inference provider (GET /chat/providers)
-            </Text>
-
-            {['ollama · llama-3', 'OpenRouter · mistral-7b', 'Gemini 1.5 Pro (fallback)'].map(p => (
               <TouchableOpacity
-                key={p}
-                style={[styles.providerOption, { borderColor: colors.line }]}
+                style={[styles.sheetMenuItem, { borderBottomWidth: 1, borderBottomColor: colors.line }]}
                 onPress={() => {
-                  setProvider(p);
-                  setIsProviderSheetOpen(false);
+                  setShowProfileModal(false);
+                  navigation.navigate(Routes.ProfileSettings);
                 }}
               >
-                <Text style={[styles.providerOptionText, { color: colors.ink }]}>{p}</Text>
-                {provider === p && <Text style={{ color: colors.brandDark, fontWeight: '700' }}>✓</Text>}
+                <View style={styles.sheetMenuLeft}>
+                  <User size={18} color={colors.ink} style={{ marginRight: 10 }} />
+                  <Text style={[styles.sheetMenuText, { color: colors.ink }]}>Profile & settings</Text>
+                </View>
+                <ChevronRight size={18} color={colors.muted} />
               </TouchableOpacity>
-            ))}
 
-            <TouchableOpacity
-              style={[styles.sheetCloseBtn, { backgroundColor: colors.surface2, marginTop: 12 }]}
-              onPress={() => setIsProviderSheetOpen(false)}
-            >
-              <Text style={[styles.sheetCloseBtnText, { color: colors.ink }]}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+              <TouchableOpacity
+                style={[styles.sheetMenuItem, { borderBottomWidth: 1, borderBottomColor: colors.line }]}
+                onPress={() => {
+                  setShowProfileModal(false);
+                  navigation.navigate(Routes.SessionsTab);
+                }}
+              >
+                <View style={styles.sheetMenuLeft}>
+                  <Clock size={18} color={colors.ink} style={{ marginRight: 10 }} />
+                  <Text style={[styles.sheetMenuText, { color: colors.ink }]}>Conversation history</Text>
+                </View>
+                <ChevronRight size={18} color={colors.muted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.sheetMenuItem}
+                onPress={() => {
+                  setShowProfileModal(false);
+                  signOut();
+                  navigation.navigate(Routes.SignIn);
+                }}
+              >
+                <View style={styles.sheetMenuLeft}>
+                  <LogOut size={18} color="#ef4444" style={{ marginRight: 10 }} />
+                  <Text style={[styles.sheetMenuText, { color: '#ef4444', fontWeight: '600' }]}>Sign out</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
+
+      {/* Duplicate Claim Modal */}
+      <DuplicateClaimModal
+        visible={!!duplicateClaimId}
+        onClose={() => {
+          setDuplicateClaimId(null);
+          setIsReprocessing(false);
+          clearFiles();
+        }}
+        onViewExisting={() => {
+          const targetId = duplicateClaimId;
+          setDuplicateClaimId(null);
+          setIsReprocessing(false);
+          clearFiles();
+          if (targetId) {
+            navigation.navigate(Routes.ClaimDetail, { claimId: targetId });
+          }
+        }}
+        onUploadAnyway={() => {
+          handleStartPipeline(true);
+        }}
+        isReprocessing={isReprocessing}
+      />
+
+      {/* Floating Toast Notification */}
+      {toastMsg && (
+        <View style={[styles.toast, { backgroundColor: colors.navy }]}>
+          <Check size={16} color="#ffffff" strokeWidth={2.5} />
+          <Text style={styles.toastText} numberOfLines={2}>
+            {toastMsg}
+          </Text>
+        </View>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  appBar: {
+  header: {
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
     borderBottomWidth: 1,
   },
-  avatarCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  avatarBtn: {},
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
   },
-  avatarText: { fontSize: 13.5, fontWeight: '700' },
-  appTitle: { fontSize: 17, fontWeight: '750', flex: 1, letterSpacing: -0.2 },
-  appBarActions: { flexDirection: 'row', gap: 8 },
+  avatarText: { fontSize: 13, fontWeight: '700' },
+  headerLogo: {
+    width: 124,
+    height: 28,
+  },
+  headerRight: { flexDirection: 'row', alignItems: 'center' },
   iconBtn: { padding: 6 },
-  contextStrip: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  pill: { paddingHorizontal: 9, paddingVertical: 3.5, borderRadius: 99 },
-  pillText: { fontSize: 11, fontWeight: '700' },
-  scrollArea: { flex: 1 },
-  scrollContent: { padding: 14, gap: 12, paddingBottom: 24 },
-  card: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-  },
-  accordionHeader: {
+  contextBar: { paddingVertical: 8, paddingHorizontal: 14, borderBottomWidth: 1 },
+  contextScroll: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  contextBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  contextBadgeText: { fontSize: 11.5, fontWeight: '600' },
+  contextBadgePlain: { paddingHorizontal: 6, paddingVertical: 4 },
+  contextBadgePlainText: { fontSize: 11.5, fontWeight: '500' },
+  contextBadgeGreen: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  contextBadgeGreenText: { fontSize: 11.5, fontWeight: '700' },
+  scrollContent: { flex: 1 },
+  scrollInner: { padding: 14, gap: 12 },
+  card: { borderRadius: 14, borderWidth: 1, padding: 14 },
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  accordionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
+  cardHeaderLeft: { flexDirection: 'row', alignItems: 'center' },
+  cardTitle: { fontSize: 15, fontWeight: '700', marginRight: 8 },
+  fileBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  fileBadgeText: { fontSize: 11, fontWeight: '600' },
+  cardContent: { marginTop: 14 },
+  actionGrid: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  srcBtn: {
     flex: 1,
-  },
-  countBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 99,
-    marginRight: 8,
-  },
-  countBadgeText: { fontSize: 11, fontWeight: '650' },
-  chevron: { fontSize: 12 },
-  accordionBody: { marginTop: 12 },
-  srcGrid: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  srcCard: {
-    flex: 1,
-    borderRadius: 11,
-    borderWidth: 1,
     paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'center',
   },
-  srcIcon: { fontSize: 18 },
-  srcLabel: { fontSize: 11, fontWeight: '600' },
-  helperNote: {
-    fontSize: 11,
-    marginTop: 10,
-    marginBottom: 12,
-    lineHeight: 15,
+  srcBtnText: { fontSize: 11.5, fontWeight: '500' },
+  uploadHelperText: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginVertical: 12,
+    lineHeight: 16,
   },
-  uploadBtnRow: {
+  fileRow: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 8,
   },
+  fileRowLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, marginRight: 8 },
+  docIconBox: { marginRight: 8, flexShrink: 0 },
+  fileNameText: { fontSize: 13, fontWeight: '600', flexShrink: 1 },
+  fileRowRight: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
+  fileRemoveBtn: {
+    padding: 4,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 2,
+  },
+  purpleTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+  purpleTagText: { fontSize: 11, fontWeight: '600' },
+  readyTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+  readyTagText: { fontSize: 11, fontWeight: '600' },
+  cardActions: { flexDirection: 'row', gap: 10 },
   outlineBtn: {
     flex: 1,
     paddingVertical: 10,
@@ -517,149 +1159,181 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
   },
-  outlineBtnText: { fontSize: 12.5, fontWeight: '700' },
-  fillBtn: {
+  outlineBtnText: { fontSize: 13, fontWeight: '600' },
+  solidTealBtn: {
     flex: 1,
     paddingVertical: 10,
     borderRadius: 10,
     alignItems: 'center',
   },
-  fillBtnText: { fontSize: 12.5, fontWeight: '700' },
-  cardHeading: { fontSize: 14, fontWeight: '700' },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  subNote: { fontSize: 11.5, marginTop: 4 },
-  fullOutlineBtn: {
-    paddingVertical: 10,
-    borderRadius: 10,
+  solidTealBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
+  pipelineCard: { padding: 14, borderRadius: 14, borderWidth: 1, marginVertical: 4 },
+  pipelineHeader: { marginBottom: 10 },
+  pipelineTitle: { fontSize: 14.5, fontWeight: '500' },
+  pipelineSub: { fontSize: 11.5, marginTop: 2 },
+  progressSegments: { flexDirection: 'row', gap: 6, marginVertical: 10 },
+  segment: { flex: 1, height: 4, borderRadius: 2 },
+  pipelineDoneText: { fontSize: 12.5 },
+
+
+  welcomeCard: { padding: 14, borderRadius: 14, borderWidth: 1, marginVertical: 4 },
+  welcomeText: { fontSize: 13.5, lineHeight: 19, marginBottom: 14 },
+  promptGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  promptGridBox: {
+    width: '48%',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
     borderWidth: 1,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  fullOutlineBtnText: { fontSize: 12.5, fontWeight: '700' },
-  welcomeGreeting: {
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 12,
-  },
-  startersGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  starterBox: {
-    width: '48.5%',
-    padding: 12,
-    borderRadius: 11,
-    borderWidth: 1,
-    minHeight: 56,
     justifyContent: 'center',
   },
-  starterBoxText: { fontSize: 12, fontWeight: '500', lineHeight: 16 },
-  chipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
+  promptGridText: { fontSize: 12.5, fontWeight: '500', lineHeight: 16 },
+  userBubbleWrapper: { alignItems: 'flex-end', marginVertical: 4 },
+  userBubble: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+    borderBottomRightRadius: 4,
+    maxWidth: '85%',
   },
-  chipPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 99,
-    borderWidth: 1,
-  },
-  chipText: { fontSize: 11.5 },
-  chatBubble: {
-    padding: 12,
-    borderRadius: 14,
-    maxWidth: '84%',
-    marginBottom: 6,
-  },
-  userBubble: { alignSelf: 'flex-end', borderBottomRightRadius: 2 },
-  assistantBubble: { alignSelf: 'flex-start', borderBottomLeftRadius: 2, borderWidth: 1 },
-  bubbleText: { fontSize: 13, lineHeight: 18.5 },
-  scrubLabel: { fontSize: 9.5, color: '#e0f2fe', marginTop: 4 },
-  sourceLabel: { fontSize: 10, marginTop: 6 },
+  userBubbleText: { color: '#ffffff', fontSize: 13.5, fontWeight: '500' },
+  assistantCard: { padding: 14, borderRadius: 14, borderWidth: 1, marginVertical: 4 },
+  assistantTitle: { fontSize: 13.5, lineHeight: 19 },
+  sourceText: { fontSize: 11, marginTop: 6 },
   composerContainer: {
     paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 12,
+    paddingTop: 8,
+    paddingBottom: 10,
     borderTopWidth: 1,
   },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  attachBtn: {
-    padding: 6,
-  },
-  textInput: {
+  composerPillRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 8 },
+  suggestionChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
+  suggestionChipText: { fontSize: 12, fontWeight: '500' },
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  attachBtn: { padding: 6 },
+  composerInput: {
     flex: 1,
-    height: 44,
-    borderRadius: 22,
+    height: 42,
+    borderRadius: 21,
     paddingHorizontal: 16,
-    fontSize: 13,
+    fontSize: 13.5,
     borderWidth: 1,
   },
-  sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  sendCircleBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendIcon: { color: '#fff', fontSize: 17, fontWeight: '700' },
-  phiFooterNote: {
+  phiNoticeText: {
     fontSize: 10.5,
-    marginTop: 6,
+    textAlign: 'center',
+    marginTop: 8,
     lineHeight: 14,
+    paddingHorizontal: 8,
   },
-  modalOverlay: {
+
+  // Modal Sheets
+  modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     justifyContent: 'flex-end',
   },
-  bottomSheet: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 18,
-    paddingBottom: 28,
+  sheetContainer: {
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 18,
+    paddingTop: 10,
   },
   sheetHandle: {
     width: 40,
     height: 4,
     borderRadius: 2,
+    backgroundColor: '#d1d5db',
     alignSelf: 'center',
-    marginBottom: 14,
+    marginBottom: 16,
   },
-  sheetTitle: { fontSize: 16, fontWeight: '700' },
-  sectionHeading: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', marginTop: 10 },
-  roleSelectRow: {
+  sheetModalTitle: { fontSize: 17, fontWeight: '700', marginBottom: 2 },
+  sheetModalSub: { fontSize: 12, marginBottom: 10 },
+  modalGroup: { marginBottom: 12 },
+  modalGroupTitle: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    marginBottom: 6,
+    marginLeft: 4,
+  },
+  modalGroupCard: { borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
+  modalFeatItem: {
     flexDirection: 'row',
-    borderRadius: 10,
-    padding: 3,
-    borderWidth: 1,
-    marginTop: 6,
-  },
-  roleSelectBtn: {
-    flex: 1,
-    paddingVertical: 8,
     alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 10,
+  },
+  modalFeatIconBox: {
+    width: 32,
+    height: 32,
     borderRadius: 8,
-  },
-  roleSelectBtnText: { fontSize: 11.5, fontWeight: '700' },
-  roleExplain: { fontSize: 11.5, marginTop: 8, lineHeight: 16 },
-  providerOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  providerOptionText: { fontSize: 13, fontWeight: '600' },
-  sheetCloseBtn: {
-    paddingVertical: 12,
-    borderRadius: 10,
     alignItems: 'center',
-    marginTop: 16,
+    justifyContent: 'center',
   },
-  sheetCloseBtnText: { fontSize: 13, fontWeight: '700' },
+  modalFeatName: { fontSize: 13, fontWeight: '600' },
+  modalFeatDesc: { fontSize: 11, marginTop: 1 },
+  pillBad: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  pillBadText: { fontSize: 9.5, fontWeight: '700' },
+
+  sheetProfileHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  sheetAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  sheetAvatarText: { fontSize: 16, fontWeight: '700' },
+  sheetProfileInfo: { flex: 1 },
+  sheetUserName: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
+  sheetUserEmail: { fontSize: 12 },
+  sheetRoleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  sheetRoleLabel: { fontSize: 13, fontWeight: '600' },
+  singleRoleBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14 },
+  singleRoleText: { fontSize: 12, fontWeight: '700' },
+  sheetMenuLeft: { flexDirection: 'row', alignItems: 'center' },
+  sheetMenuCard: { borderRadius: 12, borderWidth: 1, overflow: 'hidden', marginTop: 4 },
+  sheetMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  sheetMenuText: { fontSize: 13.5 },
+  toast: {
+    position: 'absolute',
+    left: 14,
+    right: 14,
+    bottom: 80,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+  },
+  toastText: { color: '#ffffff', fontSize: 11.5, flex: 1 },
 });

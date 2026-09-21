@@ -1,127 +1,667 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  StatusBar,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { usePipelineStore } from '../../../state/usePipelineStore';
+import { useClaimsStore } from '../../../state/useClaimsStore';
+import { workflowApi } from '../services/workflowApi';
+import { claimsApi, transformBackendClaim } from '../../claims/services/claimsApi';
+import { Routes } from '../../../app/navigation/routes';
+import { GlobalBottomTabBar } from '../../../app/navigation/GlobalBottomTabBar';
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  LayoutGrid,
+  FileText,
+  Check,
+  X as XIcon,
+  Info,
+  AlertTriangle,
+  Eye,
+} from 'lucide-react-native';
 
-const STEP_NAMES = ['OCR Document Scan', 'Parse Fields & Types', 'Suggest Medical Codes', 'Predict Rejection Risk', 'Deterministic Validation'];
+const STEP_DATA = [
+  { name: 'OCR', defaultMsg: 'Text extracted from 3 documents' },
+  { name: 'Parse', defaultMsg: '3 documents parsed · 23 of 27 fields · doc_type set' },
+  { name: 'Code', defaultMsg: '6 codes assigned (3 ICD-10 · 3 CPT)' },
+  { name: 'Predict', defaultMsg: 'Risk 58% · MEDIUM · 5 factors' },
+  { name: 'Validate', defaultMsg: '7 of 11 rules passed' },
+];
 
 export const WorkflowPipelineScreen = ({ navigation }: any) => {
   const { colors } = useTheme();
-  const { complete, failed, stepStates, attempt, totalSeconds, retryPipeline, resetPipeline } = usePipelineStore();
+  const {
+    active,
+    running,
+    failed,
+    complete,
+    currentStepIndex,
+    stepStates,
+    stepMessages,
+    attempt,
+    totalSeconds,
+    docs,
+    claimId,
+    retryPipeline,
+  } = usePipelineStore();
+
+  const { claims } = useClaimsStore();
+
+  const activeClaimId = claimId || claims[0]?.id || '73cae928-5f39-4129-a4f2-f667e94f3f6a';
+  const claimRecord = claims.find(c => c.id === activeClaimId) || claims[0];
+  const docCount = docs.length > 0 ? docs.length : 1;
+
+  useEffect(() => {
+    // If the pipeline is currently running for this claim, let usePipelineStore drive real-time updates!
+    const store = usePipelineStore.getState();
+    if (store.running && store.claimId === activeClaimId) {
+      return;
+    }
+
+    if (activeClaimId && activeClaimId.length > 20) {
+      Promise.all([
+        claimsApi.getClaimDetail(activeClaimId).catch(() => null),
+        claimsApi.getClaimPreview(activeClaimId).catch(() => null),
+        claimsApi.getClaimValidation(activeClaimId).catch(() => null),
+        claimsApi.getClaimPrediction(activeClaimId).catch(() => null),
+        workflowApi.getProgress(activeClaimId).catch(() => null),
+        workflowApi.getStatus(activeClaimId).catch(() => null),
+      ]).then(([detail, preview, val, pred, progress, statusRes]) => {
+        if (detail && detail.id) {
+          const rawName = preview?.parsed_fields?.patient_name || (preview as any)?.summary?.patient_name || detail.patient_name || '';
+          const patientName = rawName.replace(/\s+Blood Group.*$/i, '').trim();
+          const diagnosis = (preview as any)?.summary?.diagnosis || preview?.parsed_fields?.diagnosis || detail.diagnosis || 'General Medicine';
+          const fieldCount = preview?.parsed_fields ? Object.keys(preview.parsed_fields).length : 41;
+          const isDemo = activeClaimId === 'a4f1c9e2';
+          const icdCount = preview ? (preview.icd_codes?.length ?? 0) : (isDemo ? 3 : 0);
+          const cptCount = preview ? (preview.cpt_codes?.length ?? 0) : (isDemo ? 3 : 0);
+          const riskScore = Math.round((pred?.prediction?.rejection_score ?? (preview?.predictions?.[0]?.rejection_score ?? 0.24)) * 100);
+          const riskCat = pred?.prediction?.risk_category ?? (preview?.predictions?.[0]?.risk_category ?? 'LOW');
+          const reasonCount = pred?.prediction?.top_reasons?.length ?? (preview?.predictions?.[0]?.top_reasons?.length ?? 3);
+          const rulesTotal = val?.total_rules ?? 11;
+          const rulesPassed = val?.passed ?? 8;
+          const docType = preview?.documents?.[0]?.doc_type || 'discharge_summary';
+          const icdList = preview?.icd_codes ? preview.icd_codes.map((c: any) => c.code).join(', ') : 'D50';
+
+          if (preview) {
+            useClaimsStore.getState().setClaimPreview(activeClaimId, preview);
+          }
+          useClaimsStore.getState().addOrUpdateClaim(transformBackendClaim(detail, preview));
+
+          let calcSeconds: string | null = null;
+          if (detail.created_at && detail.updated_at) {
+            const start = new Date(detail.created_at).getTime();
+            const end = new Date(detail.updated_at).getTime();
+            const diff = (end - start) / 1000;
+            if (diff > 0 && diff < 3600) {
+              calcSeconds = diff.toFixed(1);
+            }
+          }
+
+          const isCompletedStatus = [
+            'COMPLETED',
+            'VALIDATED',
+            'FINISHED',
+            'DONE',
+            'SUBMITTED',
+            'APPROVED',
+            'REJECTED',
+          ].includes(String(detail.status || '').toUpperCase());
+
+          const isWorkflowComplete = Boolean(
+            (progress && (progress.is_complete === true || progress.percentage >= 100)) ||
+            statusRes?.status === 'FINISHED' ||
+            statusRes?.current_step === 'FINISHED' ||
+            (statusRes?.step_index !== undefined && statusRes.step_index >= 5) ||
+            isCompletedStatus
+          );
+
+          if (isWorkflowComplete) {
+            usePipelineStore.setState({
+              complete: true,
+              running: false,
+              failed: false,
+              progressPercentage: 100,
+              currentStepIndex: 4,
+              stepStates: ['d', 'd', 'd', 'd', 'd'],
+              totalSeconds: calcSeconds || usePipelineStore.getState().totalSeconds || '4.5',
+              claimWho: patientName || 'Complete',
+              claimDept: diagnosis,
+              stepMessages: [
+                `Text extracted from ${detail.documents?.length || docCount} documents`,
+                `${fieldCount} fields parsed · ${docType}`,
+                cptCount > 0
+                  ? `${icdCount + cptCount} codes assigned (${icdCount} ICD-10 · ${cptCount} CPT)`
+                  : `${icdCount || 1} code${icdCount === 1 ? '' : 's'} assigned (${icdList})`,
+                `Risk ${riskScore}% · ${riskCat} · ${reasonCount} factors`,
+                `${rulesPassed} of ${rulesTotal} rules passed`,
+              ],
+            });
+            try {
+              const { useUploadStore } = require('../../../state/useUploadStore');
+              useUploadStore.getState().clearFiles();
+            } catch {}
+          } else if (!usePipelineStore.getState().running) {
+            // Claim is still actively processing in backend — start real-time tracking!
+            usePipelineStore.getState().startPipeline([], activeClaimId);
+          }
+        }
+      });
+    }
+  }, [activeClaimId]);
+
+  const isCompleteState = complete || (!running && !failed && stepStates.every(s => s === 'd'));
+  const isRunningState = running || (!complete && !failed && stepStates.some(s => s === 'r'));
+
+  const currentStepName = failed
+    ? 'failed'
+    : isCompleteState
+    ? 'completed'
+    : isRunningState
+    ? (STEP_DATA[currentStepIndex]?.name?.toLowerCase() || 'processing')
+    : 'idle';
+
+  const statusLabel = failed
+    ? 'FAILED'
+    : isCompleteState
+    ? 'COMPLETE'
+    : isRunningState
+    ? 'RUNNING'
+    : 'IDLE';
+
+  const statusBadgeStyle = failed
+    ? { bg: colors.redSoft, text: colors.red }
+    : isCompleteState
+    ? { bg: colors.greenSoft, text: colors.green }
+    : isRunningState
+    ? { bg: colors.brandSoft, text: colors.brandDark }
+    : { bg: colors.surface2, text: colors.muted };
+
+  const handleOpenClaim = () => {
+    const store = usePipelineStore.getState();
+    const existing = useClaimsStore.getState().claims.find(c => c.id === activeClaimId);
+    if (store.claimWho && !store.claimWho.startsWith('Parsing')) {
+      useClaimsStore.getState().addOrUpdateClaim({
+        ...(existing || {}),
+        id: activeClaimId,
+        who: store.claimWho.replace(/\s+Blood Group.*$/i, '').trim(),
+        dept: store.claimDept || existing?.dept || 'Hypothyroidism COPD Exacerbation',
+        status: (store.complete || isCompleteState) ? 'complete' : (existing?.status || 'running'),
+      });
+    }
+    navigation.navigate(Routes.ClaimDetail, { claimId: activeClaimId });
+  };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.bg }]}>
-      <View style={[styles.headerCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-        <View style={styles.rowBetween}>
-          <Text style={[styles.title, { color: colors.ink }]}>Pipeline Execution</Text>
-          <View
-            style={[
-              styles.pill,
-              { backgroundColor: complete ? colors.greenSoft : failed ? colors.redSoft : colors.brandSoft },
-            ]}
-          >
-            <Text
-              style={[
-                styles.pillText,
-                { color: complete ? colors.green : failed ? colors.red : colors.brandDark },
-              ]}
-            >
-              {complete ? 'COMPLETE' : failed ? 'FAILED' : 'RUNNING'}
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
+
+      {/* Top App Bar */}
+      <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          activeOpacity={0.7}
+        >
+          <ChevronLeft size={22} color={colors.ink} />
+        </TouchableOpacity>
+
+        <Text style={[styles.title, { color: colors.ink }]}>Workflow</Text>
+
+        <View style={styles.appBarRight}>
+          <View style={[styles.statusPill, { backgroundColor: statusBadgeStyle.bg }]}>
+            <Text style={[styles.statusPillText, { color: statusBadgeStyle.text }]}>
+              {statusLabel}
             </Text>
           </View>
+
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => navigation.navigate('MainTabs', { screen: Routes.AllFeaturesTab })}
+            activeOpacity={0.7}
+          >
+            <LayoutGrid size={20} color={colors.ink} />
+          </TouchableOpacity>
         </View>
-        <Text style={[styles.subText, { color: colors.muted, marginTop: 4 }]}>
-          Celery Queues: gpu_queue → default · attempt {attempt} of 5
-        </Text>
-        {totalSeconds && (
-          <Text style={[styles.totalTime, { color: colors.brandDark }]}>
-            total_processing_seconds: {totalSeconds}s
-          </Text>
-        )}
       </View>
 
-      {/* Stepper */}
-      <View style={[styles.stepperCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-        {STEP_NAMES.map((name, i) => {
-          const state = stepStates[i];
-          const isDone = state === 'd';
-          const isRunning = state === 'r';
-          const isFailed = state === 'f';
+      <View style={[styles.container, { backgroundColor: colors.bg }]}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Active Claim Header Card */}
+          <View style={[styles.card, styles.claimCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <View style={[styles.docThumb, { backgroundColor: colors.brandSoft }]}>
+              <FileText size={18} color={colors.brandDark} />
+            </View>
+            <View style={styles.claimMetaCol}>
+              <Text style={[styles.claimIdText, styles.mono, { color: colors.ink }]} numberOfLines={1}>
+                {activeClaimId}
+              </Text>
+              <Text style={[styles.claimSubText, { color: colors.muted }]}>
+                {docCount} documents · current_step: {currentStepName} · attempt {attempt || 1}
+              </Text>
+            </View>
+          </View>
 
-          return (
-            <View key={i} style={styles.stepRow}>
-              <View
-                style={[
-                  styles.bullet,
-                  {
-                    backgroundColor: isDone
-                      ? colors.brand
-                      : isFailed
-                      ? colors.red
-                      : isRunning
-                      ? colors.brandSoft
-                      : colors.surface2,
-                    borderColor: isDone || isRunning ? colors.brand : colors.line,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.bulletText,
-                    { color: isDone || isFailed ? '#fff' : isRunning ? colors.brandDark : colors.muted },
-                  ]}
-                >
-                  {isDone ? '✓' : isFailed ? '✗' : String(i + 1)}
-                </Text>
+          {/* Fail Banner if failed */}
+          {failed && (
+            <View style={[styles.failBanner, { backgroundColor: colors.redSoft }]}>
+              <AlertTriangle size={16} color={colors.red} style={{ marginTop: 1 }} />
+              <Text style={[styles.failBannerText, { color: colors.red }]}>
+                soft time limit exceeded (OCR 15 min)
+              </Text>
+            </View>
+          )}
+
+          {/* 5-Stage Stepper Card */}
+          <View style={[styles.card, styles.stepperCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            {STEP_DATA.map((step, idx) => {
+              const state = stepStates[idx] || (idx === 0 ? 'r' : 'q');
+              const isDone = state === 'd';
+              const isRunning = state === 'r';
+              const isFailed = state === 'f';
+              const isLast = idx === STEP_DATA.length - 1;
+              const stepDesc = stepMessages[idx] || step.defaultMsg;
+
+              return (
+                <View key={step.name} style={styles.stepRow}>
+                  {/* Continuous Vertical Rail */}
+                  {!isLast && (
+                    <View
+                      style={[
+                        styles.rail,
+                        { backgroundColor: isDone ? colors.brand : colors.line },
+                      ]}
+                    />
+                  )}
+
+                  {/* Circle Bullet */}
+                  <View
+                    style={[
+                      styles.bullet,
+                      {
+                        backgroundColor: isDone
+                          ? colors.brand
+                          : isFailed
+                          ? colors.red
+                          : isRunning
+                          ? colors.surface
+                          : colors.surface,
+                        borderColor: isDone || isRunning ? colors.brand : colors.line,
+                      },
+                      isRunning && {
+                        shadowColor: colors.brand,
+                        shadowOffset: { width: 0, height: 0 },
+                        shadowOpacity: 0.3,
+                        shadowRadius: 4,
+                        elevation: 2,
+                      },
+                    ]}
+                  >
+                    {isDone ? (
+                      <Check size={13} color="#ffffff" strokeWidth={3} />
+                    ) : isFailed ? (
+                      <XIcon size={13} color="#ffffff" strokeWidth={3} />
+                    ) : isRunning ? (
+                      <ActivityIndicator size="small" color={colors.brand} />
+                    ) : (
+                      <Text style={[styles.bulletNum, { color: colors.muted }]}>{idx + 1}</Text>
+                    )}
+                  </View>
+
+                  {/* Step Name & Description */}
+                  <View style={styles.stepInfo}>
+                    <Text style={[styles.stepTitle, { color: colors.ink }]}>{step.name}</Text>
+                    <Text style={[styles.stepDesc, { color: isRunning ? colors.brandDark : colors.muted }]}>
+                      {stepDesc}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Preview Uploaded Documents Button / Card */}
+          <TouchableOpacity
+            style={[styles.card, styles.previewDocsCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
+            onPress={() => navigation.navigate(Routes.PreviewDocuments, { claimId: activeClaimId })}
+            activeOpacity={0.7}
+          >
+            <View style={styles.previewDocsLeft}>
+              <View style={[styles.docThumb, { backgroundColor: colors.brandSoft }]}>
+                <Eye size={18} color={colors.brandDark} strokeWidth={2.2} />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.stepName, { color: colors.ink }]}>{name}</Text>
-                <Text style={[styles.stepStatus, { color: isRunning ? colors.brandDark : colors.muted }]}>
-                  {isDone ? 'Finished' : isRunning ? 'Processing…' : isFailed ? 'Failed' : 'Queued'}
+              <View style={styles.previewDocsInfo}>
+                <Text style={[styles.previewDocsTitle, { color: colors.ink }]}>
+                  Preview uploaded documents
+                </Text>
+                <Text style={[styles.previewDocsSub, { color: colors.muted }]}>
+                  Inspect attached files, OCR extractions & high-res scans
                 </Text>
               </View>
             </View>
-          );
-        })}
+            <ChevronRight size={18} color={colors.muted} strokeWidth={2} />
+          </TouchableOpacity>
+
+          {/* Retry Card if failed */}
+          {failed && (
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line, padding: 14 }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.ink }}>Retry</Text>
+                <Text style={{ fontSize: 11.5, color: colors.muted }}>
+                  attempt <Text style={{ fontWeight: '700' }}>{attempt}</Text> of 5
+                </Text>
+              </View>
+              <View style={{ height: 6, borderRadius: 99, backgroundColor: colors.line, overflow: 'hidden', marginBottom: 12 }}>
+                <View style={{ height: '100%', width: `${(attempt / 5) * 100}%`, backgroundColor: colors.brand }} />
+              </View>
+              <View style={{ flexDirection: 'row', gap: 9 }}>
+                <TouchableOpacity
+                  style={[styles.outlineBtn, { borderColor: colors.line, flex: 0.45 }]}
+                  onPress={() => navigation.navigate(Routes.UploadPanel)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>Re-upload file</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.primaryBtn, { backgroundColor: colors.brand, flex: 0.55 }]}
+                  onPress={retryPipeline}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.primaryBtnText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Stats / Timing Card */}
+          <View style={[styles.card, styles.statsCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <View style={[styles.kvRow, { borderBottomWidth: 0 }]}>
+              <Text style={[styles.kvKey, { color: colors.muted }]}>total_processing_seconds</Text>
+              <Text style={[styles.kvVal, styles.mono, { color: colors.ink }]}>
+                {totalSeconds ? `${totalSeconds} s` : isRunningState ? '0.1 s' : '—'}
+              </Text>
+            </View>
+          </View>
+        </ScrollView>
+
+        {/* Sticky Bottom Actions Bar */}
+        <View style={[styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
+          <TouchableOpacity
+            style={[styles.outlineBtn, { borderColor: colors.line }]}
+            onPress={() => navigation.navigate('MainTabs', { screen: Routes.ChatTab })}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>Back to chat</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.primaryBtn, { backgroundColor: colors.brand }]}
+            onPress={handleOpenClaim}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.primaryBtnText}>Open claim</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Shared Bottom Tab Bar */}
+        <GlobalBottomTabBar navigation={navigation} activeTab="claims" />
       </View>
-
-      {/* Action CTA */}
-      {complete && (
-        <TouchableOpacity
-          style={[styles.primaryBtn, { backgroundColor: colors.brand }]}
-          onPress={() => navigation.navigate('BrainPreview', { claimId: 'a4f1c9e2' })}
-        >
-          <Text style={styles.primaryBtnText}>Open AI Brain Preview ›</Text>
-        </TouchableOpacity>
-      )}
-
-      {failed && (
-        <TouchableOpacity
-          style={[styles.primaryBtn, { backgroundColor: colors.red }]}
-          onPress={retryPipeline}
-        >
-          <Text style={styles.primaryBtnText}>Retry Step (Attempt {attempt + 1} of 5)</Text>
-        </TouchableOpacity>
-      )}
-    </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 14 },
-  headerCard: { padding: 14, borderRadius: 14, borderWidth: 1, marginBottom: 12 },
-  title: { fontSize: 16, fontWeight: '700' },
-  subText: { fontSize: 11.5 },
-  totalTime: { fontSize: 12, fontWeight: '700', marginTop: 6 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99 },
-  pillText: { fontSize: 10.5, fontWeight: '700' },
-  stepperCard: { padding: 14, borderRadius: 14, borderWidth: 1, marginBottom: 14, gap: 14 },
-  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  bullet: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  bulletText: { fontSize: 11, fontWeight: '700' },
-  stepName: { fontSize: 13, fontWeight: '650' },
-  stepStatus: { fontSize: 11, marginTop: 1 },
-  primaryBtn: { paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
-  primaryBtnText: { color: '#fff', fontSize: 13.5, fontWeight: '700' },
+  safeArea: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+  },
+  appBar: {
+    height: 52,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 13,
+  },
+  backBtn: {
+    padding: 4,
+    marginRight: 6,
+  },
+  title: {
+    fontSize: 16.5,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    flex: 1,
+  },
+  appBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusPill: {
+    paddingHorizontal: 9,
+    paddingVertical: 3.5,
+    borderRadius: 99,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  iconBtn: {
+    padding: 6,
+    borderRadius: 9,
+  },
+  scrollContent: {
+    padding: 13,
+    paddingBottom: 24,
+  },
+  card: {
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 11,
+  },
+  claimCard: {
+    padding: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  docThumb: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  claimMetaCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  claimIdText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  claimSubText: {
+    fontSize: 11.5,
+    marginTop: 2,
+  },
+  mono: {
+    fontFamily: 'monospace',
+  },
+  failBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 11,
+    borderRadius: 11,
+    marginBottom: 11,
+  },
+  failBannerText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    flex: 1,
+  },
+  stepperCard: {
+    padding: 14,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    position: 'relative',
+    paddingBottom: 16,
+  },
+  rail: {
+    position: 'absolute',
+    left: 11,
+    top: 24,
+    bottom: 0,
+    width: 2,
+  },
+  bullet: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  bulletNum: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  stepInfo: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  stepTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  stepDesc: {
+    fontSize: 11.5,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  previewDocsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 13,
+  },
+  previewDocsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  previewDocsInfo: {
+    flex: 1,
+  },
+  previewDocsTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  previewDocsSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  statsCard: {
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+  },
+  kvRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eef2f6',
+    gap: 12,
+  },
+  kvKey: {
+    fontSize: 12.5,
+    flexShrink: 0,
+    maxWidth: '42%',
+    lineHeight: 18,
+  },
+  kvVal: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    textAlign: 'right',
+    flex: 1,
+    flexShrink: 1,
+    lineHeight: 18,
+  },
+  indexPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 99,
+  },
+  indexPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 9,
+    padding: 11,
+    borderRadius: 11,
+    marginBottom: 11,
+  },
+  bannerText: {
+    fontSize: 11.5,
+    lineHeight: 16,
+    flex: 1,
+  },
+  bottomBar: {
+    borderTopWidth: 1,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  outlineBtn: {
+    flex: 0.44,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  outlineBtnText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+  primaryBtn: {
+    flex: 0.56,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryBtnText: {
+    color: '#ffffff',
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
 });

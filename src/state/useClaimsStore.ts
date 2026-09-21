@@ -1,41 +1,138 @@
 import { create } from 'zustand';
-import { ClaimItem, INITIAL_CLAIMS } from '../mocks/claims.mock';
+import { ClaimItem } from '../mocks/claims.mock';
+import { claimsApi, BackendClaimPreview } from '../features/claims/services/claimsApi';
+import { useAuthStore } from './useAuthStore';
 
 interface ClaimsState {
   claims: ClaimItem[];
   selectedClaimId: string;
   filter: string;
+  loading: boolean;
+  refreshing: boolean;
+  backendConnected: boolean;
+  error: string | null;
+  claimPreviews: Record<string, BackendClaimPreview>;
+
   setFilter: (filter: string) => void;
   selectClaim: (id: string) => void;
-  indexClaim: (id: string) => void;
-  deleteClaim: (id: string) => void;
+  loadClaims: (refresh?: boolean, patientIdOverride?: string) => Promise<void>;
+  indexClaim: (id: string) => Promise<void>;
+  deleteClaim: (id: string) => Promise<void>;
   addOrUpdateClaim: (claim: Partial<ClaimItem> & { id: string }) => void;
+  getClaim: (id: string) => ClaimItem | undefined;
+  setClaimPreview: (id: string, preview: BackendClaimPreview) => void;
+  fetchClaimPreview: (id: string) => Promise<BackendClaimPreview | null>;
+  clearClaims: () => void;
 }
 
 export const useClaimsStore = create<ClaimsState>((set, get) => ({
-  claims: INITIAL_CLAIMS,
-  selectedClaimId: INITIAL_CLAIMS[0].id,
+  claims: [],
+  selectedClaimId: '',
   filter: 'All',
+  loading: false,
+  refreshing: false,
+  backendConnected: false,
+  error: null,
+  claimPreviews: {},
+
+  clearClaims: () =>
+    set({
+      claims: [],
+      selectedClaimId: '',
+      claimPreviews: {},
+      error: null,
+    }),
+
   setFilter: filter => set({ filter }),
   selectClaim: id => set({ selectedClaimId: id }),
-  indexClaim: id =>
+
+  setClaimPreview: (id, preview) =>
+    set(state => ({
+      claimPreviews: { ...state.claimPreviews, [id]: preview },
+    })),
+
+  fetchClaimPreview: async id => {
+    try {
+      const preview = await claimsApi.getClaimPreview(id);
+      if (preview) {
+        set(state => ({
+          claimPreviews: { ...state.claimPreviews, [id]: preview },
+        }));
+        return preview;
+      }
+      return null;
+    } catch (err) {
+      console.warn(`[useClaimsStore] Failed to fetch preview for claim ${id}:`, err);
+      return null;
+    }
+  },
+
+  loadClaims: async (refresh = false, patientIdOverride?: string) => {
+    if (refresh) {
+      set({ refreshing: true, error: null });
+    } else {
+      set({ loading: true, error: null });
+    }
+
+    try {
+      const auth = useAuthStore.getState();
+      const patientId = patientIdOverride || auth.userId || undefined;
+      const res = await claimsApi.getClaims(0, 100, patientId);
+      const backendClaims = res.claims || [];
+
+      set({
+        claims: backendClaims,
+        selectedClaimId: backendClaims[0]?.id || '',
+        backendConnected: true,
+        loading: false,
+        refreshing: false,
+      });
+    } catch (err: any) {
+      console.warn('[useClaimsStore] Could not fetch claims from backend:', err?.message || err);
+      set({
+        backendConnected: false,
+        error: err?.message || 'Backend unreachable',
+        loading: false,
+        refreshing: false,
+      });
+    }
+  },
+
+  indexClaim: async id => {
     set(state => ({
       claims: state.claims.map(c => (c.id === id ? { ...c, indexed: true } : c)),
-    })),
-  deleteClaim: id =>
+    }));
+
+    try {
+      await claimsApi.indexClaim(id);
+    } catch (err) {
+      console.warn(`[useClaimsStore] Failed to index claim ${id} in backend:`, err);
+    }
+  },
+
+  deleteClaim: async id => {
     set(state => {
       const remaining = state.claims.filter(c => c.id !== id);
       return {
         claims: remaining,
         selectedClaimId: remaining.length > 0 ? remaining[0].id : '',
       };
-    }),
+    });
+
+    try {
+      await claimsApi.deleteClaim(id);
+    } catch (err) {
+      console.warn(`[useClaimsStore] Failed to delete claim ${id} in backend:`, err);
+    }
+  },
+
   addOrUpdateClaim: updated =>
     set(state => {
       const exists = state.claims.some(c => c.id === updated.id);
       if (exists) {
         return {
           claims: state.claims.map(c => (c.id === updated.id ? { ...c, ...updated } : c)),
+          selectedClaimId: updated.id,
         };
       }
       return {
@@ -43,4 +140,6 @@ export const useClaimsStore = create<ClaimsState>((set, get) => ({
         selectedClaimId: updated.id,
       };
     }),
+
+  getClaim: id => get().claims.find(c => c.id === id) || get().claims[0],
 }));
