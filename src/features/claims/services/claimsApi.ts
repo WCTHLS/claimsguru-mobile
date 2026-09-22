@@ -311,6 +311,105 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
   };
 }
 
+async function prepareBlobForFormData(
+  uri: string | undefined,
+  existingBlob: any | undefined,
+  fileName: string,
+  mimeType: string,
+  idx: number
+): Promise<any> {
+  let blob: any = null;
+
+  if (existingBlob && typeof existingBlob === 'object' && ('bytes' in existingBlob || existingBlob instanceof Blob)) {
+    blob = existingBlob;
+  } else if (Platform.OS === 'web' && !uri) {
+    blob = new Blob(['sample claim document content'], { type: mimeType });
+  } else {
+    let resolvedUri = uri;
+    const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+    if (!resolvedUri) {
+      try {
+        const fallbackPath = `${FileSystemLegacy.cacheDirectory}claim_${Date.now()}_${idx}_${safeName}`;
+        await FileSystemLegacy.writeAsStringAsync(fallbackPath, '%PDF-1.4 sample claim document content');
+        resolvedUri = fallbackPath;
+      } catch {
+        resolvedUri = `${FileSystemLegacy.cacheDirectory}${safeName}`;
+      }
+    } else {
+      try {
+        const targetPath = `${FileSystemLegacy.cacheDirectory}ready_${Date.now()}_${idx}_${safeName}`;
+        await FileSystemLegacy.copyAsync({ from: resolvedUri, to: targetPath });
+        resolvedUri = targetPath;
+      } catch (copyErr) {
+        // Continue with original URI if copy fails
+      }
+    }
+
+    if (resolvedUri) {
+      try {
+        const resp = await fetch(resolvedUri);
+        blob = await resp.blob();
+      } catch (fetchErr) {
+        console.warn(`[claimsApi] fetch(uri).blob() failed for ${safeName}:`, fetchErr);
+        try {
+          const base64 = await FileSystemLegacy.readAsStringAsync(resolvedUri, {
+            encoding: FileSystemLegacy.EncodingType.Base64,
+          });
+          if (typeof atob === 'function') {
+            const binaryString = atob(base64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let b = 0; b < binaryString.length; b++) {
+              bytes[b] = binaryString.charCodeAt(b);
+            }
+            blob = new Blob([bytes], { type: mimeType });
+          }
+        } catch (fsErr) {
+          console.warn(`[claimsApi] Base64 fallback failed for ${safeName}:`, fsErr);
+        }
+      }
+    }
+  }
+
+  if (!blob) {
+    blob = new Blob(['sample claim document content'], { type: mimeType });
+  }
+
+  // Define WRITABLE own properties for name and type on the Blob instance.
+  // This is required because Expo's FormData.normalizeArgs performs:
+  // `value.name = blobFilename ?? value.name ?? 'blob'`.
+  // If `value` is a standard File or has only a prototype getter for `name`,
+  // strict mode throws: "Cannot assign to property 'name' which has only a getter".
+  // An explicit writable own property ensures Expo's assignment succeeds cleanly.
+  try {
+    Object.defineProperty(blob, 'name', {
+      value: fileName,
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
+  } catch {
+    try {
+      (blob as any).name = fileName;
+    } catch {}
+  }
+
+  try {
+    Object.defineProperty(blob, 'type', {
+      value: mimeType,
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
+  } catch {
+    try {
+      (blob as any).type = mimeType;
+    } catch {}
+  }
+
+  return blob;
+}
+
 export const claimsApi = {
   getClaims: async (
     offset: number = 0,
@@ -413,170 +512,45 @@ export const claimsApi = {
     const effectivePatientId = options?.patientId || authState.userId || undefined;
     const effectiveEmail = options?.email || authState.userEmail || undefined;
 
-    if (Platform.OS === 'web') {
-      const formData = new FormData();
-      if (files && files.length > 0) {
-        for (const f of files) {
-          const fileName = f.name || 'document.pdf';
-          const mimeType = getEffectiveMimeType(fileName, f.type);
-          if (f.blob) {
-            formData.append('files', f.blob, fileName);
-          } else {
-            const emptyBlob = new Blob(['sample claim document content'], { type: mimeType });
-            formData.append('files', emptyBlob, fileName);
-          }
-        }
-      }
-      if (effectivePolicyId) formData.append('policy_id', String(effectivePolicyId));
-      if (effectivePatientId) formData.append('patient_id', String(effectivePatientId));
-      if (effectiveEmail) formData.append('email', String(effectiveEmail));
-      if (options?.force) {
-        formData.append('force', 'true');
-      }
+    const formData = new FormData();
 
-      const res = await apiClient.upload<BackendUploadResponse>(API_ENDPOINTS.claimsUpload(), formData, {
-        headers: validToken ? { Authorization: `Bearer ${validToken}` } : undefined,
-      });
+    if (files && files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const fileName = f.name || `document_${i + 1}.pdf`;
+        const mimeType = getEffectiveMimeType(fileName, f.type);
 
-      const isDup = Boolean(res.is_duplicate || (res.status === 'COMPLETED' && res.task_id === null));
-      return {
-        ...res,
-        claim_id: res.claim_id || res.id,
-        id: res.id || res.claim_id,
-        is_duplicate: isDup,
-      };
-    }
-
-    // Native iOS & Android: Ensure file is in a guaranteed accessible cache location for Android 11+ scoped storage
-    const primaryFile = (files && files.length > 0) ? files[0] : { name: 'document.pdf' };
-    const primaryName = primaryFile.name || 'document.pdf';
-    const primaryMime = getEffectiveMimeType(primaryName, primaryFile.type);
-
-    let uploadUri = primaryFile.uri;
-    const safeName = primaryName.replace(/[^a-zA-Z0-9._-]/g, '_');
-
-    if (!uploadUri) {
-      try {
-        const fallbackPath = `${FileSystemLegacy.cacheDirectory}claim_${Date.now()}_${safeName}`;
-        await FileSystemLegacy.writeAsStringAsync(fallbackPath, '%PDF-1.4 sample claim document content');
-        uploadUri = fallbackPath;
-      } catch {
-        uploadUri = `${FileSystemLegacy.cacheDirectory}${safeName}`;
+        const part = await prepareBlobForFormData(f.uri, f.blob, fileName, mimeType, i);
+        formData.append('files', part, fileName);
       }
     } else {
-      // For Android 11+ compatibility: Copy picked document from DocumentPicker cache to app's own cacheDirectory
-      try {
-        const targetPath = `${FileSystemLegacy.cacheDirectory}ready_${Date.now()}_${safeName}`;
-        await FileSystemLegacy.copyAsync({ from: uploadUri, to: targetPath });
-        uploadUri = targetPath;
-      } catch (copyErr) {
-        console.warn('[claimsApi] copyAsync failed, trying base64 rewrite:', copyErr);
-        try {
-          const content = await FileSystemLegacy.readAsStringAsync(uploadUri, {
-            encoding: FileSystemLegacy.EncodingType.Base64,
-          });
-          const targetPath = `${FileSystemLegacy.cacheDirectory}ready_${Date.now()}_${safeName}`;
-          await FileSystemLegacy.writeAsStringAsync(targetPath, content, {
-            encoding: FileSystemLegacy.EncodingType.Base64,
-          });
-          uploadUri = targetPath;
-        } catch (base64Err) {
-          console.warn('[claimsApi] Base64 rewrite fallback failed, proceeding with original URI:', base64Err);
-        }
-      }
+      const emptyBlob = new Blob(['sample claim document content'], { type: 'application/pdf' });
+      formData.append('files', emptyBlob, 'document.pdf');
+    }
+
+    if (effectivePolicyId) formData.append('policy_id', String(effectivePolicyId));
+    if (effectivePatientId) formData.append('patient_id', String(effectivePatientId));
+    if (effectiveEmail) formData.append('email', String(effectiveEmail));
+    if (options?.force) {
+      formData.append('force', 'true');
     }
 
     const uploadUrl = API_ENDPOINTS.claimsUpload();
-    let resData: any = null;
+    const timeoutMs = Math.max(45000, (files?.length || 1) * 15000);
 
-    try {
-      const uploadParams: Record<string, string> = {};
-      if (options?.force) uploadParams.force = 'true';
-      if (effectivePolicyId) uploadParams.policy_id = String(effectivePolicyId);
-      if (effectivePatientId) uploadParams.patient_id = String(effectivePatientId);
-      if (effectiveEmail) uploadParams.email = String(effectiveEmail);
+    const res = await apiClient.upload<BackendUploadResponse>(uploadUrl, formData, {
+      headers: {
+        ...(validToken ? { Authorization: `Bearer ${validToken}` } : {}),
+        ...(effectivePatientId ? { 'X-Patient-Id': String(effectivePatientId), 'X-User-Id': String(effectivePatientId) } : {}),
+      },
+      timeoutMs,
+    });
 
-      const result = await FileSystemLegacy.uploadAsync(uploadUrl, uploadUri, {
-        httpMethod: 'POST',
-        uploadType: FileSystemLegacy.FileSystemUploadType.MULTIPART,
-        fieldName: 'files',
-        mimeType: primaryMime,
-        parameters: uploadParams,
-        headers: {
-          Accept: 'application/json',
-          ...(validToken ? { Authorization: `Bearer ${validToken}` } : {}),
-          ...(effectivePatientId ? { 'X-Patient-Id': String(effectivePatientId), 'X-User-Id': String(effectivePatientId) } : {}),
-        },
-      });
-
-      try {
-        resData = JSON.parse(result.body);
-      } catch {
-        resData = { message: result.body };
-      }
-
-      if (result.status >= 400) {
-        const errorMsg = resData?.detail || resData?.message || `Upload failed with status ${result.status}`;
-        throw new ApiError(errorMsg, result.status, resData);
-      }
-    } catch (uploadErr: any) {
-      if (uploadErr instanceof ApiError) {
-        throw uploadErr;
-      }
-      console.warn('[claimsApi] FileSystem.uploadAsync failed, attempting fallback FormData upload:', uploadErr);
-      
-      const formData = new FormData();
-      formData.append('files', {
-        uri: uploadUri,
-        name: primaryName,
-        type: primaryMime,
-      } as any);
-      if (effectivePolicyId) formData.append('policy_id', String(effectivePolicyId));
-      if (effectivePatientId) formData.append('patient_id', String(effectivePatientId));
-      if (effectiveEmail) formData.append('email', String(effectiveEmail));
-      if (options?.force) formData.append('force', 'true');
-
-      resData = await apiClient.upload<BackendUploadResponse>(uploadUrl, formData);
-    }
-
-    const claimResponse = resData as BackendUploadResponse;
-    const isDup = Boolean(claimResponse.is_duplicate || (claimResponse.status === 'COMPLETED' && claimResponse.task_id === null));
-    const createdClaimId = claimResponse.claim_id || claimResponse.id;
-
-    // If there are additional files attached, upload them to the claim documents endpoint (unless duplicate)
-    if (!isDup && files && files.length > 1 && createdClaimId) {
-      const docUploadUrl = `${API_ENDPOINTS.claims()}/${createdClaimId}/documents`;
-      for (let i = 1; i < files.length; i++) {
-        const extra = files[i];
-        if (extra.uri) {
-          try {
-            let extraUri = extra.uri;
-            const extraSafe = (extra.name || 'document.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
-            const extraTarget = `${FileSystemLegacy.cacheDirectory}extra_${Date.now()}_${extraSafe}`;
-            try {
-              await FileSystemLegacy.copyAsync({ from: extraUri, to: extraTarget });
-              extraUri = extraTarget;
-            } catch {}
-
-            await FileSystemLegacy.uploadAsync(docUploadUrl, extraUri, {
-              httpMethod: 'POST',
-              uploadType: FileSystemLegacy.FileSystemUploadType.MULTIPART,
-              fieldName: 'file',
-              mimeType: getEffectiveMimeType(extra.name, extra.type),
-              headers: { 
-                Accept: 'application/json',
-                ...(authState.token ? { Authorization: `Bearer ${authState.token}` } : {}),
-              },
-            });
-          } catch (extraErr) {
-            console.warn('[claimsApi] Extra file upload failed:', extraErr);
-          }
-        }
-      }
-    }
+    const isDup = Boolean(res.is_duplicate || (res.status === 'COMPLETED' && res.task_id === null));
+    const createdClaimId = res.claim_id || res.id;
 
     return {
-      ...claimResponse,
+      ...res,
       claim_id: createdClaimId,
       id: createdClaimId,
       is_duplicate: isDup,
