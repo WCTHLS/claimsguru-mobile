@@ -25,7 +25,7 @@ import {
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { Routes } from '../../../app/navigation/routes';
 import { isEntraEnabled, getEntraMobileConfig } from '../../../core/config/authConfig';
-import { loginWithPassword, completeEntraAuthCode, syncEntraUser } from '../../../core/api/authApi';
+import { loginWithPassword, completeEntraAuthCode, loginWithEntraNative } from '../../../core/api/authApi';
 
 export const SignInScreen = ({ navigation }: any) => {
   const { colors, isDark } = useTheme();
@@ -108,10 +108,35 @@ export const SignInScreen = ({ navigation }: any) => {
     setErrorMessage(null);
 
     try {
-      await loginWithPassword({
-        username: identifier.trim(),
-        password,
-      });
+      if (useEntra) {
+        // Native Microsoft Entra authentication: pass mail and password directly to Entra API
+        await loginWithEntraNative({
+          email: identifier.trim(),
+          password,
+        });
+      } else {
+        try {
+          await loginWithPassword({
+            username: identifier.trim(),
+            password,
+          });
+        } catch (localErr: any) {
+          const msg = localErr instanceof Error ? localErr.message : String(localErr);
+          if (
+            msg.toLowerCase().includes('microsoft entra') ||
+            msg.toLowerCase().includes('web portal') ||
+            msg.toLowerCase().includes('no account found')
+          ) {
+            // User was created via Microsoft Entra on Web Portal: authenticate natively via Entra!
+            await loginWithEntraNative({
+              email: identifier.trim(),
+              password,
+            });
+          } else {
+            throw localErr;
+          }
+        }
+      }
       navigation.replace('MainTabs');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Invalid email or password.');
@@ -122,8 +147,11 @@ export const SignInScreen = ({ navigation }: any) => {
 
   const handleSsoSignIn = async (provider: string) => {
     if (provider === 'Microsoft' && useEntra) {
-      await handleEntraSignIn();
-      return;
+      // If user typed email & password, submit them natively
+      if (identifier.trim() && password.trim()) {
+        await handlePasswordSubmit();
+        return;
+      }
     }
     setSubmitting(true);
     setErrorMessage(null);
@@ -200,9 +228,7 @@ export const SignInScreen = ({ navigation }: any) => {
             Welcome to ClaimsGuru
           </Text>
           <Text style={[styles.welcomeSubtitle, { color: colors.muted }]}>
-            {useEntra
-              ? 'Select your portal to continue with Microsoft Entra External ID.'
-              : 'Sign in to your ClaimsGuru workspace to continue.'}
+            Sign in to your ClaimsGuru workspace to continue.
           </Text>
         </View>
 
@@ -213,206 +239,131 @@ export const SignInScreen = ({ navigation }: any) => {
           </View>
         ) : null}
 
-        {/* Main Authentication Flow */}
-        {useEntra ? (
-          /* ========================================================================= */
-          /* Microsoft Entra External ID (CIAM) Flow */
-          /* ========================================================================= */
-          <View style={styles.entraContainer}>
-            {/* Continue as Patient Card */}
-            <TouchableOpacity
+        {/* Main Authentication Flow - Same Custom UI Form */}
+        <View style={styles.localContainer}>
+          {/* Email / Username Field */}
+          <View style={styles.formGroup}>
+            <Text style={[styles.label, { color: colors.ink }]}>
+              Email Address or Mobile Number
+            </Text>
+            <View
               style={[
-                styles.entraCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.brand,
-                },
+                styles.inputWrapper,
+                { backgroundColor: colors.surface, borderColor: colors.line },
               ]}
-              onPress={handleEntraSignIn}
-              disabled={entraLoading}
-              activeOpacity={0.85}
             >
-              <View style={styles.entraCardLeft}>
-                <View style={[styles.avatarIconBox, { backgroundColor: colors.brandSoft }]}>
-                  <User size={24} color={colors.brandDark} />
-                </View>
-                <View style={styles.entraCardTextCol}>
-                  <View style={styles.entraBadgeRow}>
-                    <Text style={[styles.entraCardTitle, { color: colors.ink }]}>
-                      Continue as Patient
-                    </Text>
-                    <View style={[styles.rolePill, { backgroundColor: colors.brandSoft, borderColor: colors.brand }]}>
-                      <Text style={[styles.rolePillText, { color: colors.brandDark }]}>Submitter</Text>
-                    </View>
-                  </View>
-                  <Text style={[styles.entraCardSub, { color: colors.muted }]}>
-                    Sign in to track and submit insurance claims
-                  </Text>
-                </View>
-              </View>
+              <Mail size={18} color={colors.muted} style={styles.inputLeadingIcon} />
+              <TextInput
+                style={[styles.textInput, { color: colors.ink }]}
+                placeholder="Enter email or mobile number"
+                placeholderTextColor={colors.muted}
+                value={identifier}
+                onChangeText={setIdentifier}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoComplete="username"
+              />
+            </View>
+          </View>
 
-              <View style={[styles.entraCardArrow, { backgroundColor: colors.brandSoft }]}>
-                {entraLoading ? (
-                  <ActivityIndicator size="small" color={colors.brandDark} />
+          {/* Password Field */}
+          <View style={styles.formGroup}>
+            <View style={styles.passwordLabelRow}>
+              <Text style={[styles.label, { color: colors.ink }]}>Password</Text>
+              <TouchableOpacity onPress={() => {}}>
+                <Text style={[styles.forgotLink, { color: colors.brandDark }]}>Forgot password?</Text>
+              </TouchableOpacity>
+            </View>
+            <View
+              style={[
+                styles.inputWrapper,
+                { backgroundColor: colors.surface, borderColor: colors.line },
+              ]}
+            >
+              <Lock size={18} color={colors.muted} style={styles.inputLeadingIcon} />
+              <TextInput
+                style={[styles.textInput, { color: colors.ink, paddingRight: 40 }]}
+                placeholder="Enter password"
+                placeholderTextColor={colors.muted}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoComplete="password"
+              />
+              <TouchableOpacity
+                style={styles.eyeBtn}
+                onPress={() => setShowPassword(!showPassword)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                {showPassword ? (
+                  <EyeOff size={18} color={colors.muted} />
                 ) : (
-                  <ArrowRight size={18} color={colors.brandDark} />
+                  <Eye size={18} color={colors.muted} />
                 )}
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
+          </View>
 
-            {/* Entra Security Badge */}
+          {/* Submit Button */}
+          <TouchableOpacity
+            style={[
+              styles.primarySubmitBtn,
+              { backgroundColor: colors.brand },
+              submitting && { opacity: 0.8 },
+            ]}
+            onPress={handlePasswordSubmit}
+            disabled={submitting}
+            activeOpacity={0.88}
+          >
+            {submitting ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <>
+                <Text style={styles.primarySubmitBtnText}>Sign In to Patient Portal</Text>
+                <ArrowRight size={18} color="#ffffff" style={{ marginLeft: 8 }} />
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* Security Badge */}
+          {useEntra ? (
             <View style={styles.securityBadgeRow}>
               <ShieldCheck size={14} color={colors.brand} />
               <Text style={[styles.securityBadgeText, { color: colors.muted }]}>
-                Secured by Microsoft Entra External ID (CIAM)
+                Secured 256-bit Encrypted Login
               </Text>
             </View>
+          ) : null}
 
-            {/* Entra Sign-up Prompt */}
-            <View style={styles.signupPromptRow}>
-              <Text style={[styles.signupPrompt, { color: colors.muted }]}>
-                New patient to ClaimsGuru?{' '}
-              </Text>
-              <TouchableOpacity onPress={() => navigation.navigate(Routes.SignUp)}>
-                <Text style={[styles.signupLink, { color: colors.brandDark }]}>Create an account</Text>
-              </TouchableOpacity>
-            </View>
+          {/* SSO Section */}
+          <View style={styles.dividerRow}>
+            <View style={[styles.dividerLine, { backgroundColor: colors.line }]} />
+            <Text style={[styles.dividerText, { color: colors.muted }]}>Or sign in with</Text>
+            <View style={[styles.dividerLine, { backgroundColor: colors.line }]} />
           </View>
-        ) : (
-          /* ========================================================================= */
-          /* Local Email + Password Authentication (Default Flow) */
-          /* ========================================================================= */
-          <View style={styles.localContainer}>
-            {/* Email / Username Field */}
-            <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.ink }]}>
-                Email Address or Mobile Number
-              </Text>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  { backgroundColor: colors.surface, borderColor: colors.line },
-                ]}
-              >
-                <Mail size={18} color={colors.muted} style={styles.inputLeadingIcon} />
-                <TextInput
-                  style={[styles.textInput, { color: colors.ink }]}
-                  placeholder="Enter email or mobile number"
-                  placeholderTextColor={colors.muted}
-                  value={identifier}
-                  onChangeText={setIdentifier}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  autoComplete="username"
-                />
-              </View>
-            </View>
 
-            {/* Password Field */}
-            <View style={styles.formGroup}>
-              <View style={styles.passwordLabelRow}>
-                <Text style={[styles.label, { color: colors.ink }]}>Password</Text>
-                <TouchableOpacity onPress={() => {}}>
-                  <Text style={[styles.forgotLink, { color: colors.brandDark }]}>Forgot password?</Text>
-                </TouchableOpacity>
-              </View>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  { backgroundColor: colors.surface, borderColor: colors.line },
-                ]}
-              >
-                <Lock size={18} color={colors.muted} style={styles.inputLeadingIcon} />
-                <TextInput
-                  style={[styles.textInput, { color: colors.ink, paddingRight: 40 }]}
-                  placeholder="Enter password"
-                  placeholderTextColor={colors.muted}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  autoComplete="password"
-                />
-                <TouchableOpacity
-                  style={styles.eyeBtn}
-                  onPress={() => setShowPassword(!showPassword)}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  {showPassword ? (
-                    <EyeOff size={18} color={colors.muted} />
-                  ) : (
-                    <Eye size={18} color={colors.muted} />
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Submit Button */}
-            <TouchableOpacity
+          <View style={styles.ssoGrid}>
+            <View
               style={[
-                styles.primarySubmitBtn,
-                { backgroundColor: colors.brand },
-                submitting && { opacity: 0.8 },
+                styles.ssoBtn,
+                { backgroundColor: colors.surface, borderColor: colors.line, flexBasis: '100%' },
               ]}
-              onPress={handlePasswordSubmit}
-              disabled={submitting}
-              activeOpacity={0.88}
             >
-              {submitting ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <>
-                  <Text style={styles.primarySubmitBtnText}>Sign In to Patient Portal</Text>
-                  <ArrowRight size={18} color="#ffffff" style={{ marginLeft: 8 }} />
-                </>
-              )}
-            </TouchableOpacity>
-
-            {/* SSO Section */}
-            <View style={styles.dividerRow}>
-              <View style={[styles.dividerLine, { backgroundColor: colors.line }]} />
-              <Text style={[styles.dividerText, { color: colors.muted }]}>Or sign in with</Text>
-              <View style={[styles.dividerLine, { backgroundColor: colors.line }]} />
-            </View>
-
-            <View style={styles.ssoGrid}>
-              <TouchableOpacity
-                style={[styles.ssoBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                onPress={() => handleSsoSignIn('Google')}
-              >
-                <Text style={[styles.ssoBtnText, { color: colors.ink }]}>Google</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.ssoBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                onPress={() => handleSsoSignIn('Microsoft')}
-              >
-                <Text style={[styles.ssoBtnText, { color: colors.ink }]}>Microsoft</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.ssoBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                onPress={() => handleSsoSignIn('Apple')}
-              >
-                <Text style={[styles.ssoBtnText, { color: colors.ink }]}>Apple</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.ssoBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                onPress={() => handleSsoSignIn('SAML')}
-              >
-                <Text style={[styles.ssoBtnText, { color: colors.ink }]}>SAML</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Sign Up Link */}
-            <View style={styles.signupPromptRow}>
-              <Text style={[styles.signupPrompt, { color: colors.muted }]}>
-                New to ClaimsGuru?{' '}
-              </Text>
-              <TouchableOpacity onPress={() => navigation.navigate(Routes.SignUp)}>
-                <Text style={[styles.signupLink, { color: colors.brandDark }]}>Create an account</Text>
-              </TouchableOpacity>
+              <Text style={[styles.ssoBtnText, { color: colors.ink }]}>Google</Text>
             </View>
           </View>
-        )}
+
+          {/* Sign Up Link */}
+          <View style={styles.signupPromptRow}>
+            <Text style={[styles.signupPrompt, { color: colors.muted }]}>
+              New to ClaimsGuru?{' '}
+            </Text>
+            <TouchableOpacity onPress={() => navigation.navigate(Routes.SignUp)}>
+              <Text style={[styles.signupLink, { color: colors.brandDark }]}>Create an account</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Footer */}
         <View style={[styles.footerBox, { borderTopColor: colors.line }]}>

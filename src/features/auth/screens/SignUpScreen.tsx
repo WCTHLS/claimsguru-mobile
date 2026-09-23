@@ -21,10 +21,19 @@ import {
   ShieldCheck,
   Check,
   CheckCircle2,
+  KeyRound,
+  RotateCw,
+  ArrowRight,
 } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { Routes } from '../../../app/navigation/routes';
-import { registerPatient } from '../../../core/api/authApi';
+import { isEntraEnabled } from '../../../core/config/authConfig';
+import {
+  registerPatient,
+  startEntraNativeSignUp,
+  verifyEntraNativeSignUpCode,
+  resendEntraNativeSignUpCode,
+} from '../../../core/api/authApi';
 
 const INSURERS = [
   'Star Health',
@@ -58,6 +67,22 @@ export const SignUpScreen = ({ navigation }: any) => {
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // Microsoft Entra Native Auth verification state
+  const useEntra = isEntraEnabled();
+  const [step, setStep] = useState<'form' | 'verify_code'>('form');
+  const [continuationToken, setContinuationToken] = useState<string | null>(null);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [verifyingCode, setVerifyingCode] = useState(false);
+  const [resendingCode, setResendingCode] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+
+  React.useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(c => c - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown]);
 
   const handleDobChange = (text: string) => {
     const raw = text.replace(/\D/g, '').slice(0, 8);
@@ -102,29 +127,118 @@ export const SignUpScreen = ({ navigation }: any) => {
     setSubmitting(true);
 
     try {
-      await registerPatient({
-        username: cleanEmail,
+      if (useEntra) {
+        // Step 1: Request Microsoft Entra to send verification code to user's email
+        const res = await startEntraNativeSignUp({
+          email: cleanEmail,
+          password,
+        });
+
+        setContinuationToken(res.continuationToken);
+        setStep('verify_code');
+        setCountdown(30);
+        setToastMsg('Verification code sent to your email!');
+        setTimeout(() => setToastMsg(null), 3000);
+      } else {
+        await registerPatient({
+          username: cleanEmail,
+          password,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phone: phone.trim() || undefined,
+          dob: dob.trim() || undefined,
+          gender,
+          policy: policyNumber.trim() || undefined,
+          sumInsured: sumInsured.trim() || undefined,
+        });
+
+        setToastMsg('Account created successfully!');
+        setTimeout(() => {
+          setToastMsg(null);
+          navigation.replace('MainTabs');
+        }, 1200);
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (
+        msg.toLowerCase().includes('already registered on the claimsguru web portal') ||
+        msg.toLowerCase().includes('already exists') ||
+        msg.toLowerCase().includes('duplicate')
+      ) {
+        setErrorMessage(
+          'An account with this email address already exists. Please sign in with your email and password instead.'
+        );
+      } else {
+        setErrorMessage(msg);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    const cleanCode = verificationCode.trim().replace(/\s+/g, '');
+    if (!cleanCode) {
+      setErrorMessage('Please enter the verification code sent to your email.');
+      return;
+    }
+    if (!continuationToken) {
+      setErrorMessage('Verification session expired. Please go back and try again.');
+      return;
+    }
+
+    setVerifyingCode(true);
+    setErrorMessage(null);
+
+    try {
+      await verifyEntraNativeSignUpCode({
+        continuationToken,
+        code: cleanCode,
         password,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        phone: phone.trim() || undefined,
-        dob: dob.trim() || undefined,
-        gender,
-        policy: policyNumber.trim() || undefined,
-        sumInsured: sumInsured.trim() || undefined,
+        email: email.trim().toLowerCase(),
+        profileDetails: {
+          name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phone: phone.trim() || undefined,
+          dob: dob.trim() || undefined,
+          gender,
+          policy: policyNumber.trim() || undefined,
+          sumInsured: sumInsured.trim() || undefined,
+        },
       });
 
-      setToastMsg('Account created successfully!');
+      setToastMsg('Account created & verified successfully!');
       setTimeout(() => {
         setToastMsg(null);
         navigation.replace('MainTabs');
       }, 1200);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : 'Registration failed. Please try again.'
+        error instanceof Error ? error.message : 'Code verification failed. Please try again.'
       );
     } finally {
-      setSubmitting(false);
+      setVerifyingCode(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (!continuationToken || countdown > 0 || resendingCode) return;
+    setResendingCode(true);
+    setErrorMessage(null);
+
+    try {
+      const res = await resendEntraNativeSignUpCode({ continuationToken });
+      setContinuationToken(res.continuationToken);
+      setCountdown(30);
+      setToastMsg('New verification code sent to your email!');
+      setTimeout(() => setToastMsg(null), 3000);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to resend verification code.'
+      );
+    } finally {
+      setResendingCode(false);
     }
   };
 
@@ -139,12 +253,21 @@ export const SignUpScreen = ({ navigation }: any) => {
       >
         <TouchableOpacity
           style={styles.backBtn}
-          onPress={() => navigation.goBack()}
+          onPress={() => {
+            if (step === 'verify_code') {
+              setStep('form');
+              setErrorMessage(null);
+            } else {
+              navigation.goBack();
+            }
+          }}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <ChevronLeft size={22} color={colors.ink} />
         </TouchableOpacity>
-        <Text style={[styles.appBarTitle, { color: colors.ink }]}>Create Patient Account</Text>
+        <Text style={[styles.appBarTitle, { color: colors.ink }]}>
+          {step === 'verify_code' ? 'Verify Email' : 'Create Patient Account'}
+        </Text>
         <View style={{ width: 32 }} />
       </View>
 
@@ -154,354 +277,468 @@ export const SignUpScreen = ({ navigation }: any) => {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Banner */}
-        <View style={[styles.banner, { backgroundColor: colors.brandSoft }]}>
-          <ShieldCheck size={18} color={colors.brandDark} style={{ marginTop: 2 }} />
-          <Text style={[styles.bannerText, { color: colors.brandDark }]}>
-            Self-service patient registration. Your profile and insurance details will be securely saved.
-          </Text>
-        </View>
-
-        {/* Error Message */}
-        {errorMessage ? (
-          <View style={[styles.errorBox, { backgroundColor: colors.redSoft, borderColor: colors.red }]}>
-            <Text style={[styles.errorText, { color: colors.red }]}>{errorMessage}</Text>
-          </View>
-        ) : null}
-
-        {/* Account Credentials Card */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <Text style={[styles.cardSectionTitle, { color: colors.ink }]}>
-            Login Credentials
-          </Text>
-
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: colors.ink }]}>Email Address *</Text>
-            <View
-              style={[
-                styles.inputWrapper,
-                { backgroundColor: colors.surface2, borderColor: colors.line },
-              ]}
-            >
-              <Mail size={16} color={colors.muted} style={styles.inputIcon} />
-              <TextInput
-                style={[styles.input, { color: colors.ink }]}
-                placeholder="you@example.com"
-                placeholderTextColor={colors.muted}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
+        {step === 'verify_code' ? (
+          /* ========================================================================= */
+          /* Step 2: Microsoft Entra Email Verification Code (OOB) */
+          /* ========================================================================= */
+          <View style={styles.verifyContainer}>
+            {/* Banner */}
+            <View style={[styles.banner, { backgroundColor: colors.brandSoft }]}>
+              <ShieldCheck size={18} color={colors.brandDark} style={{ marginTop: 2 }} />
+              <Text style={[styles.bannerText, { color: colors.brandDark }]}>
+                An official verification code has been dispatched to your email.
+              </Text>
             </View>
-          </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: colors.ink }]}>Password *</Text>
-            <View
-              style={[
-                styles.inputWrapper,
-                { backgroundColor: colors.surface2, borderColor: colors.line },
-              ]}
-            >
-              <Lock size={16} color={colors.muted} style={styles.inputIcon} />
-              <TextInput
-                style={[styles.input, { color: colors.ink, paddingRight: 36 }]}
-                placeholder="At least 6 characters"
-                placeholderTextColor={colors.muted}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity
-                style={styles.eyeIconBtn}
-                onPress={() => setShowPassword(!showPassword)}
+            {/* Error Message */}
+            {errorMessage ? (
+              <View style={[styles.errorBox, { backgroundColor: colors.redSoft, borderColor: colors.red }]}>
+                <Text style={[styles.errorText, { color: colors.red }]}>{errorMessage}</Text>
+              </View>
+            ) : null}
+
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line, alignItems: 'center' }]}>
+              <View style={[styles.verifyIconBox, { backgroundColor: colors.brandSoft }]}>
+                <KeyRound size={28} color={colors.brandDark} />
+              </View>
+
+              <Text style={[styles.verifyTitle, { color: colors.ink }]}>
+                Check Your Email
+              </Text>
+              <Text style={[styles.verifySubtitle, { color: colors.muted }]}>
+                A verification code has been sent to:{'\n'}
+                <Text style={{ fontWeight: '700', color: colors.ink }}>{email}</Text>
+              </Text>
+
+              {/* OTP Input */}
+              <View
+                style={[
+                  styles.otpInputWrapper,
+                  { backgroundColor: colors.surface2, borderColor: colors.brand },
+                ]}
               >
-                {showPassword ? (
-                  <EyeOff size={16} color={colors.muted} />
+                <TextInput
+                  style={[styles.otpInput, { color: colors.ink }]}
+                  placeholder="--------"
+                  placeholderTextColor={colors.muted}
+                  value={verificationCode}
+                  onChangeText={setVerificationCode}
+                  keyboardType="number-pad"
+                  maxLength={10}
+                  autoFocus
+                  textAlign="center"
+                />
+              </View>
+
+              {/* Verify & Complete Button */}
+              <TouchableOpacity
+                style={[
+                  styles.submitBtn,
+                  { backgroundColor: colors.brand, width: '100%', marginTop: 8 },
+                  verifyingCode && { opacity: 0.8 },
+                ]}
+                onPress={handleVerifyCode}
+                disabled={verifyingCode}
+                activeOpacity={0.88}
+              >
+                {verifyingCode ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
-                  <Eye size={16} color={colors.muted} />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <Text style={styles.submitText}>Verify & Create Account</Text>
+                    <ArrowRight size={16} color="#ffffff" />
+                  </View>
                 )}
+              </TouchableOpacity>
+
+              {/* Resend Code Button */}
+              <TouchableOpacity
+                style={styles.resendBtn}
+                onPress={handleResendCode}
+                disabled={countdown > 0 || resendingCode}
+                activeOpacity={0.7}
+              >
+                <RotateCw size={14} color={countdown > 0 ? colors.muted : colors.brandDark} style={{ marginRight: 6 }} />
+                <Text style={[styles.resendBtnText, { color: countdown > 0 ? colors.muted : colors.brandDark }]}>
+                  {resendingCode
+                    ? 'Resending code…'
+                    : countdown > 0
+                    ? `Resend code in ${countdown}s`
+                    : 'Resend verification code'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Edit Details Button */}
+              <TouchableOpacity
+                style={[styles.changeEmailBtn, { borderColor: colors.line }]}
+                onPress={() => {
+                  setStep('form');
+                  setErrorMessage(null);
+                }}
+              >
+                <Text style={[styles.changeEmailBtnText, { color: colors.muted }]}>
+                  Edit Registration Information
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
+        ) : (
+          /* ========================================================================= */
+          /* Step 1: Account Registration Form */
+          /* ========================================================================= */
+          <>
+            {/* Banner */}
+            <View style={[styles.banner, { backgroundColor: colors.brandSoft }]}>
+              <ShieldCheck size={18} color={colors.brandDark} style={{ marginTop: 2 }} />
+              <Text style={[styles.bannerText, { color: colors.brandDark }]}>
+                {useEntra
+                  ? 'Secure patient registration. Your profile & insurance will be safely linked to your account.'
+                  : 'Self-service patient registration. Your profile and insurance details will be securely saved.'}
+              </Text>
+            </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: colors.ink }]}>Confirm Password *</Text>
-            <View
-              style={[
-                styles.inputWrapper,
-                { backgroundColor: colors.surface2, borderColor: colors.line },
-              ]}
+            {/* Error Message */}
+            {errorMessage ? (
+              <View style={[styles.errorBox, { backgroundColor: colors.redSoft, borderColor: colors.red }]}>
+                <Text style={[styles.errorText, { color: colors.red }]}>{errorMessage}</Text>
+              </View>
+            ) : null}
+
+            {/* Account Credentials Card */}
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+              <Text style={[styles.cardSectionTitle, { color: colors.ink }]}>
+                Login Credentials
+              </Text>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: colors.ink }]}>Email Address *</Text>
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    { backgroundColor: colors.surface2, borderColor: colors.line },
+                  ]}
+                >
+                  <Mail size={16} color={colors.muted} style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.input, { color: colors.ink }]}
+                    placeholder="you@example.com"
+                    placeholderTextColor={colors.muted}
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: colors.ink }]}>Password *</Text>
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    { backgroundColor: colors.surface2, borderColor: colors.line },
+                  ]}
+                >
+                  <Lock size={16} color={colors.muted} style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.input, { color: colors.ink, paddingRight: 36 }]}
+                    placeholder="At least 6 characters"
+                    placeholderTextColor={colors.muted}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeIconBtn}
+                    onPress={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff size={16} color={colors.muted} />
+                    ) : (
+                      <Eye size={16} color={colors.muted} />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: colors.ink }]}>Confirm Password *</Text>
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    { backgroundColor: colors.surface2, borderColor: colors.line },
+                  ]}
+                >
+                  <Lock size={16} color={colors.muted} style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.input, { color: colors.ink }]}
+                    placeholder="Re-enter password"
+                    placeholderTextColor={colors.muted}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                  />
+                </View>
+              </View>
+            </View>
+
+            {/* Personal Details Card */}
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+              <Text style={[styles.cardSectionTitle, { color: colors.ink }]}>
+                Personal Details
+              </Text>
+
+              <View style={styles.rowTwoCols}>
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <Text style={[styles.label, { color: colors.ink }]}>First Name *</Text>
+                  <View
+                    style={[
+                      styles.inputWrapper,
+                      { backgroundColor: colors.surface2, borderColor: colors.line },
+                    ]}
+                  >
+                    <User size={16} color={colors.muted} style={styles.inputIcon} />
+                    <TextInput
+                      style={[styles.input, { color: colors.ink }]}
+                      placeholder="First name"
+                      placeholderTextColor={colors.muted}
+                      value={firstName}
+                      onChangeText={setFirstName}
+                    />
+                  </View>
+                </View>
+
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <Text style={[styles.label, { color: colors.ink }]}>Last Name</Text>
+                  <View
+                    style={[
+                      styles.inputWrapper,
+                      { backgroundColor: colors.surface2, borderColor: colors.line },
+                    ]}
+                  >
+                    <TextInput
+                      style={[styles.input, { color: colors.ink }]}
+                      placeholder="Last name"
+                      placeholderTextColor={colors.muted}
+                      value={lastName}
+                      onChangeText={setLastName}
+                    />
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.rowTwoCols}>
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <Text style={[styles.label, { color: colors.ink }]}>Mobile Phone</Text>
+                  <View
+                    style={[
+                      styles.inputWrapper,
+                      { backgroundColor: colors.surface2, borderColor: colors.line },
+                    ]}
+                  >
+                    <Phone size={16} color={colors.muted} style={styles.inputIcon} />
+                    <TextInput
+                      style={[styles.input, { color: colors.ink }]}
+                      placeholder="9876543210"
+                      placeholderTextColor={colors.muted}
+                      value={phone}
+                      onChangeText={setPhone}
+                      keyboardType="phone-pad"
+                    />
+                  </View>
+                </View>
+
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <Text style={[styles.label, { color: colors.ink }]}>Date of Birth</Text>
+                  <View
+                    style={[
+                      styles.inputWrapper,
+                      { backgroundColor: colors.surface2, borderColor: colors.line },
+                    ]}
+                  >
+                    <Calendar size={16} color={colors.muted} style={styles.inputIcon} />
+                    <TextInput
+                      style={[styles.input, { color: colors.ink }]}
+                      placeholder="DD/MM/YYYY"
+                      placeholderTextColor={colors.muted}
+                      value={dob}
+                      onChangeText={handleDobChange}
+                      keyboardType="numeric"
+                      maxLength={10}
+                    />
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: colors.ink }]}>Gender</Text>
+                <View style={[styles.segBar, { backgroundColor: colors.surface2 }]}>
+                  {(['Male', 'Female', 'Other'] as const).map(g => {
+                    const isSel = gender === g;
+                    return (
+                      <TouchableOpacity
+                        key={g}
+                        style={[
+                          styles.segBtn,
+                          isSel && [styles.segBtnOn, { backgroundColor: colors.surface }],
+                        ]}
+                        onPress={() => setGender(g)}
+                      >
+                        <Text
+                          style={[
+                            styles.segBtnText,
+                            { color: isSel ? colors.brandDark : colors.muted },
+                          ]}
+                        >
+                          {g}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+
+            {/* Insurance Details Card */}
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+              <Text style={[styles.cardSectionTitle, { color: colors.ink }]}>
+                Insurance Policy Details
+              </Text>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: colors.ink }]}>Health Insurer</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.insurerScroll}>
+                  {INSURERS.map(ins => {
+                    const isSel = insurer === ins;
+                    return (
+                      <TouchableOpacity
+                        key={ins}
+                        style={[
+                          styles.insurerChip,
+                          {
+                            backgroundColor: isSel ? colors.brandSoft : colors.surface2,
+                            borderColor: isSel ? colors.brand : colors.line,
+                          },
+                        ]}
+                        onPress={() => setInsurer(ins)}
+                      >
+                        <Text
+                          style={[
+                            styles.insurerChipText,
+                            { color: isSel ? colors.brandDark : colors.ink },
+                          ]}
+                        >
+                          {ins}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              <View style={styles.rowTwoCols}>
+                <View style={[styles.inputGroup, { flex: 1.2 }]}>
+                  <Text style={[styles.label, { color: colors.ink }]}>Policy Number</Text>
+                  <View
+                    style={[
+                      styles.inputWrapper,
+                      { backgroundColor: colors.surface2, borderColor: colors.line },
+                    ]}
+                  >
+                    <TextInput
+                      style={[styles.input, { color: colors.ink }]}
+                      placeholder="e.g. P-0007401"
+                      placeholderTextColor={colors.muted}
+                      value={policyNumber}
+                      onChangeText={setPolicyNumber}
+                      autoCapitalize="characters"
+                    />
+                  </View>
+                </View>
+
+                <View style={[styles.inputGroup, { flex: 0.9 }]}>
+                  <Text style={[styles.label, { color: colors.ink }]}>Sum Insured (₹)</Text>
+                  <View
+                    style={[
+                      styles.inputWrapper,
+                      { backgroundColor: colors.surface2, borderColor: colors.line },
+                    ]}
+                  >
+                    <TextInput
+                      style={[styles.input, { color: colors.ink }]}
+                      placeholder="500000"
+                      placeholderTextColor={colors.muted}
+                      value={sumInsured}
+                      onChangeText={setSumInsured}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Agreement Checkbox */}
+            <TouchableOpacity
+              style={styles.agreeRow}
+              onPress={() => setAgree(!agree)}
+              activeOpacity={0.8}
             >
-              <Lock size={16} color={colors.muted} style={styles.inputIcon} />
-              <TextInput
-                style={[styles.input, { color: colors.ink }]}
-                placeholder="Re-enter password"
-                placeholderTextColor={colors.muted}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Personal Details Card */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <Text style={[styles.cardSectionTitle, { color: colors.ink }]}>
-            Personal Details
-          </Text>
-
-          <View style={styles.rowTwoCols}>
-            <View style={[styles.inputGroup, { flex: 1 }]}>
-              <Text style={[styles.label, { color: colors.ink }]}>First Name *</Text>
               <View
                 style={[
-                  styles.inputWrapper,
-                  { backgroundColor: colors.surface2, borderColor: colors.line },
+                  styles.checkbox,
+                  {
+                    borderColor: agree ? colors.brand : colors.line,
+                    backgroundColor: agree ? colors.brand : 'transparent',
+                  },
                 ]}
               >
-                <User size={16} color={colors.muted} style={styles.inputIcon} />
-                <TextInput
-                  style={[styles.input, { color: colors.ink }]}
-                  placeholder="First name"
-                  placeholderTextColor={colors.muted}
-                  value={firstName}
-                  onChangeText={setFirstName}
-                />
+                {agree ? <Check size={14} color="#ffffff" strokeWidth={3} /> : null}
               </View>
-            </View>
+              <Text style={[styles.agreeText, { color: colors.muted }]}>
+                I agree to the ClaimsGuru Terms of Service, Privacy Policy, and patient data consent.
+              </Text>
+            </TouchableOpacity>
 
-            <View style={[styles.inputGroup, { flex: 1 }]}>
-              <Text style={[styles.label, { color: colors.ink }]}>Last Name</Text>
-              <View
+            {/* Submit Actions */}
+            <View style={styles.btnRow}>
+              <TouchableOpacity
+                style={[styles.cancelBtn, { borderColor: colors.line }]}
+                onPress={() => navigation.goBack()}
+                disabled={submitting}
+              >
+                <Text style={[styles.cancelText, { color: colors.muted }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 style={[
-                  styles.inputWrapper,
-                  { backgroundColor: colors.surface2, borderColor: colors.line },
+                  styles.submitBtn,
+                  { backgroundColor: colors.brand },
+                  submitting && { opacity: 0.8 },
                 ]}
+                onPress={handleRegister}
+                disabled={submitting}
               >
-                <TextInput
-                  style={[styles.input, { color: colors.ink }]}
-                  placeholder="Last name"
-                  placeholderTextColor={colors.muted}
-                  value={lastName}
-                  onChangeText={setLastName}
-                />
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.rowTwoCols}>
-            <View style={[styles.inputGroup, { flex: 1 }]}>
-              <Text style={[styles.label, { color: colors.ink }]}>Mobile Phone</Text>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  { backgroundColor: colors.surface2, borderColor: colors.line },
-                ]}
-              >
-                <Phone size={16} color={colors.muted} style={styles.inputIcon} />
-                <TextInput
-                  style={[styles.input, { color: colors.ink }]}
-                  placeholder="9876543210"
-                  placeholderTextColor={colors.muted}
-                  value={phone}
-                  onChangeText={setPhone}
-                  keyboardType="phone-pad"
-                />
-              </View>
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.submitText}>Create Account</Text>
+                )}
+              </TouchableOpacity>
             </View>
 
-            <View style={[styles.inputGroup, { flex: 1 }]}>
-              <Text style={[styles.label, { color: colors.ink }]}>Date of Birth</Text>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  { backgroundColor: colors.surface2, borderColor: colors.line },
-                ]}
-              >
-                <Calendar size={16} color={colors.muted} style={styles.inputIcon} />
-                <TextInput
-                  style={[styles.input, { color: colors.ink }]}
-                  placeholder="DD/MM/YYYY"
-                  placeholderTextColor={colors.muted}
-                  value={dob}
-                  onChangeText={handleDobChange}
-                  keyboardType="numeric"
-                  maxLength={10}
-                />
-              </View>
+            {/* Existing User Link */}
+            <View style={styles.signinPromptRow}>
+              <Text style={[styles.signinPrompt, { color: colors.muted }]}>
+                Already have an account?{' '}
+              </Text>
+              <TouchableOpacity onPress={() => navigation.navigate(Routes.SignIn)}>
+                <Text style={[styles.signinLink, { color: colors.brandDark }]}>Sign in</Text>
+              </TouchableOpacity>
             </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: colors.ink }]}>Gender</Text>
-            <View style={[styles.segBar, { backgroundColor: colors.surface2 }]}>
-              {(['Male', 'Female', 'Other'] as const).map(g => {
-                const isSel = gender === g;
-                return (
-                  <TouchableOpacity
-                    key={g}
-                    style={[
-                      styles.segBtn,
-                      isSel && [styles.segBtnOn, { backgroundColor: colors.surface }],
-                    ]}
-                    onPress={() => setGender(g)}
-                  >
-                    <Text
-                      style={[
-                        styles.segBtnText,
-                        { color: isSel ? colors.brandDark : colors.muted },
-                      ]}
-                    >
-                      {g}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-
-        {/* Insurance Details Card */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <Text style={[styles.cardSectionTitle, { color: colors.ink }]}>
-            Insurance Policy Details
-          </Text>
-
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: colors.ink }]}>Health Insurer</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.insurerScroll}>
-              {INSURERS.map(ins => {
-                const isSel = insurer === ins;
-                return (
-                  <TouchableOpacity
-                    key={ins}
-                    style={[
-                      styles.insurerChip,
-                      {
-                        backgroundColor: isSel ? colors.brandSoft : colors.surface2,
-                        borderColor: isSel ? colors.brand : colors.line,
-                      },
-                    ]}
-                    onPress={() => setInsurer(ins)}
-                  >
-                    <Text
-                      style={[
-                        styles.insurerChipText,
-                        { color: isSel ? colors.brandDark : colors.ink },
-                      ]}
-                    >
-                      {ins}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-
-          <View style={styles.rowTwoCols}>
-            <View style={[styles.inputGroup, { flex: 1.2 }]}>
-              <Text style={[styles.label, { color: colors.ink }]}>Policy Number</Text>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  { backgroundColor: colors.surface2, borderColor: colors.line },
-                ]}
-              >
-                <TextInput
-                  style={[styles.input, { color: colors.ink }]}
-                  placeholder="e.g. P-0007401"
-                  placeholderTextColor={colors.muted}
-                  value={policyNumber}
-                  onChangeText={setPolicyNumber}
-                  autoCapitalize="characters"
-                />
-              </View>
-            </View>
-
-            <View style={[styles.inputGroup, { flex: 0.9 }]}>
-              <Text style={[styles.label, { color: colors.ink }]}>Sum Insured (₹)</Text>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  { backgroundColor: colors.surface2, borderColor: colors.line },
-                ]}
-              >
-                <TextInput
-                  style={[styles.input, { color: colors.ink }]}
-                  placeholder="500000"
-                  placeholderTextColor={colors.muted}
-                  value={sumInsured}
-                  onChangeText={setSumInsured}
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Agreement Checkbox */}
-        <TouchableOpacity
-          style={styles.agreeRow}
-          onPress={() => setAgree(!agree)}
-          activeOpacity={0.8}
-        >
-          <View
-            style={[
-              styles.checkbox,
-              {
-                borderColor: agree ? colors.brand : colors.line,
-                backgroundColor: agree ? colors.brand : 'transparent',
-              },
-            ]}
-          >
-            {agree ? <Check size={14} color="#ffffff" strokeWidth={3} /> : null}
-          </View>
-          <Text style={[styles.agreeText, { color: colors.muted }]}>
-            I agree to the ClaimsGuru Terms of Service, Privacy Policy, and patient data consent.
-          </Text>
-        </TouchableOpacity>
-
-        {/* Submit Actions */}
-        <View style={styles.btnRow}>
-          <TouchableOpacity
-            style={[styles.cancelBtn, { borderColor: colors.line }]}
-            onPress={() => navigation.goBack()}
-            disabled={submitting}
-          >
-            <Text style={[styles.cancelText, { color: colors.muted }]}>Cancel</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.submitBtn,
-              { backgroundColor: colors.brand },
-              submitting && { opacity: 0.8 },
-            ]}
-            onPress={handleRegister}
-            disabled={submitting}
-          >
-            {submitting ? (
-              <ActivityIndicator size="small" color="#ffffff" />
-            ) : (
-              <Text style={styles.submitText}>Create Account</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Existing User Link */}
-        <View style={styles.signinPromptRow}>
-          <Text style={[styles.signinPrompt, { color: colors.muted }]}>
-            Already have an account?{' '}
-          </Text>
-          <TouchableOpacity onPress={() => navigation.navigate(Routes.SignIn)}>
-            <Text style={[styles.signinLink, { color: colors.brandDark }]}>Sign in</Text>
-          </TouchableOpacity>
-        </View>
+          </>
+        )}
       </ScrollView>
 
       {/* Toast */}
@@ -682,4 +919,67 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
   },
   toastText: { color: '#ffffff', fontSize: 13, fontWeight: '600', flex: 1 },
+  verifyContainer: {
+    width: '100%',
+  },
+  verifyIconBox: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    marginTop: 8,
+  },
+  verifyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  verifySubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  otpInputWrapper: {
+    width: '100%',
+    height: 52,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    marginBottom: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  otpInput: {
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: 4,
+    width: '100%',
+    height: '100%',
+    textAlign: 'center',
+  },
+  resendBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  resendBtnText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  changeEmailBtn: {
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  changeEmailBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
 });

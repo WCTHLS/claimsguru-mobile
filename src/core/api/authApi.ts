@@ -28,6 +28,8 @@ export interface SyncEntraParams {
   lastName?: string;
   subjectId?: string;
   phone?: string;
+  dob?: string;
+  gender?: string;
   policy?: string;
   sumInsured?: string | number;
 }
@@ -341,6 +343,8 @@ export async function syncEntraUser(params: SyncEntraParams): Promise<AuthRespon
     external_subject_id: params.subjectId || params.email,
     requested_role: 'patient',
     phone: params.phone,
+    dob: params.dob,
+    gender: params.gender,
     policy: params.policy,
     sum_insured: params.sumInsured,
   };
@@ -370,8 +374,8 @@ export async function syncEntraUser(params: SyncEntraParams): Promise<AuthRespon
       firstName: raw.first_name || params.firstName,
       lastName: raw.last_name || params.lastName,
       phone: raw.phone || params.phone,
-      dob: raw.dob,
-      gender: raw.gender,
+      dob: raw.dob || params.dob,
+      gender: raw.gender || params.gender,
       policyNumber: raw.policy_number || params.policy,
       sumInsured: raw.sum_insured || (params.sumInsured ? Number(params.sumInsured) : undefined),
       role: 'submitter',
@@ -601,3 +605,13 @@ export async function ensureValidAuthToken(): Promise<string> {
 
   return useAuthStore.getState().token || '';
 }
+
+export {
+  loginWithEntraNative,
+  startEntraNativeSignUp,
+  verifyEntraNativeSignUpCode,
+  resendEntraNativeSignUpCode,
+  EntraNativeLoginParams,
+  EntraNativeSignUpParams,
+  EntraSignUpStartResult,
+} from './entraNativeAuth';

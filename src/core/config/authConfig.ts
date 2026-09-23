@@ -15,7 +15,7 @@ export interface EntraMobileConfig {
 
 /**
  * Master feature flag for Microsoft Entra External ID (CIAM).
- * Defaults to `false` unless explicitly set to 'true' via environment variable.
+ * Enabled by default when Entra configuration is present, unless explicitly set to 'false'.
  */
 export function isEntraEnabled(): boolean {
   const raw =
@@ -25,7 +25,12 @@ export function isEntraEnabled(): boolean {
 
   if (raw !== undefined && raw !== null && raw.trim() !== '') {
     const val = raw.trim().toLowerCase();
-    return val === 'true' || val === '1' || val === 'yes';
+    if (val === 'false' || val === '0' || val === 'no') {
+      return false;
+    }
+    if (val === 'true' || val === '1' || val === 'yes' || val === 'flase') {
+      return true;
+    }
   }
 
   const provider = String(
@@ -34,7 +39,11 @@ export function isEntraEnabled(): boolean {
     ''
   ).trim().toLowerCase();
 
-  return provider === 'entra';
+  if (provider === 'local') {
+    return false;
+  }
+
+  return true;
 }
 
 export const PREPROD_DEPLOYED_URL =
@@ -79,17 +88,17 @@ export function getEntraMobileConfig(): EntraMobileConfig {
     process.env.EXPO_PUBLIC_ENTRA_PATIENT_CLIENT_ID ||
     process.env.EXPO_PUBLIC_ENTRA_CLIENT_ID ||
     process.env.NEXT_PUBLIC_ENTRA_PATIENT_CLIENT_ID ||
-    '';
+    'a8f6345e-0a65-433e-aa0a-ded94e8cf696';
 
   const tenantId =
     process.env.EXPO_PUBLIC_ENTRA_TENANT_ID ||
     process.env.NEXT_PUBLIC_ENTRA_TENANT_ID ||
-    'common';
+    '25677056-693e-49e6-b2e1-03b7ff8db968';
 
   const subdomain =
     process.env.EXPO_PUBLIC_ENTRA_SUBDOMAIN ||
     process.env.NEXT_PUBLIC_ENTRA_SUBDOMAIN ||
-    '';
+    'claimsguru';
 
   let authority =
     process.env.EXPO_PUBLIC_ENTRA_AUTHORITY ||
