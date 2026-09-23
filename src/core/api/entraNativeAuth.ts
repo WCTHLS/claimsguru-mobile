@@ -558,3 +558,208 @@ export async function resendEntraNativeSignUpCode({
     message: 'A new verification code has been dispatched to your email.',
   };
 }
+
+/**
+ * Step 1 of Password Reset (SSPR):
+ * Initiates the self-service password reset flow via /resetpassword/v1.0/start and /challenge.
+ * Dispatches an email OTP code to the user.
+ */
+export async function startEntraPasswordReset({
+  email,
+}: {
+  email: string;
+}): Promise<{ continuationToken: string; message: string }> {
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail) {
+    throw new Error('Please enter your registered email address.');
+  }
+
+  const { base, clientId } = getEntraNativeAuthBase();
+  const startUrl = `${base}/resetpassword/v1.0/start`;
+
+  const startParams = new URLSearchParams({
+    client_id: clientId,
+    username: cleanEmail,
+    challenge_type: 'oob redirect',
+  });
+
+  const startRes = await fetch(startUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+    },
+    body: startParams.toString(),
+  });
+
+  const startData = await startRes.json().catch(() => ({}));
+  if (!startRes.ok) {
+    throw new Error(parseEntraError(startData, startRes.status));
+  }
+
+  if (!startData.continuation_token) {
+    throw new Error('Could not initiate password reset session. Please try again.');
+  }
+
+  let continuationToken = startData.continuation_token;
+
+  // Challenge step to dispatch email OTP
+  const challengeUrl = `${base}/resetpassword/v1.0/challenge`;
+  const chParams = new URLSearchParams({
+    client_id: clientId,
+    challenge_type: 'oob redirect',
+    continuation_token: continuationToken,
+  });
+
+  const chRes = await fetch(challengeUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+    },
+    body: chParams.toString(),
+  });
+
+  const chData = await chRes.json().catch(() => ({}));
+  if (!chRes.ok) {
+    throw new Error(parseEntraError(chData, chRes.status));
+  }
+
+  continuationToken = chData.continuation_token || continuationToken;
+
+  return {
+    continuationToken,
+    message: `A verification code has been dispatched to ${cleanEmail}.`,
+  };
+}
+
+/**
+ * Resend the OTP code for password reset.
+ */
+export async function resendEntraPasswordResetCode({
+  continuationToken,
+}: {
+  continuationToken: string;
+}): Promise<{ continuationToken: string; message: string }> {
+  const { base, clientId } = getEntraNativeAuthBase();
+  const challengeUrl = `${base}/resetpassword/v1.0/challenge`;
+
+  const chParams = new URLSearchParams({
+    client_id: clientId,
+    challenge_type: 'oob redirect',
+    continuation_token: continuationToken,
+  });
+
+  const chRes = await fetch(challengeUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+    },
+    body: chParams.toString(),
+  });
+
+  const chData = await chRes.json().catch(() => ({}));
+  if (!chRes.ok) {
+    throw new Error(parseEntraError(chData, chRes.status));
+  }
+
+  return {
+    continuationToken: chData.continuation_token || continuationToken,
+    message: 'A fresh verification code has been sent to your email.',
+  };
+}
+
+/**
+ * Step 2 of Password Reset (SSPR):
+ * Submits the OTP code via /resetpassword/v1.0/continue, then submits the new password via /resetpassword/v1.0/submit.
+ */
+export async function submitEntraPasswordReset({
+  continuationToken,
+  code,
+  newPassword,
+}: {
+  continuationToken: string;
+  code: string;
+  newPassword: string;
+}): Promise<{ message: string }> {
+  const cleanCode = code.trim().replace(/\s+/g, '');
+  if (!cleanCode) {
+    throw new Error('Please enter the verification code sent to your email.');
+  }
+  if (!newPassword || newPassword.length < 8) {
+    throw new Error('New password must be at least 8 characters long.');
+  }
+
+  const { base, clientId } = getEntraNativeAuthBase();
+
+  // 1. Submit OTP to continue
+  const continueUrl = `${base}/resetpassword/v1.0/continue`;
+  const continueParams = new URLSearchParams({
+    client_id: clientId,
+    continuation_token: continuationToken,
+    grant_type: 'oob',
+    oob: cleanCode,
+  });
+
+  const continueRes = await fetch(continueUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+    },
+    body: continueParams.toString(),
+  });
+
+  const continueData = await continueRes.json().catch(() => ({}));
+  if (!continueRes.ok) {
+    throw new Error(parseEntraError(continueData, continueRes.status));
+  }
+
+  const nextToken = continueData.continuation_token || continuationToken;
+
+  // 2. Submit new password
+  const submitUrl = `${base}/resetpassword/v1.0/submit`;
+  const submitParams = new URLSearchParams({
+    client_id: clientId,
+    continuation_token: nextToken,
+    grant_type: 'password',
+    new_password: newPassword,
+  });
+
+  const submitRes = await fetch(submitUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+    },
+    body: submitParams.toString(),
+  });
+
+  const submitData = await submitRes.json().catch(() => ({}));
+  if (!submitRes.ok) {
+    throw new Error(parseEntraError(submitData, submitRes.status));
+  }
+
+  // 3. Poll completion if returned
+  if (submitData.continuation_token) {
+    const pollUrl = `${base}/resetpassword/v1.0/poll_completion`;
+    const pollParams = new URLSearchParams({
+      client_id: clientId,
+      continuation_token: submitData.continuation_token,
+    });
+
+    await fetch(pollUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+      },
+      body: pollParams.toString(),
+    }).catch(() => {});
+  }
+
+  return {
+    message: 'Your password has been successfully reset! You can now sign in with your new password.',
+  };
+}
