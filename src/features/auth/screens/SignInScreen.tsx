@@ -97,7 +97,7 @@ export const SignInScreen = ({ navigation }: any) => {
         }
 
         if (error) {
-          throw new Error(errorDesc || 'Microsoft Entra authentication was cancelled or access was denied.');
+          throw new Error(errorDesc || 'Authentication was cancelled or access was denied.');
         }
 
         if (!code) {
@@ -105,14 +105,41 @@ export const SignInScreen = ({ navigation }: any) => {
         }
 
         // Exchange authorization code for token and verify in backend database
-        await completeEntraAuthCode(code);
+        const codeRes = await completeEntraAuthCode(code);
 
-        // ONLY upon successful verification, proceed into the app
-        navigation.replace('MainTabs');
-      } catch (err) {
-        setErrorMessage(
-          err instanceof Error ? err.message : 'Microsoft Entra authentication verification failed.'
-        );
+        // If user exists on Entra but not in application DB, redirect to complete patient profile
+        if ((codeRes as any)?.is_new_user || (codeRes as any)?.needs_onboarding) {
+          navigation.replace(Routes.SignUp, {
+            mode: 'complete_profile',
+            email: (codeRes as any)?.email,
+            name: (codeRes as any)?.name,
+          });
+        } else {
+          navigation.replace('MainTabs');
+        }
+      } catch (err: any) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const cleanLower = msg.toLowerCase();
+        if (
+          cleanLower.includes('org web portal') ||
+          cleanLower.includes('not registered as a paient') ||
+          cleanLower.includes('not registered as a patient')
+        ) {
+          setErrorMessage('user not registered as a paient please continue on claimsguru org web portal');
+        } else if (
+          cleanLower.includes('user not found') ||
+          cleanLower.includes('no account') ||
+          cleanLower.includes('does not exist')
+        ) {
+          setErrorMessage('User not found , Please create a new account ');
+        } else {
+          setErrorMessage(
+            msg
+              .replace(/Microsoft Entra/gi, 'Authentication service')
+              .replace(/Entra/gi, 'Authentication service')
+              .replace(/submitter|admin|reviewer/gi, 'user')
+          );
+        }
       } finally {
         setEntraLoading(false);
       }
@@ -139,27 +166,26 @@ export const SignInScreen = ({ navigation }: any) => {
     setForgotSuccessMsg(null);
 
     try {
+      let authRes: any;
       if (useEntra) {
-        // Native Microsoft Entra authentication: pass mail and password directly to Entra API
-        await loginWithEntraNative({
+        // Native authentication
+        authRes = await loginWithEntraNative({
           email: identifier.trim(),
           password,
         });
       } else {
         try {
-          await loginWithPassword({
+          authRes = await loginWithPassword({
             username: identifier.trim(),
             password,
           });
         } catch (localErr: any) {
           const msg = localErr instanceof Error ? localErr.message : String(localErr);
           if (
-            msg.toLowerCase().includes('microsoft entra') ||
-            msg.toLowerCase().includes('web portal') ||
-            msg.toLowerCase().includes('no account found')
+            msg.toLowerCase().includes('user not found') ||
+            msg.toLowerCase().includes('no account')
           ) {
-            // User was created via Microsoft Entra on Web Portal: authenticate natively via Entra!
-            await loginWithEntraNative({
+            authRes = await loginWithEntraNative({
               email: identifier.trim(),
               password,
             });
@@ -168,9 +194,56 @@ export const SignInScreen = ({ navigation }: any) => {
           }
         }
       }
-      navigation.replace('MainTabs');
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Invalid email or password.');
+
+      // Scenario 1: if user exists on entra but not in application db:
+      // redirect to complete patient profile and log in him/her as a patient (role will be submitter)
+      if (authRes?.is_new_user || authRes?.needs_onboarding) {
+        navigation.replace(Routes.SignUp, {
+          mode: 'complete_profile',
+          email: identifier.trim(),
+          name: authRes?.name,
+        });
+      } else {
+        navigation.replace('MainTabs');
+      }
+    } catch (error: any) {
+      const msg = error instanceof Error ? error.message : String(error);
+      const cleanLower = msg.toLowerCase();
+
+      // Scenario 1: if role is admin or reviewer then show "user not registered as a paient please continue on claimsguru org web portal"
+      if (
+        cleanLower.includes('org web portal') ||
+        cleanLower.includes('not registered as a paient') ||
+        cleanLower.includes('not registered as a patient') ||
+        cleanLower.includes('organization staff')
+      ) {
+        setErrorMessage('user not registered as a paient please continue on claimsguru org web portal');
+      }
+      // Scenario 1: if user not exists on entra : show "User not found , Please a create new account "
+      else if (
+        cleanLower.includes('user not found') ||
+        cleanLower.includes('no account') ||
+        cleanLower.includes('username not found') ||
+        cleanLower.includes('does not exist') ||
+        cleanLower.includes('aadsts50034')
+      ) {
+        setErrorMessage('User not found , Please create a new account ');
+      }
+      // Invalid credentials
+      else if (
+        cleanLower.includes('bad_username_password') ||
+        cleanLower.includes('invalid email or password') ||
+        cleanLower.includes('invalid password') ||
+        cleanLower.includes('wrong password')
+      ) {
+        setErrorMessage('Invalid email address or password. Please verify your credentials and try again.');
+      } else {
+        const sanitized = msg
+          .replace(/Microsoft Entra/gi, 'Authentication service')
+          .replace(/Entra/gi, 'Authentication service')
+          .replace(/submitter|admin|reviewer/gi, 'user');
+        setErrorMessage(sanitized);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -295,7 +368,7 @@ export const SignInScreen = ({ navigation }: any) => {
       const config = getEntraMobileConfig();
       if (!config.clientId || !config.authority) {
         throw new Error(
-          'Microsoft Entra External ID configuration is missing Client ID or Authority in .env.'
+          'Authentication service configuration is missing Client ID or Authority in environment settings.'
         );
       }
 
@@ -307,14 +380,14 @@ export const SignInScreen = ({ navigation }: any) => {
 
       const canOpen = await Linking.canOpenURL(authorizeUrl).catch(() => false);
       if (!canOpen && Platform.OS !== 'web') {
-        throw new Error('Unable to open browser for Microsoft Entra login.');
+        throw new Error('Unable to open browser for authentication.');
       }
 
       await Linking.openURL(authorizeUrl);
       // Wait for OAuth callback. DO NOT navigate to MainTabs here!
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : 'Unable to connect to Microsoft Entra External ID.'
+        error instanceof Error ? error.message : 'Unable to connect to authentication service.'
       );
     } finally {
       setEntraLoading(false);

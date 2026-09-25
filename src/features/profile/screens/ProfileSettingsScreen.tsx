@@ -6,6 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -20,9 +22,11 @@ import {
   Clock,
   Moon,
   LogOut,
+  Trash2,
 } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useAuthStore } from '../../../state/useAuthStore';
+import { deleteUserAccount } from '../../../core/api/authApi';
 import { Routes } from '../../../app/navigation/routes';
 import { GlobalBottomTabBar } from '../../../app/navigation/GlobalBottomTabBar';
 import { UserAvatar } from '../../../core/components/UserAvatar';
@@ -30,11 +34,11 @@ import { UserAvatar } from '../../../core/components/UserAvatar';
 export const ProfileSettingsScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { colors, isDark, toggleTheme } = useTheme();
-  const { role, userName, userEmail, policyNumber, organization, gender, setUserDetails } = useAuthStore();
+  const { role, userName, userEmail, userId, policyNumber, organization, gender, setUserDetails } = useAuthStore();
 
   const [biometric, setBiometric] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
-
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Active single role (default submitter)
   const currentRole = role || 'submitter';
@@ -45,6 +49,34 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
       index: 0,
       routes: [{ name: Routes.SignIn }],
     });
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Permanently Delete Account?',
+      'This will permanently delete your account, patient profile, claims, and your Microsoft Entra login identity. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsDeleting(true);
+              await deleteUserAccount(userId, userEmail);
+              Alert.alert('Account Deleted', 'Your account and Entra identity have been permanently removed.');
+              navigation.reset({
+                index: 0,
+                routes: [{ name: Routes.SignIn }],
+              });
+            } catch (err: any) {
+              setIsDeleting(false);
+              Alert.alert('Deletion Failed', err?.message || 'Could not delete account. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -210,6 +242,29 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
         >
           <LogOut size={16} color={colors.red} style={{ marginRight: 8 }} />
           <Text style={[styles.signOutText, { color: colors.red }]}>Sign out</Text>
+        </TouchableOpacity>
+
+        {/* Delete Account button */}
+        <TouchableOpacity
+          style={[
+            styles.deleteAccountBtn,
+            {
+              borderColor: isDark ? '#7f1d1d' : '#fecaca',
+              backgroundColor: isDark ? 'rgba(127, 29, 29, 0.2)' : '#fef2f2',
+            },
+          ]}
+          onPress={handleDeleteAccount}
+          disabled={isDeleting}
+          activeOpacity={0.7}
+        >
+          {isDeleting ? (
+            <ActivityIndicator size="small" color="#ef4444" style={{ marginRight: 8 }} />
+          ) : (
+            <Trash2 size={16} color="#ef4444" style={{ marginRight: 8 }} />
+          )}
+          <Text style={[styles.deleteAccountText, { color: '#ef4444' }]}>
+            {isDeleting ? 'Deleting account & Entra identity…' : 'Delete account'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -388,10 +443,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   signOutText: {
     fontSize: 13.5,
     fontWeight: '650' as any,
+  },
+  deleteAccountBtn: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  deleteAccountText: {
+    fontSize: 13.5,
+    fontWeight: '700' as any,
   },
 });

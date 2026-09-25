@@ -30,6 +30,7 @@ import { Routes } from '../../../app/navigation/routes';
 import { isEntraEnabled } from '../../../core/config/authConfig';
 import {
   registerPatient,
+  syncEntraUser,
   startEntraNativeSignUp,
   verifyEntraNativeSignUpCode,
   resendEntraNativeSignUpCode,
@@ -44,16 +45,31 @@ const INSURERS = [
   'Bajaj Allianz',
 ];
 
-export const SignUpScreen = ({ navigation }: any) => {
+export const SignUpScreen = ({ route, navigation }: any) => {
   const { colors } = useTheme();
 
+  const isCompleteProfileMode = route?.params?.mode === 'complete_profile';
+  const paramEmail = route?.params?.email || '';
+  const paramName = route?.params?.name || '';
+
   // Personal Info
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(paramEmail);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
+  const [firstName, setFirstName] = useState(() => {
+    if (paramName) {
+      return paramName.split(' ')[0] || '';
+    }
+    return '';
+  });
+  const [lastName, setLastName] = useState(() => {
+    if (paramName) {
+      const parts = paramName.split(' ');
+      return parts.slice(1).join(' ') || '';
+    }
+    return '';
+  });
   const [phone, setPhone] = useState('');
   const [dob, setDob] = useState('');
   const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Male');
@@ -70,7 +86,9 @@ export const SignUpScreen = ({ navigation }: any) => {
 
   // Microsoft Entra Native Auth verification state
   const useEntra = isEntraEnabled();
-  const [step, setStep] = useState<'form' | 'verify_code'>('form');
+  const [step, setStep] = useState<'credentials' | 'details' | 'verify_code'>(
+    isCompleteProfileMode ? 'details' : 'credentials'
+  );
   const [continuationToken, setContinuationToken] = useState<string | null>(null);
   const [verificationCode, setVerificationCode] = useState('');
   const [verifyingCode, setVerifyingCode] = useState(false);
@@ -95,11 +113,11 @@ export const SignUpScreen = ({ navigation }: any) => {
     }
   };
 
-  const handleRegister = async () => {
+  const handleNextToDetails = () => {
     setErrorMessage(null);
 
     const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes('@')) {
+    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
       setErrorMessage('Please enter a valid email address.');
       return;
     }
@@ -114,6 +132,12 @@ export const SignUpScreen = ({ navigation }: any) => {
       return;
     }
 
+    setStep('details');
+  };
+
+  const handleRegister = async () => {
+    setErrorMessage(null);
+
     if (!firstName.trim()) {
       setErrorMessage('Please enter your first name.');
       return;
@@ -127,10 +151,32 @@ export const SignUpScreen = ({ navigation }: any) => {
     setSubmitting(true);
 
     try {
+      if (isCompleteProfileMode) {
+        await syncEntraUser({
+          email: email.trim().toLowerCase(),
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+          phone: phone.trim() || undefined,
+          dob: dob.trim() || undefined,
+          gender,
+          policy: policyNumber.trim() || undefined,
+          sumInsured: sumInsured.trim() || undefined,
+        });
+
+        setToastMsg('Patient profile completed successfully!');
+        setTimeout(() => {
+          setToastMsg(null);
+          navigation.replace('MainTabs');
+        }, 1200);
+        return;
+      }
+
       if (useEntra) {
         // Step 1: Request Microsoft Entra to send verification code to user's email
+        // Notice: NO database record is created yet! Entra only sends the OTP code.
         const res = await startEntraNativeSignUp({
-          email: cleanEmail,
+          email: email.trim().toLowerCase(),
           password,
         });
 
@@ -141,7 +187,7 @@ export const SignUpScreen = ({ navigation }: any) => {
         setTimeout(() => setToastMsg(null), 3000);
       } else {
         await registerPatient({
-          username: cleanEmail,
+          username: email.trim().toLowerCase(),
           password,
           firstName: firstName.trim(),
           lastName: lastName.trim(),
@@ -160,16 +206,24 @@ export const SignUpScreen = ({ navigation }: any) => {
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
+      const cleanLower = msg.toLowerCase();
       if (
-        msg.toLowerCase().includes('already registered on the claimsguru web portal') ||
-        msg.toLowerCase().includes('already exists') ||
-        msg.toLowerCase().includes('duplicate')
+        cleanLower.includes('already exist') ||
+        cleanLower.includes('already registered') ||
+        cleanLower.includes('duplicate') ||
+        cleanLower.includes('user_already_exists')
       ) {
-        setErrorMessage(
-          'An account with this email address already exists. Please sign in with your email and password instead.'
-        );
+        setErrorMessage('User already exist with this mail , please login');
+        if (!isCompleteProfileMode) {
+          setStep('credentials');
+        }
       } else {
-        setErrorMessage(msg);
+        setErrorMessage(
+          msg
+            .replace(/Microsoft Entra/gi, 'Authentication service')
+            .replace(/Entra/gi, 'Authentication service')
+            .replace(/submitter|admin|reviewer/gi, 'user')
+        );
       }
     } finally {
       setSubmitting(false);
@@ -214,9 +268,24 @@ export const SignUpScreen = ({ navigation }: any) => {
         navigation.replace('MainTabs');
       }, 1200);
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Code verification failed. Please try again.'
-      );
+      const msg = error instanceof Error ? error.message : 'Code verification failed. Please try again.';
+      const cleanLower = msg.toLowerCase();
+      if (
+        cleanLower.includes('already exist') ||
+        cleanLower.includes('already registered') ||
+        cleanLower.includes('duplicate') ||
+        cleanLower.includes('user_already_exists')
+      ) {
+        setErrorMessage('User already exist with this mail , please login');
+        setStep('credentials');
+      } else {
+        setErrorMessage(
+          msg
+            .replace(/Microsoft Entra/gi, 'Authentication service')
+            .replace(/Entra/gi, 'Authentication service')
+            .replace(/submitter|admin|reviewer/gi, 'user')
+        );
+      }
     } finally {
       setVerifyingCode(false);
     }
@@ -254,8 +323,13 @@ export const SignUpScreen = ({ navigation }: any) => {
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => {
-            if (step === 'verify_code') {
-              setStep('form');
+            if (isCompleteProfileMode) {
+              navigation.replace(Routes.SignIn);
+            } else if (step === 'verify_code') {
+              setStep('details');
+              setErrorMessage(null);
+            } else if (step === 'details') {
+              setStep('credentials');
               setErrorMessage(null);
             } else {
               navigation.goBack();
@@ -266,10 +340,122 @@ export const SignUpScreen = ({ navigation }: any) => {
           <ChevronLeft size={22} color={colors.ink} />
         </TouchableOpacity>
         <Text style={[styles.appBarTitle, { color: colors.ink }]}>
-          {step === 'verify_code' ? 'Verify Email' : 'Create Patient Account'}
+          {isCompleteProfileMode
+            ? 'Complete Patient Profile'
+            : step === 'verify_code'
+            ? 'Verify Email'
+            : step === 'details'
+            ? 'Profile & Insurance'
+            : 'Create Patient Account'}
         </Text>
         <View style={{ width: 32 }} />
       </View>
+
+      {/* 3-Step Progress Indicator (hidden when completing existing profile) */}
+      {!isCompleteProfileMode ? (
+        <View style={[styles.progressTrack, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
+          <View style={styles.stepItem}>
+            <View
+              style={[
+                styles.stepCircle,
+                step === 'credentials'
+                  ? { backgroundColor: colors.brand }
+                  : { backgroundColor: colors.brandDark },
+              ]}
+            >
+              {step === 'details' || step === 'verify_code' ? (
+                <Check size={12} color="#ffffff" strokeWidth={3} />
+              ) : (
+                <Text style={styles.stepNumber}>1</Text>
+              )}
+            </View>
+            <Text
+              style={[
+                styles.stepLabel,
+                { color: step === 'credentials' ? colors.brandDark : colors.muted },
+              ]}
+            >
+              Credentials
+            </Text>
+          </View>
+
+          <View
+            style={[
+              styles.stepConnector,
+              { backgroundColor: step !== 'credentials' ? colors.brand : colors.line },
+            ]}
+          />
+
+          <View style={styles.stepItem}>
+            <View
+              style={[
+                styles.stepCircle,
+                step === 'details'
+                  ? { backgroundColor: colors.brand }
+                  : step === 'verify_code'
+                  ? { backgroundColor: colors.brandDark }
+                  : { backgroundColor: colors.surface2, borderColor: colors.line, borderWidth: 1 },
+              ]}
+            >
+              {step === 'verify_code' ? (
+                <Check size={12} color="#ffffff" strokeWidth={3} />
+              ) : (
+                <Text
+                  style={[
+                    styles.stepNumber,
+                    step === 'credentials' && { color: colors.muted },
+                  ]}
+                >
+                  2
+                </Text>
+              )}
+            </View>
+            <Text
+              style={[
+                styles.stepLabel,
+                { color: step === 'details' ? colors.brandDark : colors.muted },
+              ]}
+            >
+              Details
+            </Text>
+          </View>
+
+          <View
+            style={[
+              styles.stepConnector,
+              { backgroundColor: step === 'verify_code' ? colors.brand : colors.line },
+            ]}
+          />
+
+          <View style={styles.stepItem}>
+            <View
+              style={[
+                styles.stepCircle,
+                step === 'verify_code'
+                  ? { backgroundColor: colors.brand }
+                  : { backgroundColor: colors.surface2, borderColor: colors.line, borderWidth: 1 },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.stepNumber,
+                  step !== 'verify_code' && { color: colors.muted },
+                ]}
+              >
+                3
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.stepLabel,
+                { color: step === 'verify_code' ? colors.brandDark : colors.muted },
+              ]}
+            >
+              Verify
+            </Text>
+          </View>
+        </View>
+      ) : null}
 
       <ScrollView
         style={styles.content}
@@ -279,14 +465,14 @@ export const SignUpScreen = ({ navigation }: any) => {
       >
         {step === 'verify_code' ? (
           /* ========================================================================= */
-          /* Step 2: Microsoft Entra Email Verification Code (OOB) */
+          /* Step 3: Microsoft Entra Email Verification Code (OOB) */
           /* ========================================================================= */
           <View style={styles.verifyContainer}>
             {/* Banner */}
             <View style={[styles.banner, { backgroundColor: colors.brandSoft }]}>
               <ShieldCheck size={18} color={colors.brandDark} style={{ marginTop: 2 }} />
               <Text style={[styles.bannerText, { color: colors.brandDark }]}>
-                An official verification code has been dispatched to your email.
+                Step 3 of 3: Enter the verification code sent to your email to verify and create your account.
               </Text>
             </View>
 
@@ -345,7 +531,7 @@ export const SignUpScreen = ({ navigation }: any) => {
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    <Text style={styles.submitText}>Verify & Create Account</Text>
+                    <Text style={styles.submitText}>Verify & Complete Registration</Text>
                     <ArrowRight size={16} color="#ffffff" />
                   </View>
                 )}
@@ -368,32 +554,30 @@ export const SignUpScreen = ({ navigation }: any) => {
                 </Text>
               </TouchableOpacity>
 
-              {/* Edit Details Button */}
+              {/* Back to Details Button */}
               <TouchableOpacity
                 style={[styles.changeEmailBtn, { borderColor: colors.line }]}
                 onPress={() => {
-                  setStep('form');
+                  setStep('details');
                   setErrorMessage(null);
                 }}
               >
                 <Text style={[styles.changeEmailBtnText, { color: colors.muted }]}>
-                  Edit Registration Information
+                  Back to Profile & Insurance
                 </Text>
               </TouchableOpacity>
             </View>
           </View>
-        ) : (
+        ) : step === 'credentials' ? (
           /* ========================================================================= */
-          /* Step 1: Account Registration Form */
+          /* Step 1: Login Credentials (Email + Password) */
           /* ========================================================================= */
           <>
             {/* Banner */}
             <View style={[styles.banner, { backgroundColor: colors.brandSoft }]}>
               <ShieldCheck size={18} color={colors.brandDark} style={{ marginTop: 2 }} />
               <Text style={[styles.bannerText, { color: colors.brandDark }]}>
-                {useEntra
-                  ? 'Secure patient registration. Your profile & insurance will be safely linked to your account.'
-                  : 'Self-service patient registration. Your profile and insurance details will be securely saved.'}
+                Step 1 of 3: Enter your email address and create a password for your account.
               </Text>
             </View>
 
@@ -483,6 +667,58 @@ export const SignUpScreen = ({ navigation }: any) => {
                 </View>
               </View>
             </View>
+
+            {/* Step 1 Actions: Cancel & Next */}
+            <View style={styles.btnRow}>
+              <TouchableOpacity
+                style={[styles.cancelBtn, { borderColor: colors.line }]}
+                onPress={() => navigation.goBack()}
+              >
+                <Text style={[styles.cancelText, { color: colors.muted }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.submitBtn, { backgroundColor: colors.brand }]}
+                onPress={handleNextToDetails}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <Text style={styles.submitText}>Next</Text>
+                  <ArrowRight size={16} color="#ffffff" />
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* Existing User Link */}
+            <View style={styles.signinPromptRow}>
+              <Text style={[styles.signinPrompt, { color: colors.muted }]}>
+                Already have an account?{' '}
+              </Text>
+              <TouchableOpacity onPress={() => navigation.navigate(Routes.SignIn)}>
+                <Text style={[styles.signinLink, { color: colors.brandDark }]}>Sign in</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          /* ========================================================================= */
+          /* Step 2: Personal Details + Insurance Details */
+          /* ========================================================================= */
+          <>
+            {/* Banner */}
+            <View style={[styles.banner, { backgroundColor: colors.brandSoft }]}>
+              <ShieldCheck size={18} color={colors.brandDark} style={{ marginTop: 2 }} />
+              <Text style={[styles.bannerText, { color: colors.brandDark }]}>
+                {isCompleteProfileMode
+                  ? 'Please complete your patient profile details to continue.'
+                  : 'Step 2 of 3: Enter your personal and insurance details to complete profile setup.'}
+              </Text>
+            </View>
+
+            {/* Error Message */}
+            {errorMessage ? (
+              <View style={[styles.errorBox, { backgroundColor: colors.redSoft, borderColor: colors.red }]}>
+                <Text style={[styles.errorText, { color: colors.red }]}>{errorMessage}</Text>
+              </View>
+            ) : null}
 
             {/* Personal Details Card */}
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
@@ -701,14 +937,23 @@ export const SignUpScreen = ({ navigation }: any) => {
               </Text>
             </TouchableOpacity>
 
-            {/* Submit Actions */}
+            {/* Submit Actions: Back & Create Account / Complete Profile */}
             <View style={styles.btnRow}>
               <TouchableOpacity
                 style={[styles.cancelBtn, { borderColor: colors.line }]}
-                onPress={() => navigation.goBack()}
+                onPress={() => {
+                  if (isCompleteProfileMode) {
+                    navigation.replace(Routes.SignIn);
+                  } else {
+                    setStep('credentials');
+                    setErrorMessage(null);
+                  }
+                }}
                 disabled={submitting}
               >
-                <Text style={[styles.cancelText, { color: colors.muted }]}>Cancel</Text>
+                <Text style={[styles.cancelText, { color: colors.muted }]}>
+                  {isCompleteProfileMode ? 'Cancel' : 'Back'}
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -723,20 +968,24 @@ export const SignUpScreen = ({ navigation }: any) => {
                 {submitting ? (
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
-                  <Text style={styles.submitText}>Create Account</Text>
+                  <Text style={styles.submitText}>
+                    {isCompleteProfileMode ? 'Complete Profile & Continue' : 'Create Account'}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
 
-            {/* Existing User Link */}
-            <View style={styles.signinPromptRow}>
-              <Text style={[styles.signinPrompt, { color: colors.muted }]}>
-                Already have an account?{' '}
-              </Text>
-              <TouchableOpacity onPress={() => navigation.navigate(Routes.SignIn)}>
-                <Text style={[styles.signinLink, { color: colors.brandDark }]}>Sign in</Text>
-              </TouchableOpacity>
-            </View>
+            {/* Existing User Link (hidden when completing profile) */}
+            {!isCompleteProfileMode ? (
+              <View style={styles.signinPromptRow}>
+                <Text style={[styles.signinPrompt, { color: colors.muted }]}>
+                  Already have an account?{' '}
+                </Text>
+                <TouchableOpacity onPress={() => navigation.navigate(Routes.SignIn)}>
+                  <Text style={[styles.signinLink, { color: colors.brandDark }]}>Sign in</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </>
         )}
       </ScrollView>
@@ -764,6 +1013,41 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: 6 },
   appBarTitle: { fontSize: 16.5, fontWeight: '700' },
+  progressTrack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderBottomWidth: 1,
+  },
+  stepItem: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  stepCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepNumber: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  stepConnector: {
+    flex: 1,
+    height: 2,
+    marginHorizontal: 8,
+    marginBottom: 16,
+    borderRadius: 1,
+  },
+  stepLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
   content: { flex: 1 },
   scrollInner: { padding: 16, paddingBottom: 36 },
   banner: {

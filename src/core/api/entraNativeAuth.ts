@@ -41,20 +41,20 @@ export interface EntraTokenResponse {
  */
 function parseEntraError(data: any, status: number): string {
   if (!data) {
-    return 'Microsoft Entra authentication service did not return a response. Please check your network connection.';
+    return 'Authentication service did not return a response. Please check your network connection.';
   }
 
   const subError = data.suberror || data.sub_error || '';
   const error = data.error || '';
   const errorDescription = data.error_description || data.message || data.detail || '';
 
-  // User or Administrator consent required (AADSTS65001)
+  // User or Administrator consent required
   if (
     errorDescription.includes('AADSTS65001') ||
     subError === 'consent_required' ||
     errorDescription.toLowerCase().includes('not consented to use the application')
   ) {
-    return 'Admin consent is required for this app in Microsoft Entra. In Entra Admin Center, go to App Registrations > API Permissions and click "Grant admin consent".';
+    return 'Administrative authorization is required for this application.';
   }
 
   // Credentials incorrect
@@ -74,9 +74,11 @@ function parseEntraError(data: any, status: number): string {
     subError === 'user_not_found' ||
     errorDescription.toLowerCase().includes('user does not exist') ||
     errorDescription.toLowerCase().includes('no account found') ||
-    errorDescription.toLowerCase().includes('account not found')
+    errorDescription.toLowerCase().includes('account not found') ||
+    errorDescription.toLowerCase().includes('user not found') ||
+    errorDescription.toLowerCase().includes('username not found')
   ) {
-    return 'No account exists with this email address. Please create a new account first.';
+    return 'User not found , Please create a new account ';
   }
 
   // Account locked or disabled
@@ -110,24 +112,30 @@ function parseEntraError(data: any, status: number): string {
   if (
     subError === 'user_already_exists' ||
     errorDescription.toLowerCase().includes('already exists') ||
+    errorDescription.toLowerCase().includes('already exist') ||
     errorDescription.toLowerCase().includes('duplicate')
   ) {
-    return 'An account with this email address already exists. Please sign in instead.';
+    return 'User already exist with this mail , please login';
   }
 
-  // Redirect required (e.g. MFA or web fallback required by policy)
+  // Redirect required
   if (data.challenge_type === 'redirect' || error === 'redirect_required') {
-    return 'This account requires administrative authorization. Please sign in via the web portal.';
+    return 'Please sign in via the web portal.';
   }
 
   // Clean raw error description
   if (typeof errorDescription === 'string' && errorDescription.trim()) {
-    // Strip AADSTS error prefix codes if present for clean UI display
-    const cleanMsg = errorDescription.replace(/AADSTS\d+:\s*/gi, '').split('\r\n')[0].split('\n')[0];
+    const cleanMsg = errorDescription
+      .replace(/AADSTS\d+:\s*/gi, '')
+      .replace(/Microsoft Entra/gi, 'Authentication service')
+      .replace(/Entra/gi, 'Authentication service')
+      .replace(/submitter|admin|reviewer/gi, 'user')
+      .split('\r\n')[0]
+      .split('\n')[0];
     return cleanMsg;
   }
 
-  return `Authentication failed (${status || error || 'Unknown error'}). Please try again.`;
+  return `Authentication failed. Please try again.`;
 }
 
 /**
@@ -185,11 +193,11 @@ export async function loginWithEntraNative({ email, password }: EntraNativeLogin
   }
 
   if (initJson.challenge_type === 'redirect') {
-    throw new Error('Microsoft Entra requires browser-based authentication for this account.');
+    throw new Error('Please sign in via the web portal for this account.');
   }
 
   if (!initJson.continuation_token) {
-    throw new Error('Microsoft Entra did not return a continuation token.');
+    throw new Error('Authentication session token was not returned.');
   }
 
   let continuationToken = initJson.continuation_token;
@@ -218,7 +226,7 @@ export async function loginWithEntraNative({ email, password }: EntraNativeLogin
   }
 
   if (chJson.challenge_type === 'redirect') {
-    throw new Error('Microsoft Entra requires browser-based authentication.');
+    throw new Error('Please authenticate via the web portal.');
   }
 
   continuationToken = chJson.continuation_token || continuationToken;
@@ -249,7 +257,7 @@ export async function loginWithEntraNative({ email, password }: EntraNativeLogin
   }
 
   if (!tokenJson.access_token) {
-    throw new Error('Microsoft Entra did not return an access token.');
+    throw new Error('Unable to obtain access token.');
   }
 
   const tokenData: EntraTokenResponse = tokenJson;
@@ -332,7 +340,7 @@ export async function startEntraNativeSignUp({
   }
 
   if (!data.continuation_token) {
-    throw new Error('Microsoft Entra did not return a session continuation token for registration.');
+    throw new Error('Unable to start registration session.');
   }
 
   let continuationToken = data.continuation_token;
@@ -360,11 +368,11 @@ export async function startEntraNativeSignUp({
   }
 
   if (chData.challenge_type === 'redirect') {
-    throw new Error('Microsoft Entra requires browser-based authentication for this signup.');
+    throw new Error('Please complete registration via the web portal.');
   }
 
   if (!chData.continuation_token) {
-    throw new Error('Microsoft Entra did not return a continuation token after signup challenge.');
+    throw new Error('Registration continuation token was not returned.');
   }
 
   continuationToken = chData.continuation_token;
@@ -373,7 +381,7 @@ export async function startEntraNativeSignUp({
     continuationToken,
     challengeType: chData.challenge_type || 'oob',
     expiresIn: data.expires_in,
-    message: `A verification code has been sent to ${cleanEmail} by Microsoft Entra.`,
+    message: `A verification code has been sent to ${cleanEmail}.`,
   };
 }
 
@@ -513,6 +521,8 @@ export async function verifyEntraNativeSignUpCode({
     firstName,
     lastName,
     phone: profileDetails?.phone,
+    dob: profileDetails?.dob,
+    gender: profileDetails?.gender,
     policy: profileDetails?.policy,
     sumInsured: profileDetails?.sumInsured,
     subjectId: String(claims.sub || claims.oid || cleanEmail),
@@ -756,7 +766,7 @@ export async function submitEntraPasswordReset({
         Accept: 'application/json',
       },
       body: pollParams.toString(),
-    }).catch(() => {});
+    }).catch(() => { });
   }
 
   return {

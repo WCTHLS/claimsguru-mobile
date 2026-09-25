@@ -43,6 +43,8 @@ export interface AuthResponse {
   access_token?: string;
   token?: string;
   message?: string;
+  is_new_user?: boolean;
+  needs_onboarding?: boolean;
 }
 
 /**
@@ -380,6 +382,9 @@ export async function syncEntraUser(params: SyncEntraParams): Promise<AuthRespon
       sumInsured: raw.sum_insured || (params.sumInsured ? Number(params.sumInsured) : undefined),
       role: 'submitter',
     });
+    const isNewUser = Boolean(raw.is_new_user);
+    const needsOnboarding = raw.needs_onboarding !== undefined ? Boolean(raw.needs_onboarding) : isNewUser;
+
     return {
       success: true,
       user_id: userId,
@@ -387,11 +392,13 @@ export async function syncEntraUser(params: SyncEntraParams): Promise<AuthRespon
       name: fullName,
       role: 'submitter',
       access_token: token,
-      message: 'Entra identity synchronized successfully',
+      message: 'Identity synchronized successfully',
+      is_new_user: isNewUser,
+      needs_onboarding: needsOnboarding,
     };
   }
 
-  // STRICT SECURITY CHECK: Deny access if Entra synchronization fails
+  // STRICT SECURITY CHECK: Deny access if synchronization fails
   useAuthStore.getState().signOut();
 
   const detail = res.data?.detail || res.data?.error || res.data?.message;
@@ -400,7 +407,7 @@ export async function syncEntraUser(params: SyncEntraParams): Promise<AuthRespon
       ? detail
       : typeof detail?.message === 'string'
       ? detail.message
-      : 'Access denied. Microsoft Entra identity verification failed in backend database.';
+      : 'Access denied. Identity verification failed in backend database.';
   throw new Error(msg);
 }
 
@@ -604,6 +611,45 @@ export async function ensureValidAuthToken(): Promise<string> {
   }
 
   return useAuthStore.getState().token || '';
+}
+
+/**
+ * Permanently delete user record, profile, claims, and Microsoft Entra identity.
+ */
+export async function deleteUserAccount(
+  userId?: string,
+  email?: string
+): Promise<{ success: boolean; message: string }> {
+  const current = useAuthStore.getState();
+  const cleanEmail = (email || current.userEmail || '').trim().toLowerCase();
+  const cleanUserId = (userId || current.userId || '').trim();
+
+  const payload: Record<string, unknown> = {
+    user_id: cleanUserId || undefined,
+    email: cleanEmail || undefined,
+  };
+
+  const response = await postToCandidateEndpoints(
+    ['auth/delete-account', 'ingress/auth/delete-account'],
+    payload
+  );
+
+  if (!response.ok) {
+    const errorMsg =
+      response.data?.detail ||
+      response.data?.message ||
+      response.data?.error ||
+      'Failed to delete account on server.';
+    throw new Error(errorMsg);
+  }
+
+  // Clear local session, files, and state
+  useAuthStore.getState().signOut();
+
+  return {
+    success: true,
+    message: response.data?.message || 'Account successfully deleted.',
+  };
 }
 
 export {
