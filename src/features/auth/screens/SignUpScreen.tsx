@@ -36,15 +36,6 @@ import {
   resendEntraNativeSignUpCode,
 } from '../../../core/api/authApi';
 
-const INSURERS = [
-  'Star Health',
-  'HDFC ERGO',
-  'ICICI Lombard',
-  'Care Health',
-  'Niva Bupa',
-  'Bajaj Allianz',
-];
-
 export const SignUpScreen = ({ route, navigation }: any) => {
   const { colors } = useTheme();
 
@@ -73,11 +64,6 @@ export const SignUpScreen = ({ route, navigation }: any) => {
   const [phone, setPhone] = useState('');
   const [dob, setDob] = useState('');
   const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Male');
-
-  // Insurance Info
-  const [insurer, setInsurer] = useState('Star Health');
-  const [policyNumber, setPolicyNumber] = useState('P-0007401');
-  const [sumInsured, setSumInsured] = useState('500000');
 
   const [agree, setAgree] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -160,8 +146,6 @@ export const SignUpScreen = ({ route, navigation }: any) => {
           phone: phone.trim() || undefined,
           dob: dob.trim() || undefined,
           gender,
-          policy: policyNumber.trim() || undefined,
-          sumInsured: sumInsured.trim() || undefined,
         });
 
         setToastMsg('Patient profile completed successfully!');
@@ -194,8 +178,6 @@ export const SignUpScreen = ({ route, navigation }: any) => {
           phone: phone.trim() || undefined,
           dob: dob.trim() || undefined,
           gender,
-          policy: policyNumber.trim() || undefined,
-          sumInsured: sumInsured.trim() || undefined,
         });
 
         setToastMsg('Account created successfully!');
@@ -257,8 +239,6 @@ export const SignUpScreen = ({ route, navigation }: any) => {
           phone: phone.trim() || undefined,
           dob: dob.trim() || undefined,
           gender,
-          policy: policyNumber.trim() || undefined,
-          sumInsured: sumInsured.trim() || undefined,
         },
       });
 
@@ -345,7 +325,7 @@ export const SignUpScreen = ({ route, navigation }: any) => {
             : step === 'verify_code'
             ? 'Verify Email'
             : step === 'details'
-            ? 'Profile & Insurance'
+            ? 'Patient Profile'
             : 'Create Patient Account'}
         </Text>
         <View style={{ width: 32 }} />
@@ -563,7 +543,7 @@ export const SignUpScreen = ({ route, navigation }: any) => {
                 }}
               >
                 <Text style={[styles.changeEmailBtnText, { color: colors.muted }]}>
-                  Back to Profile & Insurance
+                  Back to Profile Details
                 </Text>
               </TouchableOpacity>
             </View>
@@ -709,7 +689,7 @@ export const SignUpScreen = ({ route, navigation }: any) => {
               <Text style={[styles.bannerText, { color: colors.brandDark }]}>
                 {isCompleteProfileMode
                   ? 'Please complete your patient profile details to continue.'
-                  : 'Step 2 of 3: Enter your personal and insurance details to complete profile setup.'}
+                  : 'Step 2 of 3: Enter your personal details to complete profile setup.'}
               </Text>
             </View>
 
@@ -833,84 +813,6 @@ export const SignUpScreen = ({ route, navigation }: any) => {
                       </TouchableOpacity>
                     );
                   })}
-                </View>
-              </View>
-            </View>
-
-            {/* Insurance Details Card */}
-            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-              <Text style={[styles.cardSectionTitle, { color: colors.ink }]}>
-                Insurance Policy Details
-              </Text>
-
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: colors.ink }]}>Health Insurer</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.insurerScroll}>
-                  {INSURERS.map(ins => {
-                    const isSel = insurer === ins;
-                    return (
-                      <TouchableOpacity
-                        key={ins}
-                        style={[
-                          styles.insurerChip,
-                          {
-                            backgroundColor: isSel ? colors.brandSoft : colors.surface2,
-                            borderColor: isSel ? colors.brand : colors.line,
-                          },
-                        ]}
-                        onPress={() => setInsurer(ins)}
-                      >
-                        <Text
-                          style={[
-                            styles.insurerChipText,
-                            { color: isSel ? colors.brandDark : colors.ink },
-                          ]}
-                        >
-                          {ins}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              <View style={styles.rowTwoCols}>
-                <View style={[styles.inputGroup, { flex: 1.2 }]}>
-                  <Text style={[styles.label, { color: colors.ink }]}>Policy Number</Text>
-                  <View
-                    style={[
-                      styles.inputWrapper,
-                      { backgroundColor: colors.surface2, borderColor: colors.line },
-                    ]}
-                  >
-                    <TextInput
-                      style={[styles.input, { color: colors.ink }]}
-                      placeholder="e.g. P-0007401"
-                      placeholderTextColor={colors.muted}
-                      value={policyNumber}
-                      onChangeText={setPolicyNumber}
-                      autoCapitalize="characters"
-                    />
-                  </View>
-                </View>
-
-                <View style={[styles.inputGroup, { flex: 0.9 }]}>
-                  <Text style={[styles.label, { color: colors.ink }]}>Sum Insured (₹)</Text>
-                  <View
-                    style={[
-                      styles.inputWrapper,
-                      { backgroundColor: colors.surface2, borderColor: colors.line },
-                    ]}
-                  >
-                    <TextInput
-                      style={[styles.input, { color: colors.ink }]}
-                      placeholder="500000"
-                      placeholderTextColor={colors.muted}
-                      value={sumInsured}
-                      onChangeText={setSumInsured}
-                      keyboardType="numeric"
-                    />
-                  </View>
                 </View>
               </View>
             </View>
@@ -1119,21 +1021,6 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   segBtnText: { fontSize: 12, fontWeight: '600' },
-  insurerScroll: {
-    flexDirection: 'row',
-    marginBottom: 2,
-  },
-  insurerChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 9,
-    borderWidth: 1,
-    marginRight: 8,
-  },
-  insurerChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
   agreeRow: {
     flexDirection: 'row',
     alignItems: 'center',
