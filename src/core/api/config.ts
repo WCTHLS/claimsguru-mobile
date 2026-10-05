@@ -56,6 +56,8 @@ export const API_ENDPOINTS = {
   claimSubmit: (claimId: string) => `${API_BASE_URL}/submission/submit/${claimId}`,
   tpaPdf: (claimId: string, style: string = 'modern', inline: boolean = true, tpaName?: string) =>
     `${API_BASE_URL}/submission/claims/${claimId}/tpa-pdf?style=${style}&view=${inline ? 'true' : 'false'}${tpaName ? `&tpa_name=${encodeURIComponent(tpaName)}` : ''}`,
+  tpaList: () => `${API_BASE_URL}/submission/tpa-list`,
+  extractPolicy: (claimId: string) => `${API_BASE_URL}/submission/claims/${claimId}/extract-policy`,
 
   // Validation & Prediction Services
   claimValidation: (claimId: string) => `${API_BASE_URL}/validator/validate/${claimId}`,

@@ -21,6 +21,27 @@ function getEffectiveMimeType(fileName: string, explicitType?: string): string {
   return 'application/pdf';
 }
 
+export interface TpaProviderItem {
+  id: string;
+  org_id?: string;
+  name: string;
+  logo?: string;
+  type: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+}
+
+export interface ExtractPolicyResponse {
+  success: boolean;
+  policy_id: string;
+  insurer: string;
+  file_name: string;
+  extracted?: boolean;
+  raw_snippet?: string;
+  message?: string;
+}
+
 export interface BackendDocument {
   id: string;
   file_name: string;
@@ -565,9 +586,35 @@ export const claimsApi = {
     return apiClient.delete(API_ENDPOINTS.claimDetail(claimId));
   },
 
+  fetchTpaList: async (): Promise<TpaProviderItem[]> => {
+    try {
+      const res = await apiClient.get<{ tpas: TpaProviderItem[] }>(API_ENDPOINTS.tpaList());
+      return res?.tpas || [];
+    } catch (err) {
+      console.warn('[claimsApi] fetchTpaList failed:', err);
+      return [];
+    }
+  },
+
+  extractPolicyFromDoc: async (
+    claimId: string,
+    file: { uri?: string; name: string; type?: string; blob?: any }
+  ): Promise<ExtractPolicyResponse> => {
+    const formData = new FormData();
+    const fileName = file.name || 'policy_document.pdf';
+    const mimeType = getEffectiveMimeType(fileName, file.type);
+    const part = await prepareBlobForFormData(file.uri, file.blob, fileName, mimeType, 0);
+    formData.append('file', part, fileName);
+
+    const url = API_ENDPOINTS.extractPolicy(claimId);
+    return apiClient.upload<ExtractPolicyResponse>(url, formData);
+  },
+
   submitClaim: async (
     claimId: string,
-    payer: string = 'generic'
+    payer: string = 'generic',
+    policyId?: string,
+    orgId?: string
   ): Promise<{
     submission_id?: string;
     claim_id?: string;
@@ -577,7 +624,11 @@ export const claimsApi = {
     reference?: string;
   }> => {
     const url = API_ENDPOINTS.claimSubmit(claimId);
-    return apiClient.post(url, { payer });
+    return apiClient.post(url, {
+      payer,
+      policy_id: policyId || undefined,
+      org_id: orgId || undefined,
+    });
   },
 
   updateClaimFields: async (claimId: string, fields: Record<string, string>): Promise<boolean> => {

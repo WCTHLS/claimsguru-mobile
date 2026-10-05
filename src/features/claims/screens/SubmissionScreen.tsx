@@ -33,7 +33,14 @@ import {
   ExternalLink,
   RotateCw,
   Eye,
+  ShieldCheck,
+  Building2,
+  UploadCloud,
+  Clock,
+  Sparkles,
 } from 'lucide-react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import Svg, { Path } from 'react-native-svg';
 import { WebView } from 'react-native-webview';
 import { useTheme } from '../../../core/theme/ThemeContext';
@@ -48,7 +55,7 @@ import {
   getBlankIrdaFormHtml,
 } from '../../../core/utils/blankIrdaForm';
 import { BLANK_IRDA_PDF_BASE64 } from '../../../core/assets/blankIrdaPdfBase64';
-import { claimsApi } from '../services/claimsApi';
+import { claimsApi, TpaProviderItem } from '../services/claimsApi';
 
 
 const cleanInsuredName = (raw?: string) => {
@@ -179,7 +186,21 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
   };
 
   // Modals & Feedback
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showTpaModal, setShowTpaModal] = useState(false);
+  const [tpaList, setTpaList] = useState<TpaProviderItem[]>([]);
+  const [loadingTpas, setLoadingTpas] = useState(false);
+  const [selectedOrgId, setSelectedOrgId] = useState<string>('');
+  const [selectedInsurer, setSelectedInsurer] = useState<string>('Star Health');
+  const [showOrgPickerModal, setShowOrgPickerModal] = useState(false);
+
+  // Policy verification & Fast OCR extraction state
+  const [policyId, setPolicyId] = useState<string>(claim.policyNo || auth.policyNumber || '');
+  const [policyFromOcr, setPolicyFromOcr] = useState<boolean>(false);
+  const [showUploadBox, setShowUploadBox] = useState<boolean>(false);
+  const [isUploadingPolicyDoc, setIsUploadingPolicyDoc] = useState(false);
+  const [ocrSuccessBanner, setOcrSuccessBanner] = useState<string | null>(null);
+  const [isSubmittingToPayer, setIsSubmittingToPayer] = useState(false);
+
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [submissionReceiptId, setSubmissionReceiptId] = useState('');
@@ -372,25 +393,199 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
     }
   };
 
-  const handleSubmitFinal = async () => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
+  const isUuid = (val: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((val || '').trim());
+
+  const handleOpenSubmitModal = async () => {
+    // 1. Initial policy ID check
+    let candidatePol = (fPolicy || policyId || claim.policyNo || auth.policyNumber || '').trim();
+    if (isUuid(candidatePol) || candidatePol.toUpperCase() === 'N/A' || candidatePol.toLowerCase() === 'null') {
+      candidatePol = '';
+    }
+
+    // Try checking parsed fields or summary if available
+    if (!candidatePol && claim.id) {
+      try {
+        const prev = await claimsApi.getClaimPreview(claim.id);
+        if (prev) {
+          const fromParsed = (
+            prev.parsed_fields?.policy_number ||
+            prev.parsed_fields?.policy_id ||
+            prev.summary?.policy_number ||
+            prev.policy_id ||
+            ''
+          ).trim();
+          if (fromParsed && !isUuid(fromParsed) && fromParsed.toUpperCase() !== 'N/A') {
+            candidatePol = fromParsed;
+          }
+        }
+      } catch {}
+    }
+
+    const hasValidPolicy = Boolean(candidatePol && candidatePol.length >= 4);
+    setPolicyId(candidatePol);
+    setPolicyFromOcr(hasValidPolicy);
+    setShowUploadBox(!hasValidPolicy);
+    setOcrSuccessBanner(null);
+
+    // 2. Fetch TPAs from DB
+    setLoadingTpas(true);
+    setShowTpaModal(true);
+    try {
+      const list = await claimsApi.fetchTpaList();
+      if (list && list.length > 0) {
+        setTpaList(list);
+        const match = list.find(t =>
+          (claim.hospital && claim.hospital.toLowerCase().includes(t.name.toLowerCase())) ||
+          (selectedInsurer && t.name.toLowerCase().includes(selectedInsurer.toLowerCase()))
+        ) || list[0];
+        setSelectedOrgId(match.id);
+        setSelectedInsurer(match.name);
+      }
+    } catch (err) {
+      console.warn('[SubmissionScreen] Failed to load TPAs:', err);
+    } finally {
+      setLoadingTpas(false);
+    }
+  };
+
+  const handlePickPolicyDoc = async () => {
+    if (!claim.id || isUploadingPolicyDoc) return;
+
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.pdf,.png,.jpg,.jpeg,.webp';
+      input.onchange = async (e: any) => {
+        const file = e.target?.files?.[0];
+        if (file) {
+          await runPolicyOcr({
+            name: file.name,
+            type: file.type,
+            blob: file,
+          });
+        }
+      };
+      input.click();
+      return;
+    }
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*'],
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        await runPolicyOcr({
+          name: asset.name,
+          type: asset.mimeType || 'application/pdf',
+          uri: asset.uri,
+        });
+      }
+    } catch (err: any) {
+      console.warn('[SubmissionScreen] Document picker error:', err);
+      showToast('Document selection failed');
+    }
+  };
+
+  const handlePickPolicyPhoto = async () => {
+    if (!claim.id || isUploadingPolicyDoc) return;
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: false,
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const name = asset.fileName || `HealthCard_${Date.now()}.jpg`;
+        await runPolicyOcr({
+          name,
+          type: asset.mimeType || 'image/jpeg',
+          uri: asset.uri,
+        });
+      }
+    } catch (err: any) {
+      console.warn('[SubmissionScreen] Image picker error:', err);
+    }
+  };
+
+  const runPolicyOcr = async (fileObj: { name: string; type?: string; uri?: string; blob?: any }) => {
+    setIsUploadingPolicyDoc(true);
+    setOcrSuccessBanner(null);
+
+    try {
+      const res = await claimsApi.extractPolicyFromDoc(claim.id, fileObj);
+      if (res.success && (res.policy_id || res.insurer)) {
+        if (res.policy_id) {
+          const cleanPol = res.policy_id.trim();
+          setPolicyId(cleanPol);
+          setFPolicy(cleanPol);
+          setPolicyFromOcr(true);
+          setShowUploadBox(false);
+          addOrUpdateClaim({
+            id: claim.id,
+            policyNo: cleanPol,
+          });
+        }
+        if (res.insurer) {
+          setSelectedInsurer(res.insurer);
+          const matchedOrg = tpaList.find(t =>
+            t.name.toLowerCase().includes(res.insurer.toLowerCase()) ||
+            res.insurer.toLowerCase().includes(t.name.toLowerCase())
+          );
+          if (matchedOrg) {
+            setSelectedOrgId(matchedOrg.id);
+            setSelectedInsurer(matchedOrg.name);
+          }
+        }
+
+        const bannerText = `Extracted ${res.policy_id ? `Policy #${res.policy_id}` : ''} ${res.insurer ? `(${res.insurer})` : ''} from ${fileObj.name}`.trim();
+        setOcrSuccessBanner(bannerText);
+        showToast('Policy extracted via Fast OCR!');
+      } else {
+        showToast('OCR completed. Please enter policy number manually.');
+      }
+    } catch (err: any) {
+      console.warn('[SubmissionScreen] OCR extraction error:', err);
+      showToast(err?.message || 'Failed to process document with Fast OCR');
+    } finally {
+      setIsUploadingPolicyDoc(false);
+    }
+  };
+
+  const handleConfirmSubmitToTpa = async () => {
+    if (!claim.id || isSubmittingToPayer) return;
+    if (!policyId.trim()) {
+      showToast('Please enter or scan a policy number');
+      return;
+    }
+    if (!selectedInsurer) {
+      showToast('Please select an insurance company / TPA');
+      return;
+    }
+
+    setIsSubmittingToPayer(true);
     let receiptCode = `IRDAI-${new Date().getFullYear()}-SUB-${Math.floor(10000 + Math.random() * 90000)}`;
 
     try {
-      const res = await claimsApi.submitClaim(claim.id, payer);
+      const res = await claimsApi.submitClaim(claim.id, selectedInsurer, policyId.trim(), selectedOrgId || undefined);
       if (res) {
         if (res.reference) {
           receiptCode = res.reference;
         } else if (res.submission_id) {
-          receiptCode = `TPA-${payer.toUpperCase()}-${res.submission_id.slice(0, 8)}`;
+          receiptCode = `TPA-${selectedInsurer.replace(/\s+/g, '').toUpperCase().slice(0, 6)}-${res.submission_id.slice(0, 8)}`;
         }
       }
     } catch (err: any) {
       console.warn('[SubmissionScreen] Server submission warning:', err?.message || err);
     } finally {
-      setIsSubmitting(false);
-      setShowConfirmModal(false);
+      setIsSubmittingToPayer(false);
+      setShowTpaModal(false);
     }
 
     setSubmissionReceiptId(receiptCode);
@@ -399,6 +594,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
       id: claim.id,
       status: 'submitted',
       rawStatus: 'SUBMITTED',
+      policyNo: policyId.trim(),
     });
 
     setShowSuccessModal(true);
@@ -999,47 +1195,323 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
         </TouchableOpacity>
       </Modal>
 
-      {/* Submission Confirmation Modal */}
+      {/* 🏛️ SUBMIT CLAIM TO INSURER / TPA NATIVE MOBILE MODAL */}
       <Modal
         transparent
-        visible={showConfirmModal}
+        visible={showTpaModal}
+        animationType="slide"
+        onRequestClose={() => {
+          if (!isSubmittingToPayer) setShowTpaModal(false);
+        }}
+      >
+        <View style={styles.tpaModalBackdrop}>
+          <View style={[styles.tpaModalCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            {/* Top Drag Indicator */}
+            <View style={[styles.tpaDragHandle, { backgroundColor: colors.line2 }]} />
+
+            {/* Modal Header */}
+            <View style={[styles.tpaModalHeader, { borderBottomColor: colors.line }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <View style={[styles.tpaHeaderIconWrap, { backgroundColor: colors.brandSoft }]}>
+                  <ShieldCheck size={22} color={colors.brandDark} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.tpaModalTitle, { color: colors.ink }]}>
+                    Submit Claim to Insurer / TPA
+                  </Text>
+                  <Text style={[styles.tpaModalSubtitle, { color: colors.muted }]}>
+                    Select insurer and verify policy details to dispatch claim
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  if (!isSubmittingToPayer) setShowTpaModal(false);
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={{ padding: 4 }}
+              >
+                <XIcon size={20} color={colors.muted} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Scrollable Body */}
+            <ScrollView
+              contentContainerStyle={styles.tpaModalBody}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* Section 1: Insurance Company / TPA */}
+              <View>
+                <Text style={[styles.tpaFieldLabel, { color: colors.ink }]}>
+                  Select Insurance Company / TPA <Text style={{ color: colors.red }}>*</Text>
+                </Text>
+
+                <TouchableOpacity
+                  style={[styles.tpaSelectBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}
+                  onPress={() => setShowOrgPickerModal(true)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.tpaSelectBoxLeft}>
+                    <Building2 size={17} color={colors.brandDark} style={{ marginRight: 8 }} />
+                    <Text style={[styles.tpaSelectBoxText, { color: colors.ink }]} numberOfLines={1}>
+                      {selectedInsurer || 'Select Insurance Provider'}
+                    </Text>
+                    {selectedOrgId ? (
+                      <View style={[styles.tpaTypeBadge, { backgroundColor: colors.brandSoft, borderColor: colors.brand + '40' }]}>
+                        <Text style={[styles.tpaTypeBadgeText, { color: colors.brandDark }]}>
+                          {tpaList.find(t => t.id === selectedOrgId)?.type || 'TPA'}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <ChevronDown size={16} color={colors.muted} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Section 2: Policy ID Verification & Auto-Extract */}
+              <View style={[styles.tpaCardBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
+                <View style={styles.tpaCardHdrRow}>
+                  <Text style={[styles.tpaFieldLabel, { color: colors.ink, marginBottom: 0 }]}>
+                    Policy Number / Health Card ID <Text style={{ color: colors.red }}>*</Text>
+                  </Text>
+                  {policyFromOcr ? (
+                    <View style={[styles.tpaOcrBadge, { backgroundColor: colors.greenSoft, borderColor: colors.green + '40' }]}>
+                      <CheckCircle2 size={12} color={colors.green} />
+                      <Text style={[styles.tpaOcrBadgeText, { color: colors.green }]}>
+                        Auto-detected via OCR
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {/* Policy Input Field */}
+                <TextInput
+                  style={[
+                    styles.tpaPolicyInput,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: policyFromOcr ? colors.green : colors.line,
+                      color: colors.ink,
+                      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+                    },
+                  ]}
+                  value={policyId}
+                  onChangeText={(val) => {
+                    setPolicyId(val);
+                    setFPolicy(val);
+                  }}
+                  placeholder="e.g. P/161114/01/2024/002345"
+                  placeholderTextColor={colors.muted}
+                  autoCapitalize="characters"
+                />
+
+                {policyFromOcr ? (
+                  <View>
+                    <Text style={[styles.tpaPolicyHelpText, { color: colors.muted }]}>
+                      Pre-filled from your uploaded claim documents. You can review or edit if necessary.
+                    </Text>
+
+                    <TouchableOpacity
+                      style={styles.tpaRescanBtn}
+                      onPress={() => setShowUploadBox(!showUploadBox)}
+                      activeOpacity={0.7}
+                    >
+                      <Sparkles size={13} color={colors.brandDark} />
+                      <Text style={[styles.tpaRescanBtnText, { color: colors.brandDark }]}>
+                        {showUploadBox ? 'Hide document scanner' : 'Scan another card or policy document'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+
+                {/* Upload & Fast OCR Box */}
+                {(!policyFromOcr || showUploadBox) && (
+                  <View style={{ marginTop: 10 }}>
+                    <View style={styles.tpaOrDivider}>
+                      <View style={[styles.tpaOrLine, { backgroundColor: colors.line }]} />
+                      <Text style={[styles.tpaOrText, { color: colors.muted, backgroundColor: colors.surface2 }]}>
+                        OR AUTO-EXTRACT
+                      </Text>
+                      <View style={[styles.tpaOrLine, { backgroundColor: colors.line }]} />
+                    </View>
+
+                    <View
+                      style={[
+                        styles.tpaUploadDashedBox,
+                        {
+                          borderColor: isUploadingPolicyDoc ? colors.brand : colors.line,
+                          backgroundColor: isUploadingPolicyDoc ? colors.brandSoft : colors.surface,
+                        },
+                      ]}
+                    >
+                      {isUploadingPolicyDoc ? (
+                        <View style={{ alignItems: 'center', paddingVertical: 6 }}>
+                          <ActivityIndicator size="small" color={colors.brandDark} />
+                          <Text style={[styles.tpaUploadTitle, { color: colors.brandDark }]}>
+                            Running Fast OCR &amp; Extracting Policy ID...
+                          </Text>
+                          <Text style={[styles.tpaUploadSub, { color: colors.muted }]}>
+                            Scanning card / policy for insurer and policy number
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={{ alignItems: 'center', width: '100%' }}>
+                          <UploadCloud size={28} color={colors.brandDark} />
+                          <Text style={[styles.tpaUploadTitle, { color: colors.ink }]}>
+                            Upload Health Card / Policy Document
+                          </Text>
+                          <Text style={[styles.tpaUploadSub, { color: colors.muted }]}>
+                            Fast OCR will extract Policy ID &amp; Insurer instantly
+                          </Text>
+
+                          <View style={styles.tpaUploadButtonsRow}>
+                            <TouchableOpacity
+                              style={[styles.tpaUploadMiniBtn, { backgroundColor: colors.surface2, borderColor: colors.line }]}
+                              onPress={handlePickPolicyDoc}
+                              activeOpacity={0.7}
+                            >
+                              <FileText size={14} color={colors.brandDark} />
+                              <Text style={[styles.tpaUploadMiniBtnText, { color: colors.ink }]}>
+                                Browse File (PDF/Image)
+                              </Text>
+                            </TouchableOpacity>
+
+                            {Platform.OS !== 'web' && (
+                              <TouchableOpacity
+                                style={[styles.tpaUploadMiniBtn, { backgroundColor: colors.surface2, borderColor: colors.line }]}
+                                onPress={handlePickPolicyPhoto}
+                                activeOpacity={0.7}
+                              >
+                                <Sparkles size={14} color={colors.brandDark} />
+                                <Text style={[styles.tpaUploadMiniBtnText, { color: colors.ink }]}>
+                                  Photo Gallery
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                )}
+
+                {/* Fast OCR Extraction Success Banner */}
+                {ocrSuccessBanner && (
+                  <View style={[styles.tpaBannerSuccess, { backgroundColor: colors.greenSoft, borderColor: colors.green + '40' }]}>
+                    <CheckCircle2 size={15} color={colors.green} />
+                    <Text style={[styles.tpaBannerSuccessText, { color: colors.green }]} numberOfLines={2}>
+                      {ocrSuccessBanner}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Section 3: TPA Routing Info Box */}
+              <View style={[styles.tpaRoutingBox, { backgroundColor: colors.brandSoft, borderColor: colors.brand + '30' }]}>
+                <Clock size={16} color={colors.brandDark} style={{ marginTop: 2, flexShrink: 0 }} />
+                <Text style={[styles.tpaRoutingText, { color: colors.brandDark }]}>
+                  <Text style={{ fontWeight: '700' }}>TPA Routing: </Text>
+                  Claim documents will be submitted to the <Text style={{ fontWeight: '700' }}>{selectedInsurer}</Text> TPA adjudication queue. The claim is permanently linked to Policy ID <Text style={{ fontWeight: '700' }}>#{policyId.trim() || 'N/A'}</Text>.
+                </Text>
+              </View>
+            </ScrollView>
+
+            {/* Modal Bottom Actions */}
+            <View style={[styles.tpaModalFooter, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
+              <TouchableOpacity
+                style={[styles.tpaCancelBtn, { borderColor: colors.line, backgroundColor: colors.surface2 }]}
+                onPress={() => setShowTpaModal(false)}
+                disabled={isSubmittingToPayer}
+              >
+                <Text style={[styles.tpaCancelText, { color: colors.ink }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.tpaSubmitBtn,
+                  {
+                    backgroundColor: colors.brand,
+                    opacity: (!policyId.trim() || !selectedInsurer || isSubmittingToPayer) ? 0.6 : 1,
+                  },
+                ]}
+                onPress={handleConfirmSubmitToTpa}
+                disabled={!policyId.trim() || !selectedInsurer || isSubmittingToPayer}
+                activeOpacity={0.85}
+              >
+                {isSubmittingToPayer ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <>
+                    <Send size={15} color="#ffffff" style={{ marginRight: 4 }} />
+                    <Text style={styles.tpaSubmitText}>Submit Claim to TPA</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 🏢 Organization / TPA Picker Modal */}
+      <Modal
+        transparent
+        visible={showOrgPickerModal}
         animationType="fade"
-        onRequestClose={() => setShowConfirmModal(false)}
+        onRequestClose={() => setShowOrgPickerModal(false)}
       >
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => setShowConfirmModal(false)}
+          onPress={() => setShowOrgPickerModal(false)}
         >
-          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-            <View style={[styles.modalIconWrap, { backgroundColor: colors.brandSoft }]}>
-              <Send size={24} color={colors.brandDark} />
-            </View>
-            <Text style={[styles.modalTitle, { color: colors.ink }]}>
-              Submit claim {claim.id.slice(0, 8)}?
-            </Text>
-            <Text style={[styles.modalBody, { color: colors.muted }]}>
-              POST /submission/submit/{claim.id.slice(0, 8)} · IRDAI &amp; TPA dossier ({renderStyle}). The submission is written to the submissions table and audited.
-            </Text>
-            <View style={styles.modalBtnRow}>
-              <TouchableOpacity
-                style={[styles.modalCancelBtn, { borderColor: colors.line }]}
-                onPress={() => setShowConfirmModal(false)}
-              >
-                <Text style={[styles.modalCancelText, { color: colors.muted }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalConfirmBtn, { backgroundColor: colors.brand, opacity: isSubmitting ? 0.7 : 1 }]}
-                onPress={handleSubmitFinal}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.modalConfirmText}>Submit</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+          <View style={[styles.pickerModalCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <Text style={[styles.pickerModalTitle, { color: colors.ink }]}>Select Insurer / TPA</Text>
+            {tpaList.length > 0 ? (
+              tpaList.map((org) => {
+                const isSelected = selectedOrgId === org.id || selectedInsurer.toLowerCase() === org.name.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={org.id}
+                    style={[
+                      styles.pickerOptionRow,
+                      { borderBottomColor: colors.line2 },
+                      isSelected && { backgroundColor: colors.brandSoft },
+                    ]}
+                    onPress={() => {
+                      setSelectedOrgId(org.id);
+                      setSelectedInsurer(org.name);
+                      setShowOrgPickerModal(false);
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                      <Building2 size={16} color={isSelected ? colors.brandDark : colors.muted} style={{ marginRight: 8 }} />
+                      <Text
+                        style={[
+                          styles.pickerOptionText,
+                          {
+                            color: isSelected ? colors.brandDark : colors.ink,
+                            fontWeight: isSelected ? '700' : '500',
+                          },
+                        ]}
+                      >
+                        {org.name}
+                      </Text>
+                      <View style={[styles.tpaTypeBadge, { backgroundColor: isSelected ? colors.brandSoft : colors.surface2, borderColor: colors.line }]}>
+                        <Text style={[styles.tpaTypeBadgeText, { color: isSelected ? colors.brandDark : colors.muted }]}>
+                          {org.type}
+                        </Text>
+                      </View>
+                    </View>
+                    {isSelected && <Check size={16} color={colors.brand} strokeWidth={2.6} />}
+                  </TouchableOpacity>
+                );
+              })
+            ) : (
+              <View style={{ padding: 16, alignItems: 'center' }}>
+                <Text style={{ color: colors.muted, fontSize: 13 }}>No TPAs loaded from server.</Text>
+              </View>
+            )}
           </View>
         </TouchableOpacity>
       </Modal>
@@ -1074,13 +1546,17 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                 <Text style={[styles.receiptVal, { color: colors.ink }]}>{fName}</Text>
               </View>
               <View style={styles.receiptRow}>
+                <Text style={[styles.receiptLabel, { color: colors.muted }]}>Policy ID</Text>
+                <Text style={[styles.receiptVal, styles.mono, { color: colors.ink }]}>{policyId || fPolicy || 'N/A'}</Text>
+              </View>
+              <View style={styles.receiptRow}>
                 <Text style={[styles.receiptLabel, { color: colors.muted }]}>Amount</Text>
                 <Text style={[styles.receiptVal, { color: colors.ink }]}>{formatINR(totalBilled)}</Text>
               </View>
               <View style={[styles.receiptRow, { borderBottomWidth: 0 }]}>
                 <Text style={[styles.receiptLabel, { color: colors.muted }]}>Payer Gateway</Text>
                 <Text style={[styles.receiptVal, { color: colors.green }]}>
-                  IRDAI Electronic Portal
+                  {selectedInsurer} TPA Adjudication
                 </Text>
               </View>
             </View>
@@ -1334,7 +1810,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
               style={[styles.pdfFooterBtn, { backgroundColor: colors.brand }]}
               onPress={() => {
                 setShowPdfModal(false);
-                setShowConfirmModal(true);
+                handleOpenSubmitModal();
               }}
             >
               <Text style={styles.pdfFooterBtnText}>Proceed to Submit</Text>
@@ -1356,7 +1832,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
 
         <TouchableOpacity
           style={[styles.btnSolid, { backgroundColor: colors.brand }]}
-          onPress={() => setShowConfirmModal(true)}
+          onPress={handleOpenSubmitModal}
           activeOpacity={0.85}
         >
           <Text style={styles.btnSolidText}>{getSubmitButtonLabel()}</Text>
@@ -1946,4 +2422,266 @@ const styles = StyleSheet.create({
   pdfCancelBtnText: { fontSize: 13, fontWeight: '700' },
   pdfFooterBtn: { flex: 1, height: 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   pdfFooterBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
+
+  // Submit to TPA / Insurer Modal
+  tpaModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  tpaModalCard: {
+    width: '100%',
+    maxHeight: '92%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  tpaDragHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  tpaModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  tpaHeaderIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  tpaModalTitle: {
+    fontSize: 15.5,
+    fontWeight: '700',
+  },
+  tpaModalSubtitle: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  tpaModalBody: {
+    padding: 16,
+    paddingBottom: 24,
+  },
+  tpaFieldLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  tpaSelectBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  tpaSelectBoxLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  tpaSelectBoxText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    flex: 1,
+  },
+  tpaTypeBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginLeft: 8,
+  },
+  tpaTypeBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+  },
+  tpaChipsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 9,
+  },
+  tpaChipsLabel: {
+    fontSize: 10.5,
+    fontWeight: '600',
+  },
+  tpaChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  tpaChipText: {
+    fontSize: 11,
+  },
+  tpaCardBox: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    marginTop: 14,
+  },
+  tpaCardHdrRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  tpaOcrBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  tpaOcrBadgeText: {
+    fontSize: 10,
+    marginLeft: 4,
+  },
+  tpaPolicyInput: {
+    height: 44,
+    borderRadius: 11,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    fontSize: 13.5,
+  },
+  tpaPolicyHelpText: {
+    fontSize: 11,
+    marginTop: 6,
+    lineHeight: 15,
+  },
+  tpaRescanBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  tpaRescanBtnText: {
+    fontSize: 11.5,
+    marginLeft: 5,
+  },
+  tpaOrDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 14,
+  },
+  tpaOrLine: {
+    flex: 1,
+    height: 1,
+  },
+  tpaOrText: {
+    fontSize: 10,
+    letterSpacing: 0.8,
+    paddingHorizontal: 8,
+  },
+  tpaUploadDashedBox: {
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    paddingVertical: 18,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tpaUploadTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  tpaUploadSub: {
+    fontSize: 11,
+    marginTop: 3,
+    textAlign: 'center',
+    lineHeight: 15,
+  },
+  tpaUploadButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  tpaUploadMiniBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  tpaUploadMiniBtnText: {
+    fontSize: 11.5,
+    marginLeft: 5,
+  },
+  tpaBannerSuccess: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 10,
+  },
+  tpaBannerSuccessText: {
+    fontSize: 11.5,
+    marginLeft: 6,
+    flex: 1,
+  },
+  tpaRoutingBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 14,
+  },
+  tpaRoutingText: {
+    fontSize: 11.5,
+    lineHeight: 16,
+    flex: 1,
+    marginLeft: 8,
+  },
+  tpaModalFooter: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+  },
+  tpaCancelBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 11,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tpaCancelText: {
+    fontSize: 13,
+  },
+  tpaSubmitBtn: {
+    flex: 2,
+    height: 44,
+    borderRadius: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tpaSubmitText: {
+    fontSize: 13,
+    marginLeft: 6,
+  },
 });
