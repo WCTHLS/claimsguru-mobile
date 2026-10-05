@@ -10,7 +10,7 @@ export interface ClaimItem {
   gender?: string;
   dept: string;
   amt: number;
-  status: 'complete' | 'submitted' | 'approved' | 'rejected' | 'settled' | 'running' | 'FAILED';
+  status: 'complete' | 'submitted' | 'approved' | 'rejected' | 'settled' | 'running' | 'FAILED' | 'docs_requested';
   rawStatus?: string;
   step: 'ocr' | 'parse' | 'code' | 'predict' | 'validate' | '—';
   indexed: boolean;
@@ -30,6 +30,10 @@ export interface ClaimItem {
   documents?: any[];
   createdAt?: string;
   patientId?: string;
+  hasActionRequest?: boolean;
+  tpaMessage?: string;
+  tpaRequestedDocs?: string[];
+  insuranceCompany?: string;
 }
 
 export const INITIAL_CLAIMS: ClaimItem[] = [];

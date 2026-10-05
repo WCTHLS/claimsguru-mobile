@@ -65,6 +65,10 @@ export interface BackendClaim {
   hospital_name?: string | null;
   doctor_name?: string | null;
   diagnosis?: string | null;
+  has_action_request?: boolean;
+  tpa_message?: string | null;
+  tpa_requested_docs?: string[];
+  insurance_company?: string | null;
 }
 
 export interface BackendClaimListResponse {
@@ -176,6 +180,9 @@ export interface BackendClaimPreview {
   };
   fraud_signals?: any[];
   documents?: BackendClaimDocument[];
+  tpa_message?: string | null;
+  tpa_requested_docs?: string[];
+  insurance_company?: string | null;
 }
 
 export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimPreview | null): ClaimItem {
@@ -183,8 +190,17 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
   const rawStatus = (raw.status || '').trim();
   const statusUpper = rawStatus.toUpperCase();
 
-  let uiStatus: 'complete' | 'submitted' | 'approved' | 'rejected' | 'settled' | 'running' | 'FAILED' = 'complete';
-  if (statusUpper.includes('FAIL') || statusUpper.includes('ERROR')) {
+  const isActionRequest =
+    statusUpper === 'DOCUMENTS_REQUESTED' ||
+    statusUpper === 'MODIFICATION_REQUESTED' ||
+    Boolean(raw.has_action_request) ||
+    Boolean(raw.tpa_requested_docs && raw.tpa_requested_docs.length > 0) ||
+    Boolean((preview as any)?.tpa_requested_docs?.length > 0);
+
+  let uiStatus: 'complete' | 'submitted' | 'approved' | 'rejected' | 'settled' | 'running' | 'FAILED' | 'docs_requested' = 'complete';
+  if (isActionRequest) {
+    uiStatus = 'docs_requested';
+  } else if (statusUpper.includes('FAIL') || statusUpper.includes('ERROR')) {
     uiStatus = 'FAILED';
   } else if (statusUpper === 'APPROVED') {
     uiStatus = 'approved';
@@ -329,6 +345,10 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
     documents: raw.documents || [],
     createdAt: raw.created_at,
     patientId: raw.patient_id || undefined,
+    hasActionRequest: isActionRequest,
+    tpaMessage: raw.tpa_message || preview?.tpa_message || undefined,
+    tpaRequestedDocs: raw.tpa_requested_docs || preview?.tpa_requested_docs || [],
+    insuranceCompany: raw.insurance_company || preview?.insurance_company || undefined,
   };
 }
 
@@ -729,6 +749,35 @@ export const claimsApi = {
     // React Native does not support URL.createObjectURL (throws "Cannot create URL for blob").
     // Native mobile handles the direct HTTPS URL directly.
     return { url: directUrl, filename };
+  },
+
+  appendDocumentsToClaim: async (
+    claimId: string,
+    files: UploadFilePayload[]
+  ): Promise<any> => {
+    const validToken = await ensureValidAuthToken();
+    const authState = useAuthStore.getState();
+    const effectivePatientId = authState.userId || undefined;
+
+    const formData = new FormData();
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      const fileName = f.name || `requested_doc_${i + 1}.pdf`;
+      const mimeType = getEffectiveMimeType(fileName, f.type);
+      const part = await prepareBlobForFormData(f.uri, f.blob, fileName, mimeType, i);
+      formData.append('files', part, fileName);
+    }
+
+    const uploadUrl = API_ENDPOINTS.claimAddDocuments(claimId);
+    const timeoutMs = Math.max(45000, files.length * 15000);
+
+    return apiClient.upload(uploadUrl, formData, {
+      headers: {
+        ...(validToken ? { Authorization: `Bearer ${validToken}` } : {}),
+        ...(effectivePatientId ? { 'X-Patient-Id': String(effectivePatientId), 'X-User-Id': String(effectivePatientId) } : {}),
+      },
+      timeoutMs,
+    });
   },
 };
 

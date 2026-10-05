@@ -53,6 +53,8 @@ import {
   Terminal,
   Check,
   X,
+  AlertTriangle,
+  UploadCloud,
 } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useChatStore } from '../../../state/useChatStore';
@@ -65,6 +67,8 @@ import { fetchUserProfile } from '../../../core/api/authApi';
 import { Routes } from '../../../app/navigation/routes';
 import { UserAvatar } from '../../../core/components/UserAvatar';
 import { DuplicateClaimModal } from '../../../core/components/DuplicateClaimModal';
+import { ClaimItem } from '../../../mocks/claims.mock';
+import { UploadRequestedDocsModal } from '../../claims/components/UploadRequestedDocsModal';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(global as any).nativeFabricUIManager) {
   try {
@@ -161,6 +165,18 @@ export const ChatHomeScreen = ({ navigation }: any) => {
   const [showFeaturesModal, setShowFeaturesModal] = useState(false);
   const [duplicateClaimId, setDuplicateClaimId] = useState<string | null>(null);
   const [isReprocessing, setIsReprocessing] = useState(false);
+  const { claims, selectClaim, loadClaims } = useClaimsStore();
+  const [uploadModalClaim, setUploadModalClaim] = useState<ClaimItem | null>(null);
+
+  useEffect(() => {
+    loadClaims().catch(() => {});
+  }, [userId, userEmail]);
+
+  const actionRequiredClaims = (claims || []).filter(
+    c => c.hasActionRequest || (c.rawStatus || '').toUpperCase() === 'DOCUMENTS_REQUESTED' || (c.status as any) === 'docs_requested'
+  );
+  const topActionClaim = actionRequiredClaims[0];
+
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [pipelineStarting, setPipelineStarting] = useState(false);
 
@@ -533,6 +549,54 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       )}
 
       <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollInner} keyboardShouldPersistTaps="handled">
+        {/* Prominent Action Required Banner if ANY claim has requested documents */}
+        {topActionClaim && (
+          <View style={[styles.actionBannerCard, { backgroundColor: isDark ? '#2D2012' : '#FFFBEB', borderColor: colors.amber }]}>
+            <View style={styles.actionBannerHeader}>
+              <View style={[styles.actionIconCircle, { backgroundColor: colors.amberSoft }]}>
+                <AlertTriangle size={17} color={colors.amber} />
+              </View>
+              <View style={styles.actionBannerTitles}>
+                <View style={styles.actionTitleRow}>
+                  <Text style={[styles.actionTitle, { color: isDark ? '#FDE68A' : '#78350F' }]}>
+                    Action Required: Missing Documents
+                  </Text>
+                  <View style={[styles.actionPendingBadge, { backgroundColor: colors.amberSoft }]}>
+                    <Text style={[styles.actionPendingBadgeText, { color: colors.amber }]}>
+                      {actionRequiredClaims.length} Pending
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.actionSubtitle, { color: isDark ? '#FCD34D' : '#92400E' }]} numberOfLines={2}>
+                  <Text style={{ fontWeight: '700' }}>{topActionClaim.who || 'Claim'}</Text>: {topActionClaim.tpaMessage || 'The insurance reviewer requested additional supporting documents before this claim can be approved.'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.actionBannerButtons}>
+              <TouchableOpacity
+                style={[styles.actionOpenBtn, { backgroundColor: colors.amber }]}
+                onPress={() => setUploadModalClaim(topActionClaim)}
+                activeOpacity={0.8}
+              >
+                <UploadCloud size={14} color="#ffffff" style={{ marginRight: 5 }} />
+                <Text style={styles.actionOpenBtnText}>Upload Proofs</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionViewBtn, { borderColor: colors.amber }]}
+                onPress={() => {
+                  selectClaim(topActionClaim.id);
+                  navigation.navigate(Routes.ClaimDetail, { claimId: topActionClaim.id });
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.actionViewBtnText, { color: colors.amber }]}>View Details →</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Upload Claim Documents Card */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <TouchableOpacity style={styles.cardHeader} onPress={toggleCard} activeOpacity={0.7}>
@@ -1051,6 +1115,20 @@ export const ChatHomeScreen = ({ navigation }: any) => {
         isReprocessing={isReprocessing}
       />
 
+      {uploadModalClaim && (
+        <UploadRequestedDocsModal
+          visible={Boolean(uploadModalClaim)}
+          claim={uploadModalClaim}
+          navigation={navigation}
+          onClose={() => setUploadModalClaim(null)}
+          onSuccess={() => {
+            setUploadModalClaim(null);
+            loadClaims(true);
+            navigation.navigate(Routes.WorkflowPipeline);
+          }}
+        />
+      )}
+
       {/* Floating Toast Notification */}
       {toastMsg && (
         <View style={[styles.toast, { backgroundColor: colors.navy }]}>
@@ -1066,6 +1144,94 @@ export const ChatHomeScreen = ({ navigation }: any) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  actionBannerCard: {
+    borderRadius: 16,
+    borderWidth: 1.5,
+    padding: 13,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  actionBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  actionIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  actionBannerTitles: {
+    flex: 1,
+  },
+  actionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 3,
+  },
+  actionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  actionPendingBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  actionPendingBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+  },
+  actionSubtitle: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 1,
+  },
+  actionBannerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 11,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(217, 119, 6, 0.25)',
+  },
+  actionOpenBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 7.5,
+    paddingHorizontal: 12,
+    borderRadius: 9,
+  },
+  actionOpenBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  actionViewBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 9,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionViewBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   header: {
     height: 52,
     flexDirection: 'row',

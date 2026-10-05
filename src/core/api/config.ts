@@ -38,6 +38,8 @@ export const API_ENDPOINTS = {
   claimFile: (claimId: string) => `${API_BASE_URL}/ingress/claims/${claimId}/file`,
   claimDocumentFile: (claimId: string, docId: string) =>
     `${API_BASE_URL}/ingress/claims/${claimId}/documents/${docId}/file`,
+  claimAddDocuments: (claimId: string) =>
+    `${API_BASE_URL}/ingress/claims/${claimId}/documents`,
 
   // Workflow Service
   workflowStart: (claimId: string) => `${API_BASE_URL}/workflow/start/${claimId}`,

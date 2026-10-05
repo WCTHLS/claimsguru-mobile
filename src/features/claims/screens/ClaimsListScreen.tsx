@@ -15,16 +15,19 @@ import { usePipelineStore } from '../../../state/usePipelineStore';
 import { useAuthStore } from '../../../state/useAuthStore';
 import { fetchUserProfile } from '../../../core/api/authApi';
 import { formatINR } from '../../../core/utils/currency';
-import { FileText, Search, Plus } from 'lucide-react-native';
+import { FileText, Search, Plus, AlertTriangle } from 'lucide-react-native';
 import { Routes } from '../../../app/navigation/routes';
 import { UserAvatar } from '../../../core/components/UserAvatar';
+import { ClaimItem } from '../../../mocks/claims.mock';
+import { UploadRequestedDocsModal } from '../components/UploadRequestedDocsModal';
 
 export const ClaimsListScreen = ({ navigation }: any) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { claims, selectClaim, loadClaims, refreshing, backendConnected } = useClaimsStore();
   const { running: pipelineRunning, claimId: pipelineClaimId } = usePipelineStore();
   const { userName, userId, userEmail, gender } = useAuthStore();
   const [activeFilter, setActiveFilter] = useState<'All' | 'Running' | 'FAILED'>('All');
+  const [uploadModalClaim, setUploadModalClaim] = useState<ClaimItem | null>(null);
 
   const getInitials = (name?: string) => {
     if (
@@ -117,11 +120,11 @@ export const ClaimsListScreen = ({ navigation }: any) => {
         label: 'RUNNING',
       };
     }
-    if (st === 'documents_requested' || raw === 'DOCUMENTS_REQUESTED' || raw === 'MODIFICATION_REQUESTED') {
+    if (st === 'documents_requested' || st === 'docs_requested' || raw === 'DOCUMENTS_REQUESTED' || raw === 'MODIFICATION_REQUESTED') {
       return {
         bg: colors.amberSoft,
         text: colors.amber,
-        label: 'DOCS REQUESTED',
+        label: 'DOCS REQ',
       };
     }
     if (st === 'failed' || st === 'FAILED' || raw.includes('FAIL')) {
@@ -240,38 +243,74 @@ export const ClaimsListScreen = ({ navigation }: any) => {
                 const badge = getStatusBadge(claim.status, claim.rawStatus);
                 const isLast = index === filteredClaims.length - 1;
                 const shortId = claim.id.slice(0, 8);
+                const hasDocsReq = Boolean(
+                  claim.hasActionRequest ||
+                  claim.status === 'docs_requested' ||
+                  claim.rawStatus === 'DOCUMENTS_REQUESTED'
+                );
 
                 return (
-                  <TouchableOpacity
+                  <View
                     key={claim.id}
                     style={[
-                      styles.claimRow,
+                      styles.claimCardWrap,
                       !isLast && { borderBottomWidth: 1, borderBottomColor: colors.line2 },
                     ]}
-                    onPress={() => handleClaimPress(claim)}
-                    activeOpacity={0.65}
                   >
-                    <View style={[styles.thumb, { backgroundColor: colors.brandSoft }]}>
-                      <FileText size={18} color={colors.brandDark} />
-                    </View>
+                    <TouchableOpacity
+                      style={styles.claimRow}
+                      onPress={() => handleClaimPress(claim)}
+                      activeOpacity={0.65}
+                    >
+                      <View style={[styles.thumb, { backgroundColor: hasDocsReq ? colors.amberSoft : colors.brandSoft }]}>
+                        {hasDocsReq ? (
+                          <AlertTriangle size={18} color={colors.amber} />
+                        ) : (
+                          <FileText size={18} color={colors.brandDark} />
+                        )}
+                      </View>
 
-                    <View style={styles.claimInfo}>
-                      <Text style={[styles.claimWho, { color: colors.ink }]} numberOfLines={1}>
-                        {claim.who} · {claim.dept}
-                      </Text>
-                      <Text style={[styles.claimMeta, { color: colors.muted }]} numberOfLines={1}>
-                        <Text style={styles.mono}>{shortId}</Text>
-                        {' · '}
-                        {claim.amt ? formatINR(claim.amt) : 'amount pending'}
-                        {' · step: '}
-                        <Text style={styles.mono}>{claim.step}</Text>
-                      </Text>
-                    </View>
+                      <View style={styles.claimInfo}>
+                        <Text style={[styles.claimWho, { color: colors.ink }]} numberOfLines={1}>
+                          {claim.who} · {claim.dept}
+                        </Text>
+                        <Text style={[styles.claimMeta, { color: colors.muted }]} numberOfLines={1}>
+                          <Text style={styles.mono}>{shortId}</Text>
+                          {' · '}
+                          {claim.amt ? formatINR(claim.amt) : 'amount pending'}
+                          {' · step: '}
+                          <Text style={styles.mono}>{claim.step}</Text>
+                        </Text>
+                      </View>
 
-                    <View style={[styles.pillBadge, { backgroundColor: badge.bg }]}>
-                      <Text style={[styles.pillText, { color: badge.text }]}>{badge.label}</Text>
-                    </View>
-                  </TouchableOpacity>
+                      <View style={[styles.pillBadge, { backgroundColor: badge.bg }]}>
+                        <Text style={[styles.pillText, { color: badge.text }]}>{badge.label}</Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    {hasDocsReq && (
+                      <View style={[styles.actionBox, { backgroundColor: isDark ? '#2D2012' : '#FFFBEB', borderColor: colors.amber }]}>
+                        <View style={styles.actionBoxHeader}>
+                          <AlertTriangle size={14} color={colors.amber} style={{ marginRight: 6 }} />
+                          <Text style={[styles.actionBoxTitle, { color: isDark ? '#FDE68A' : '#92400E' }]}>
+                            Insurer requested missing documents
+                          </Text>
+                        </View>
+                        {claim.tpaMessage ? (
+                          <Text style={[styles.actionBoxMessage, { color: isDark ? '#FCD34D' : '#78350F' }]} numberOfLines={2}>
+                            "{claim.tpaMessage}"
+                          </Text>
+                        ) : null}
+                        <TouchableOpacity
+                          style={[styles.actionBoxBtn, { backgroundColor: colors.amber }]}
+                          onPress={() => setUploadModalClaim(claim)}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.actionBoxBtnText}>+ Upload Requested Document</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
                 );
               })
             )}
@@ -292,6 +331,20 @@ export const ClaimsListScreen = ({ navigation }: any) => {
           <Plus size={26} color="#ffffff" strokeWidth={2.5} />
         </TouchableOpacity>
       </View>
+
+      {uploadModalClaim && (
+        <UploadRequestedDocsModal
+          visible={!!uploadModalClaim}
+          claim={uploadModalClaim}
+          navigation={navigation}
+          onClose={() => setUploadModalClaim(null)}
+          onSuccess={() => {
+            setUploadModalClaim(null);
+            loadClaims(true);
+            navigation.navigate(Routes.WorkflowPipeline);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -383,6 +436,45 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     overflow: 'hidden',
+  },
+  claimCardWrap: {
+    paddingBottom: 0,
+  },
+  actionBox: {
+    marginHorizontal: 13,
+    marginBottom: 12,
+    marginTop: -4,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  actionBoxHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  actionBoxTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  actionBoxMessage: {
+    fontSize: 11.5,
+    fontStyle: 'italic',
+    marginBottom: 8,
+    lineHeight: 16,
+  },
+  actionBoxBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  actionBoxBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   claimRow: {
     flexDirection: 'row',

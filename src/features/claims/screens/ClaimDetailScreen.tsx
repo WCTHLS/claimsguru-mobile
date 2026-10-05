@@ -23,15 +23,18 @@ import {
   LayoutGrid,
   Check,
   AlertTriangle,
+  UploadCloud,
 } from 'lucide-react-native';
+import { UploadRequestedDocsModal } from '../components/UploadRequestedDocsModal';
 
 export const ClaimDetailScreen = ({ route, navigation }: any) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const claimId = route?.params?.claimId || '3f8a1d6c-52b4-4e7a-9c11-0d5e2ab77104';
   const { claims, deleteClaim, addOrUpdateClaim } = useClaimsStore();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showUploadDocsModal, setShowUploadDocsModal] = useState(false);
 
   const existingClaim = claims.find(c => c.id === claimId || (claimId && c.id.startsWith(claimId)));
   const fallbackClaim: any = {
@@ -143,6 +146,7 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
 
   const st = (claim.status || '').toLowerCase();
   const rawSt = ((claim as any).rawStatus || '').toUpperCase();
+  const hasDocsRequested = Boolean(claim.hasActionRequest || rawSt === 'DOCUMENTS_REQUESTED' || rawSt === 'MODIFICATION_REQUESTED' || st === 'docs_requested' || st === 'documents_requested');
   const isFailed = st === 'failed' || st === 'FAILED' || rawSt.includes('FAIL');
   const isApproved = st === 'approved' || st === 'settled' || rawSt === 'APPROVED' || rawSt === 'SETTLED';
   const isRejected = st === 'rejected' || rawSt === 'REJECTED';
@@ -153,7 +157,11 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
   let statusColor = colors.green;
   let statusLabel = 'COMPLETE';
 
-  if (isApproved) {
+  if (hasDocsRequested) {
+    statusBg = colors.amberSoft;
+    statusColor = colors.amber;
+    statusLabel = 'DOCS REQUESTED';
+  } else if (isApproved) {
     statusBg = colors.greenSoft;
     statusColor = colors.green;
     statusLabel = st === 'settled' || rawSt === 'SETTLED' ? 'SETTLED' : 'APPROVED';
@@ -312,6 +320,53 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
             </View>
           </View>
 
+          {/* Insurer Document Request Card */}
+          {hasDocsRequested && (
+            <View style={[styles.docsReqCard, { backgroundColor: isDark ? '#2D2012' : '#FFFBEB', borderColor: colors.amber }]}>
+              <View style={styles.docsReqHeader}>
+                <AlertTriangle size={18} color={colors.amber} style={{ marginRight: 8 }} />
+                <Text style={[styles.docsReqTitle, { color: isDark ? '#FDE68A' : '#78350F' }]}>
+                  INSURER DOCUMENT REQUEST
+                </Text>
+              </View>
+
+              <View style={[styles.docsReqCallout, { backgroundColor: isDark ? '#3D2D1A' : '#FEF3C7', borderColor: colors.amberSoft }]}>
+                <Text style={[styles.docsReqCalloutLabel, { color: isDark ? '#FCD34D' : '#92400E' }]}>
+                  MESSAGE FROM {((claim as any).insuranceCompany || 'INSURER').toUpperCase()} CLAIMS REVIEWER:
+                </Text>
+                <Text style={[styles.docsReqCalloutText, { color: isDark ? '#FFFFFF' : '#1E293B' }]}>
+                  "{claim.tpaMessage || 'Please upload the requested missing supporting documents.'}"
+                </Text>
+              </View>
+
+              {claim.tpaRequestedDocs && claim.tpaRequestedDocs.length > 0 && (
+                <View style={styles.docsReqList}>
+                  <Text style={[styles.docsReqListTitle, { color: isDark ? '#FCD34D' : '#92400E' }]}>
+                    Requested Items:
+                  </Text>
+                  <View style={styles.docsReqChips}>
+                    {claim.tpaRequestedDocs.map((item: string, idx: number) => (
+                      <View key={idx} style={[styles.docChip, { backgroundColor: isDark ? '#451A03' : '#FDE68A' }]}>
+                        <Text style={[styles.docChipText, { color: isDark ? '#FDE68A' : '#78350F' }]}>
+                          • {item}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.docsReqUploadBtn, { backgroundColor: colors.brand }]}
+                onPress={() => setShowUploadDocsModal(true)}
+                activeOpacity={0.85}
+              >
+                <UploadCloud size={16} color="#ffffff" style={{ marginRight: 8 }} />
+                <Text style={styles.docsReqUploadBtnText}>Upload Requested Documents</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Summary Card */}
           <View style={[styles.card, styles.summaryCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
             <View style={[styles.kvRow, { borderBottomColor: colors.line }]}>
@@ -457,6 +512,19 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
           </View>
         </View>
       </Modal>
+
+      {showUploadDocsModal && (
+        <UploadRequestedDocsModal
+          visible={showUploadDocsModal}
+          claim={claim}
+          navigation={navigation}
+          onClose={() => setShowUploadDocsModal(false)}
+          onSuccess={() => {
+            setShowUploadDocsModal(false);
+            navigation.navigate(Routes.WorkflowPipeline);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -733,6 +801,73 @@ const styles = StyleSheet.create({
   modalDeleteBtnText: {
     color: '#ffffff',
     fontSize: 13.5,
+    fontWeight: '700',
+  },
+  docsReqCard: {
+    borderRadius: 14,
+    borderWidth: 1.5,
+    padding: 14,
+    marginBottom: 11,
+  },
+  docsReqHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  docsReqTitle: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  docsReqCallout: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 12,
+  },
+  docsReqCalloutLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginBottom: 5,
+  },
+  docsReqCalloutText: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  docsReqList: {
+    marginBottom: 12,
+  },
+  docsReqListTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  docsReqChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  docChip: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  docChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  docsReqUploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  docsReqUploadBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
     fontWeight: '700',
   },
 });

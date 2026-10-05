@@ -27,7 +27,9 @@ import {
   Info,
   AlertTriangle,
   Eye,
+  UploadCloud,
 } from 'lucide-react-native';
+import { UploadRequestedDocsModal } from '../../claims/components/UploadRequestedDocsModal';
 
 const STEP_DATA = [
   { name: 'OCR', defaultMsg: 'Text extracted from 3 documents' },
@@ -38,7 +40,8 @@ const STEP_DATA = [
 ];
 
 export const WorkflowPipelineScreen = ({ navigation }: any) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const [showUploadDocsModal, setShowUploadDocsModal] = useState(false);
   const {
     active,
     running,
@@ -161,9 +164,12 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
 
   const isCompleteState = complete || (!running && !failed && stepStates.every(s => s === 'd'));
   const isRunningState = running || (!complete && !failed && stepStates.some(s => s === 'r'));
+  const hasDocsRequested = Boolean(claimRecord?.hasActionRequest || claimRecord?.status === 'docs_requested' || claimRecord?.rawStatus === 'DOCUMENTS_REQUESTED' || claimRecord?.rawStatus === 'MODIFICATION_REQUESTED');
 
   const currentStepName = failed
     ? 'failed'
+    : hasDocsRequested
+    ? 'docs required'
     : isCompleteState
     ? 'completed'
     : isRunningState
@@ -172,6 +178,8 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
 
   const statusLabel = failed
     ? 'FAILED'
+    : hasDocsRequested
+    ? 'REQUIRED'
     : isCompleteState
     ? 'COMPLETE'
     : isRunningState
@@ -180,6 +188,8 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
 
   const statusBadgeStyle = failed
     ? { bg: colors.redSoft, text: colors.red }
+    : hasDocsRequested
+    ? { bg: colors.amberSoft, text: colors.amber }
     : isCompleteState
     ? { bg: colors.greenSoft, text: colors.green }
     : isRunningState
@@ -333,6 +343,53 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
             })}
           </View>
 
+          {/* Insurer Document Request Card */}
+          {hasDocsRequested && (
+            <View style={[styles.docsReqCard, { backgroundColor: isDark ? '#2D2012' : '#FFFBEB', borderColor: colors.amber }]}>
+              <View style={styles.docsReqHeader}>
+                <AlertTriangle size={18} color={colors.amber} style={{ marginRight: 8 }} />
+                <Text style={[styles.docsReqTitle, { color: isDark ? '#FDE68A' : '#78350F' }]}>
+                  INSURER DOCUMENT REQUEST
+                </Text>
+              </View>
+
+              <View style={[styles.docsReqCallout, { backgroundColor: isDark ? '#3D2D1A' : '#FEF3C7', borderColor: colors.amberSoft }]}>
+                <Text style={[styles.docsReqCalloutLabel, { color: isDark ? '#FCD34D' : '#92400E' }]}>
+                  MESSAGE FROM {((claimRecord as any)?.insuranceCompany || 'INSURER').toUpperCase()} CLAIMS REVIEWER:
+                </Text>
+                <Text style={[styles.docsReqCalloutText, { color: isDark ? '#FFFFFF' : '#1E293B' }]}>
+                  "{claimRecord?.tpaMessage || 'Please upload the requested missing supporting documents.'}"
+                </Text>
+              </View>
+
+              {claimRecord?.tpaRequestedDocs && claimRecord.tpaRequestedDocs.length > 0 && (
+                <View style={styles.docsReqList}>
+                  <Text style={[styles.docsReqListTitle, { color: isDark ? '#FCD34D' : '#92400E' }]}>
+                    Requested Items:
+                  </Text>
+                  <View style={styles.docsReqChips}>
+                    {claimRecord.tpaRequestedDocs.map((item: string, idx: number) => (
+                      <View key={idx} style={[styles.docChip, { backgroundColor: isDark ? '#451A03' : '#FDE68A' }]}>
+                        <Text style={[styles.docChipText, { color: isDark ? '#FDE68A' : '#78350F' }]}>
+                          • {item}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.docsReqUploadBtn, { backgroundColor: colors.brand }]}
+                onPress={() => setShowUploadDocsModal(true)}
+                activeOpacity={0.85}
+              >
+                <UploadCloud size={16} color="#ffffff" style={{ marginRight: 8 }} />
+                <Text style={styles.docsReqUploadBtnText}>Upload Requested Documents</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Preview Uploaded Documents Button / Card */}
           <TouchableOpacity
             style={[styles.card, styles.previewDocsCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
@@ -419,6 +476,18 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
         {/* Shared Bottom Tab Bar */}
         <GlobalBottomTabBar navigation={navigation} activeTab="claims" />
       </View>
+
+      {showUploadDocsModal && claimRecord && (
+        <UploadRequestedDocsModal
+          visible={showUploadDocsModal}
+          claim={claimRecord}
+          onClose={() => setShowUploadDocsModal(false)}
+          onSuccess={() => {
+            setShowUploadDocsModal(false);
+            useClaimsStore.getState().loadClaims(true);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -662,6 +731,73 @@ const styles = StyleSheet.create({
   primaryBtnText: {
     color: '#ffffff',
     fontSize: 13.5,
+    fontWeight: '700',
+  },
+  docsReqCard: {
+    borderRadius: 14,
+    borderWidth: 1.5,
+    padding: 14,
+    marginBottom: 11,
+  },
+  docsReqHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  docsReqTitle: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  docsReqCallout: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 12,
+  },
+  docsReqCalloutLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginBottom: 5,
+  },
+  docsReqCalloutText: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  docsReqList: {
+    marginBottom: 12,
+  },
+  docsReqListTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  docsReqChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  docChip: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  docChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  docsReqUploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  docsReqUploadBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
     fontWeight: '700',
   },
 });
