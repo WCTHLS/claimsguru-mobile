@@ -17,6 +17,7 @@ import { ValidationRulesScreen } from '../../features/brain/screens/ValidationRu
 import { MedicalCodingScreen } from '../../features/brain/screens/MedicalCodingScreen';
 import { WorkflowPipelineScreen } from '../../features/workflow/screens/WorkflowPipelineScreen';
 import { ProfileSettingsScreen } from '../../features/profile/screens/ProfileSettingsScreen';
+import { SearchScreen } from '../../features/search/screens/SearchScreen';
 import { UploadPanelScreen } from '../../features/claims/screens/UploadPanelScreen';
 import { ClaimDetailScreen } from '../../features/claims/screens/ClaimDetailScreen';
 import { DocumentGridScreen } from '../../features/claims/screens/DocumentGridScreen';
@@ -61,11 +62,11 @@ const linking: any = {
         screens: {
           [Routes.ChatTab]: 'chat',
           [Routes.ClaimsTab]: 'claims',
-          [Routes.SearchTab]: 'search',
           [Routes.SessionsTab]: 'sessions',
           [Routes.AllFeaturesTab]: 'features',
         },
       },
+      [Routes.SearchTab]: 'search',
       [Routes.ClaimDetail]: 'claims/:claimId',
       [Routes.Submission]: 'claims/:claimId/submission',
       [Routes.WorkflowPipeline]: 'claims/:claimId/pipeline',
@@ -154,6 +155,7 @@ export const RootNavigator = () => {
         <Stack.Screen name={Routes.SignIn} component={SignInScreen} />
         <Stack.Screen name="MainTabs" component={TabNavigator} />
         <Stack.Screen name={Routes.SignUp} component={SignUpScreen} />
+        <Stack.Screen name={Routes.SearchTab} component={SearchScreen} />
 
         <Stack.Screen
           name={Routes.UploadPanel}

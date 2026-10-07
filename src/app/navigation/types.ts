@@ -5,6 +5,7 @@ export type RootStackParamList = {
   [Routes.SignUp]: undefined;
   MainTabs: undefined;
 
+  [Routes.SearchTab]?: undefined;
   [Routes.ClaimDetail]: { claimId: string };
   [Routes.UploadPanel]: undefined;
   [Routes.WorkflowPipeline]: undefined;
@@ -25,7 +26,6 @@ export type RootStackParamList = {
 export type BottomTabParamList = {
   [Routes.ChatTab]: undefined;
   [Routes.ClaimsTab]: undefined;
-  [Routes.SearchTab]: undefined;
   [Routes.SessionsTab]: undefined;
   [Routes.AllFeaturesTab]: undefined;
 };

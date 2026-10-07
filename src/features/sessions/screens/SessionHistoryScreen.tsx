@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MessageSquare, Clock, ChevronRight, History } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { Routes } from '../../../app/navigation/routes';
+import { AppHeader } from '../../../core/components/AppHeader';
 
 const SESSIONS = [
   { id: 's-9f1e', title: 'Risk review · claim a4f1c9e2', when: 'Today 09:18', count: 4 },
@@ -19,22 +20,10 @@ export const SessionHistoryScreen = ({ navigation }: any) => {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]} edges={['top']}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.surface} />
       
-      <View style={[styles.container, { backgroundColor: colors.bg }]}>
-        {/* Dynamic App Bar */}
-        <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
-          <View style={styles.titleRow}>
-            <View style={[styles.headerIconWrap, { backgroundColor: colors.brandSoft }]}>
-              <History size={18} color={colors.brandDark} />
-            </View>
-            <Text style={[styles.title, { color: colors.ink }]}>Conversation History</Text>
-          </View>
-          <View style={[styles.countBadge, { backgroundColor: colors.brandSoft }]}>
-            <Text style={[styles.countBadgeText, { color: colors.brandDark }]}>
-              {SESSIONS.length} {SESSIONS.length === 1 ? 'session' : 'sessions'}
-            </Text>
-          </View>
-        </View>
+      {/* Unified Top Header Bar */}
+      <AppHeader navigation={navigation} />
 
+      <View style={[styles.container, { backgroundColor: colors.bg }]}>
         {/* Sessions List */}
         <FlatList
           data={SESSIONS}
@@ -44,6 +33,16 @@ export const SessionHistoryScreen = ({ navigation }: any) => {
             { paddingBottom: Math.max(insets.bottom + 24, 40) },
           ]}
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 2 }}>
+              <Text style={{ fontSize: 20, fontWeight: '800', color: colors.ink, letterSpacing: -0.3 }}>History</Text>
+              <View style={[styles.countBadge, { backgroundColor: colors.brandSoft }]}>
+                <Text style={[styles.countBadgeText, { color: colors.brandDark }]}>
+                  {SESSIONS.length} {SESSIONS.length === 1 ? 'session' : 'sessions'}
+                </Text>
+              </View>
+            </View>
+          }
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[styles.sessionCard, { backgroundColor: colors.surface, borderColor: colors.line }]}

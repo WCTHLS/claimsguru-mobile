@@ -24,6 +24,7 @@ import {
   User,
   Activity,
   ArrowRight,
+  ArrowLeft,
   Filter,
 } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
@@ -276,7 +277,18 @@ export const SearchScreen = ({ navigation }: any) => {
       {/* App Bar */}
       <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
         <View style={styles.appBarHeaderRow}>
-          <Text style={[styles.title, { color: colors.ink }]}>Search</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            {navigation?.canGoBack?.() && (
+              <TouchableOpacity
+                onPress={() => navigation.goBack()}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                activeOpacity={0.7}
+              >
+                <ArrowLeft size={22} color={colors.ink} />
+              </TouchableOpacity>
+            )}
+            <Text style={[styles.title, { color: colors.ink }]}>Search</Text>
+          </View>
           <View style={[styles.countBadge, { backgroundColor: colors.brandSoft }]}>
             <Text style={[styles.countBadgeText, { color: colors.brandDark }]}>
               {filteredResults.length} {filteredResults.length === 1 ? 'record' : 'records'}

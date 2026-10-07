@@ -1,6 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { MessageSquare, FileText, Search, Clock, LayoutGrid } from 'lucide-react-native';
+import { Home, FileText, Clock, LayoutGrid } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../core/theme/ThemeContext';
 import { Routes } from './routes';
@@ -9,8 +9,7 @@ import { BottomTabParamList } from './types';
 // Screens
 import { ChatHomeScreen } from '../../features/chat/screens/ChatHomeScreen';
 import { ClaimsListScreen } from '../../features/claims/screens/ClaimsListScreen';
-import { SearchScreen } from '../../features/search/screens/SearchScreen';
-import { SessionHistoryScreen } from '../../features/sessions/screens/SessionHistoryScreen';
+import { DocumentGridScreen } from '../../features/claims/screens/DocumentGridScreen';
 import { AllFeaturesDirectoryScreen } from '../../features/profile/screens/AllFeaturesDirectoryScreen';
 
 const Tab = createBottomTabNavigator<BottomTabParamList>();
@@ -42,9 +41,9 @@ export const TabNavigator = () => {
         name={Routes.ChatTab}
         component={ChatHomeScreen}
         options={{
-          tabBarLabel: 'Chat',
+          tabBarLabel: 'Home',
           tabBarIcon: ({ color, size }) => (
-            <MessageSquare size={size || 20} color={color} strokeWidth={2} />
+            <Home size={size || 20} color={color} strokeWidth={2} />
           ),
         }}
       />
@@ -59,18 +58,8 @@ export const TabNavigator = () => {
         }}
       />
       <Tab.Screen
-        name={Routes.SearchTab}
-        component={SearchScreen}
-        options={{
-          tabBarLabel: 'Search',
-          tabBarIcon: ({ color, size }) => (
-            <Search size={size || 20} color={color} strokeWidth={2} />
-          ),
-        }}
-      />
-      <Tab.Screen
         name={Routes.SessionsTab}
-        component={SessionHistoryScreen}
+        component={DocumentGridScreen}
         options={{
           tabBarLabel: 'History',
           tabBarIcon: ({ color, size }) => (

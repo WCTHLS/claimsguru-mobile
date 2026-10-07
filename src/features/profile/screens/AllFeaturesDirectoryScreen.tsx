@@ -37,6 +37,7 @@ import {
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useAuthStore } from '../../../state/useAuthStore';
 import { ALL_FEATURES, FeatureDef } from '../../chat/screens/ChatHomeScreen';
+import { AppHeader } from '../../../core/components/AppHeader';
 
 export const AllFeaturesDirectoryScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
@@ -95,15 +96,18 @@ export const AllFeaturesDirectoryScreen = ({ navigation }: any) => {
   });
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bg }]} edges={['top']}>
-      <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
-        <Text style={[styles.appBarTitle, { color: colors.ink }]}>All Features</Text>
-        <View style={[styles.countBadge, { backgroundColor: colors.brandSoft }]}>
-          <Text style={[styles.countBadgeText, { color: colors.brandDark }]}>{ALL_FEATURES.length} screens</Text>
-        </View>
-      </View>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]} edges={['top']}>
+      {/* Unified Top Header Bar */}
+      <AppHeader navigation={navigation} />
 
       <ScrollView style={styles.content} contentContainerStyle={styles.scrollInner}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2, paddingHorizontal: 2 }}>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: colors.ink, letterSpacing: -0.3 }}>All Features</Text>
+          <View style={[styles.countBadge, { backgroundColor: colors.brandSoft }]}>
+            <Text style={[styles.countBadgeText, { color: colors.brandDark }]}>{ALL_FEATURES.length} screens</Text>
+          </View>
+        </View>
+
         <Text style={[styles.subNote, { color: colors.muted }]}>
           Role-aware navigation map. Tap any screen to open directly. Active role: <Text style={{ fontWeight: '700', color: colors.brandDark }}>{role}</Text>
         </Text>

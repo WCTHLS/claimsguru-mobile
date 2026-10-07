@@ -18,6 +18,7 @@ import { formatINR } from '../../../core/utils/currency';
 import { FileText, Search, Plus, AlertTriangle } from 'lucide-react-native';
 import { Routes } from '../../../app/navigation/routes';
 import { UserAvatar } from '../../../core/components/UserAvatar';
+import { AppHeader } from '../../../core/components/AppHeader';
 import { ClaimItem } from '../../../mocks/claims.mock';
 import { UploadRequestedDocsModal } from '../components/UploadRequestedDocsModal';
 
@@ -145,26 +146,8 @@ export const ClaimsListScreen = ({ navigation }: any) => {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
 
-      {/* Top App Bar matching Screen 5 */}
-      <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
-        <TouchableOpacity
-          style={styles.avatarBtn}
-          onPress={() => navigation.navigate(Routes.PatientProfile)}
-          activeOpacity={0.7}
-        >
-          <UserAvatar size={34} name={userName} gender={gender} />
-        </TouchableOpacity>
-
-        <Text style={[styles.title, { color: colors.ink }]}>Claims</Text>
-
-        <TouchableOpacity
-          style={styles.iconBtn}
-          onPress={() => navigation.navigate(Routes.SearchTab)}
-          activeOpacity={0.7}
-        >
-          <Search size={20} color={colors.ink} />
-        </TouchableOpacity>
-      </View>
+      {/* Unified Top Header Bar */}
+      <AppHeader navigation={navigation} />
 
       <View style={[styles.container, { backgroundColor: colors.bg }]}>
         <ScrollView
@@ -179,6 +162,18 @@ export const ClaimsListScreen = ({ navigation }: any) => {
             />
           }
         >
+          {/* Page Title & Search Action */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 2 }}>
+            <Text style={{ fontSize: 20, fontWeight: '800', color: colors.ink, letterSpacing: -0.3 }}>Claims</Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate(Routes.SearchTab)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.7}
+            >
+              <Search size={19} color={colors.muted} />
+            </TouchableOpacity>
+          </View>
+
           {/* 3 KPI Stats Row */}
           <View style={styles.kpiGrid}>
             <View style={styles.kpiRow}>

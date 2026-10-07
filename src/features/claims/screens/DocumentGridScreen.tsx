@@ -35,6 +35,7 @@ import { useClaimsStore } from '../../../state/useClaimsStore';
 import { ClaimItem } from '../../../mocks/claims.mock';
 import { formatINR } from '../../../core/utils/currency';
 import { Routes } from '../../../app/navigation/routes';
+import { AppHeader } from '../../../core/components/AppHeader';
 
 export interface ClaimDocSummary {
   key: string;
@@ -200,33 +201,60 @@ export const DocumentGridScreen = ({ navigation, route }: any) => {
     }
   };
 
+  const isTabScreen = route?.name === Routes.SessionsTab;
+
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bg }]} edges={['top']}>
-      {/* Top App Bar: <  Documents  (left-aligned) */}
-      <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.7}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <ChevronLeft size={24} color={colors.ink} strokeWidth={2.4} />
-        </TouchableOpacity>
-        <View style={styles.appBarTitleContainer}>
-          <Text style={[styles.appBarTitle, { color: colors.ink }]} numberOfLines={1}>
-            Documents
-          </Text>
-          <Text style={[styles.appBarSubtitle, { color: colors.muted }]}>
-            {totalDocsCount} files attached across {allClaims.length} claims
-          </Text>
-        </View>
-        <View style={styles.headerRightBadge}>
-          <View style={[styles.docCountPill, { backgroundColor: colors.brandSoft }]}>
-            <FileText size={13} color={colors.brandDark} strokeWidth={2.2} />
-            <Text style={[styles.docCountText, { color: colors.brandDark }]}>{totalDocsCount}</Text>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: isTabScreen ? colors.surface : colors.bg }]} edges={['top']}>
+      {isTabScreen ? (
+        <>
+          {/* Unified Top Header Bar */}
+          <AppHeader navigation={navigation} />
+
+          {/* In-Page Documents Title Bar */}
+          <View style={[styles.tabTitleBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
+            <View style={styles.appBarTitleContainer}>
+              <Text style={[styles.appBarTitle, { color: colors.ink }]} numberOfLines={1}>
+                Documents
+              </Text>
+              <Text style={[styles.appBarSubtitle, { color: colors.muted }]}>
+                {totalDocsCount} files attached across {allClaims.length} claims
+              </Text>
+            </View>
+            <View style={styles.headerRightBadge}>
+              <View style={[styles.docCountPill, { backgroundColor: colors.brandSoft }]}>
+                <FileText size={13} color={colors.brandDark} strokeWidth={2.2} />
+                <Text style={[styles.docCountText, { color: colors.brandDark }]}>{totalDocsCount}</Text>
+              </View>
+            </View>
+          </View>
+        </>
+      ) : (
+        /* Top App Bar with back button when in stack navigation */
+        <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <ChevronLeft size={24} color={colors.ink} strokeWidth={2.4} />
+          </TouchableOpacity>
+          <View style={styles.appBarTitleContainer}>
+            <Text style={[styles.appBarTitle, { color: colors.ink }]} numberOfLines={1}>
+              Documents
+            </Text>
+            <Text style={[styles.appBarSubtitle, { color: colors.muted }]}>
+              {totalDocsCount} files attached across {allClaims.length} claims
+            </Text>
+          </View>
+          <View style={styles.headerRightBadge}>
+            <View style={[styles.docCountPill, { backgroundColor: colors.brandSoft }]}>
+              <FileText size={13} color={colors.brandDark} strokeWidth={2.2} />
+              <Text style={[styles.docCountText, { color: colors.brandDark }]}>{totalDocsCount}</Text>
+            </View>
           </View>
         </View>
-      </View>
+      )}
 
       {/* Search and Filters Header */}
       <View style={[styles.searchFilterContainer, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
@@ -496,6 +524,14 @@ export const DocumentGridScreen = ({ navigation, route }: any) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+  },
+  tabTitleBar: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   appBar: {
     height: 56,

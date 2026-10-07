@@ -234,11 +234,6 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
                 </Text>
               </View>
 
-              <View style={[styles.pill, { backgroundColor: colors.surface2 }]}>
-                <Text style={[styles.pillText, { color: colors.muted }]}>
-                  {claim.claimType || 'Reimbursement'}
-                </Text>
-              </View>
 
               {claim.indexed ? (
                 <View style={[styles.pill, { backgroundColor: colors.greenSoft }]}>
@@ -441,14 +436,6 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
 
         {/* Sticky Bottom Actions Bar */}
         <View style={[styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
-          <TouchableOpacity
-            style={[styles.outlineBtn, { borderColor: colors.line }]}
-            onPress={() => navigation.navigate('MainTabs', { screen: Routes.ChatTab })}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>Ask ClaimsGuru</Text>
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: colors.brand }]}
             onPress={() => navigation.navigate(Routes.BrainPreview, { claimId: claim.id })}
@@ -720,7 +707,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   primaryBtn: {
-    flex: 0.56,
+    flex: 1,
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',

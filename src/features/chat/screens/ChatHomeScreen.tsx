@@ -22,7 +22,6 @@ import {
   Camera,
   Image as ImageIcon,
   FileText,
-  Smartphone,
   ChevronDown,
   ChevronUp,
   ChevronRight,
@@ -51,13 +50,16 @@ import {
   ListFilter,
   Settings,
   Terminal,
+  Home,
   Check,
   X,
+  Eye,
   AlertTriangle,
   UploadCloud,
+  Sparkles,
+  ShieldCheck,
 } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
-import { useChatStore } from '../../../state/useChatStore';
 import { useUploadStore, UploadFileItem } from '../../../state/useUploadStore';
 import { usePipelineStore } from '../../../state/usePipelineStore';
 import { useClaimsStore } from '../../../state/useClaimsStore';
@@ -66,6 +68,7 @@ import { useAuthStore } from '../../../state/useAuthStore';
 import { fetchUserProfile } from '../../../core/api/authApi';
 import { Routes } from '../../../app/navigation/routes';
 import { UserAvatar } from '../../../core/components/UserAvatar';
+import { AppHeader } from '../../../core/components/AppHeader';
 import { DuplicateClaimModal } from '../../../core/components/DuplicateClaimModal';
 import { ClaimItem } from '../../../mocks/claims.mock';
 import { UploadRequestedDocsModal } from '../../claims/components/UploadRequestedDocsModal';
@@ -90,10 +93,10 @@ export interface FeatureDef {
 export const ALL_FEATURES: FeatureDef[] = [
   { id: 'signin', g: 'Access', nav: Routes.SignIn, n: 'Sign in', d: 'Patient portal sign in · local & Entra', iconName: 'lock' },
   { id: 'signup', g: 'Access', nav: Routes.SignUp, n: 'Register', d: 'Patient account creation · insurance profile', iconName: 'user-plus' },
-  { id: 'chat', g: 'Chat', nav: Routes.ChatTab, n: 'Chat', d: 'AI claims assistant & document Q&A', iconName: 'message-square' },
-  { id: 'sessions', g: 'Chat', nav: Routes.SessionsTab, n: 'History', d: 'Conversation history & saved sessions', iconName: 'clock' },
+  { id: 'home', g: 'Main', nav: Routes.ChatTab, n: 'Home', d: 'Patient portal dashboard & claim uploads', iconName: 'home' },
+  { id: 'sessions', g: 'Main', nav: Routes.SessionsTab, n: 'History', d: 'Inspect & manage attached claim documents', iconName: 'clock' },
   { id: 'claims', g: 'Claims', nav: Routes.ClaimsTab, n: 'Claims', d: 'Active & processed claims list', iconName: 'file-text' },
-  { id: 'upload', g: 'Claims', nav: Routes.UploadPanel, n: 'Upload', d: 'Camera · gallery · files · screenshot', iconName: 'upload' },
+  { id: 'upload', g: 'Claims', nav: Routes.UploadPanel, n: 'Upload', d: 'Camera · gallery · files', iconName: 'upload' },
   { id: 'processing', g: 'Claims', nav: Routes.WorkflowPipeline, n: 'Workflow', d: 'OCR → Parse → Code → Predict → Validate', iconName: 'layers' },
   { id: 'detail', g: 'Claims', nav: Routes.ClaimDetail, n: 'Claim detail', d: 'Summary, policy info & diagnosis', iconName: 'file-text', params: { claimId: 'a4f1c9e2' } },
   { id: 'brainpreview', g: 'AI Brain', nav: Routes.BrainPreview, n: 'AI Brain', d: 'KPI strip, expenses, risk & readiness', iconName: 'cpu', params: { claimId: 'a4f1c9e2' } },
@@ -101,7 +104,6 @@ export const ALL_FEATURES: FeatureDef[] = [
   { id: 'fraud', g: 'AI Brain', nav: Routes.FraudDetail, n: 'Fraud', d: '6 signal families · hybrid risk score', iconName: 'shield-alert', params: { claimId: 'a4f1c9e2' } },
   { id: 'validation', g: 'AI Brain', nav: Routes.ValidationRules, n: 'Validation', d: 'R001–R011 deterministic rules checklist', iconName: 'check-square', params: { claimId: 'a4f1c9e2' } },
   { id: 'coding', g: 'AI Brain', nav: Routes.MedicalCoding, n: 'Coding', d: 'ICD-10 & CPT procedure code review', iconName: 'code', params: { claimId: 'a4f1c9e2' } },
-  { id: 'docs', g: 'Documents', nav: Routes.DocumentGrid, n: 'Documents', d: 'Manage & inspect attached files', iconName: 'folder', params: { claimId: 'a4f1c9e2' } },
   { id: 'patient', g: 'Patient', nav: Routes.PatientProfile, n: 'Patient', d: 'Demographics, policy & KYC details', iconName: 'user' },
   { id: 'activity', g: 'Patient', nav: Routes.PatientActivity, n: 'Activity', d: 'Audit history & state change diffs', iconName: 'clock' },
   { id: 'search', g: 'Other', nav: Routes.SearchTab, n: 'Search', d: 'Full-text & semantic vector search', iconName: 'search' },
@@ -109,21 +111,33 @@ export const ALL_FEATURES: FeatureDef[] = [
   { id: 'profile', g: 'Other', nav: Routes.ProfileSettings, n: 'Profile', d: 'User roles, preferences & settings', iconName: 'settings' },
 ];
 
+const STEP_DATA = [
+  { name: 'OCR', defaultMsg: 'Text extracted from claim documents' },
+  { name: 'Parse', defaultMsg: 'Parsed patient, doctor, hospital & billing fields' },
+  { name: 'Code', defaultMsg: 'ICD-10 & CPT medical codes suggested' },
+  { name: 'Predict', defaultMsg: 'Risk rejection & anomaly probability scored' },
+  { name: 'Validate', defaultMsg: 'Deterministic validation & compliance checks' },
+];
+
 export const ChatHomeScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { colors, isDark, toggleTheme } = useTheme();
-  const { messages, sendMessage } = useChatStore();
   const { files, addFile, addRealFile, removeFile, clearFiles, uploadToBackend } = useUploadStore();
   const {
     active: pipelineActive,
     running: pipelineRunning,
+    failed: pipelineFailed,
     complete: pipelineComplete,
     stepStates: pipelineStepStates,
+    stepMessages: pipelineStepMessages,
     claimId: pipelineClaimId,
     progressPercentage: pipelineProgress,
     totalSeconds: pipelineSeconds,
     claimWho: pipelineClaimWho,
+    attempt: pipelineAttempt,
     startPipeline,
+    retryPipeline,
+    resetPipeline,
   } = usePipelineStore();
   const { role, userName, userEmail, userId, signOut, gender, setUserDetails } = useAuthStore();
 
@@ -132,6 +146,13 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       fetchUserProfile(userId || userEmail).catch(() => {});
     }
   }, [userEmail, userId]);
+
+  // Reset any stale idle pipeline state when mounting Home screen
+  useEffect(() => {
+    if (!usePipelineStore.getState().running) {
+      usePipelineStore.getState().resetPipeline();
+    }
+  }, []);
 
   // Once claim processing completes, clear the upload section of the previous claim's files
   useEffect(() => {
@@ -159,7 +180,6 @@ export const ChatHomeScreen = ({ navigation }: any) => {
   const userInitials = getInitials(userName);
   const firstName = userName && userName.toLowerCase() !== 'sample' ? userName.split(' ')[0] : 'Jhon';
 
-  const [input, setInput] = useState('');
   const [isCardExpanded, setIsCardExpanded] = useState(true);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showFeaturesModal, setShowFeaturesModal] = useState(false);
@@ -167,6 +187,8 @@ export const ChatHomeScreen = ({ navigation }: any) => {
   const [isReprocessing, setIsReprocessing] = useState(false);
   const { claims, selectClaim, loadClaims } = useClaimsStore();
   const [uploadModalClaim, setUploadModalClaim] = useState<ClaimItem | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [pipelineStarting, setPipelineStarting] = useState(false);
 
   useEffect(() => {
     loadClaims().catch(() => {});
@@ -177,8 +199,52 @@ export const ChatHomeScreen = ({ navigation }: any) => {
   );
   const topActionClaim = actionRequiredClaims[0];
 
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [pipelineStarting, setPipelineStarting] = useState(false);
+  const isPipelineRunning = Boolean(
+    pipelineStarting ||
+    pipelineRunning ||
+    (!pipelineComplete && !pipelineFailed && pipelineStepStates.some(s => s === 'r'))
+  );
+
+  const isPipelineComplete = Boolean(pipelineComplete && !isPipelineRunning);
+
+  // The Claim Processing section is ONLY rendered when a claim is actively being processed,
+  // or was just processed in the current session.
+  // When idle and no claim is running, this is FALSE so the home screen stays completely clean!
+  const isClaimProcessingActive = Boolean(
+    isPipelineRunning ||
+    (isPipelineComplete && Boolean(pipelineClaimId) && (pipelineProgress >= 100 || pipelineStepStates.every(s => s === 'd'))) ||
+    (pipelineFailed && Boolean(pipelineClaimId))
+  );
+
+  const activeProcessingClaimId = isClaimProcessingActive ? (pipelineClaimId || null) : null;
+  const activeProcessingClaim = activeProcessingClaimId
+    ? (claims || []).find(c => c.id === activeProcessingClaimId) || null
+    : null;
+
+  const processingStatusLabel = pipelineFailed
+    ? 'FAILED'
+    : isPipelineComplete
+    ? 'COMPLETE'
+    : isPipelineRunning
+    ? 'RUNNING'
+    : 'READY';
+
+  const processingStatusBg = pipelineFailed
+    ? colors.redSoft
+    : isPipelineComplete
+    ? colors.greenSoft
+    : isPipelineRunning
+    ? colors.brandSoft
+    : colors.surface2;
+
+  const processingStatusText = pipelineFailed
+    ? colors.red
+    : isPipelineComplete
+    ? colors.green
+    : isPipelineRunning
+    ? colors.brandDark
+    : colors.muted;
+
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -338,13 +404,6 @@ export const ChatHomeScreen = ({ navigation }: any) => {
     setIsCardExpanded(!isCardExpanded);
   };
 
-  const handleSend = () => {
-    if (input.trim()) {
-      sendMessage(input.trim());
-      setInput('');
-    }
-  };
-
   const handleStartPipeline = async (force: boolean = false) => {
     if (files.length === 0) {
       showToast('Please upload claim documents first');
@@ -415,16 +474,14 @@ export const ChatHomeScreen = ({ navigation }: any) => {
         targetClaimId
       );
 
-      sendMessage(`Uploaded ${filesToProcess.length} documents — running backend pipeline for claim ${targetClaimId.slice(0, 8)}`);
       setPipelineStarting(false);
-      navigation.navigate(Routes.WorkflowPipeline);
+      showToast('Processing claim on Home page…');
     } catch (err: any) {
       console.warn('[ChatHomeScreen] Pipeline upload failed:', err);
       setPipelineStarting(false);
       setIsReprocessing(false);
       const errMsg = err?.message || 'Could not upload claim documents to backend.';
       Alert.alert('Upload Error', `${errMsg}\n\nPlease check connection or credentials and try again.`);
-      sendMessage(`Upload failed: ${errMsg}`);
     }
   };
 
@@ -434,7 +491,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       return;
     }
     if (feat.nav === Routes.ChatTab) {
-      showToast('Already on Chat Home');
+      showToast('Already on Home');
       return;
     }
     if (showFeaturesModal) {
@@ -445,6 +502,8 @@ export const ChatHomeScreen = ({ navigation }: any) => {
 
   const renderFeatureIcon = (name: string, color: string, size = 16) => {
     switch (name) {
+      case 'home':
+        return <Home size={size} color={color} />;
       case 'lock':
         return <Lock size={size} color={color} />;
       case 'user-plus':
@@ -506,49 +565,143 @@ export const ChatHomeScreen = ({ navigation }: any) => {
   return (
     <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
       {/* Header Bar */}
-      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
-        <View style={styles.headerLeft}>
-          <Image
-            source={
-              isDark
-                ? require('../../../../assets/ClaimsGuruWhite_txt.png')
-                : require('../../../../assets/ClaimsGuruBlack_txt.png')
-            }
-            style={styles.headerLogo}
-            resizeMode="contain"
-            accessibilityLabel="ClaimsGuru"
-          />
-        </View>
-
-        <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.avatarBtn}
-            onPress={() => navigation.navigate(Routes.PatientProfile)}
-            accessibilityLabel="Patient profile"
-            activeOpacity={0.7}
-          >
-            <UserAvatar size={34} name={userName} gender={gender} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Status & Context Bar */}
-      {files.length > 0 && (
-        <View style={[styles.contextBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.contextScroll}>
-            <View style={[styles.contextBadge, { backgroundColor: '#e6f4f1' }]}>
-              <Text style={[styles.contextBadgeText, { color: '#0d9488' }]}>
-                Context · {pipelineClaimId ? `claim ${pipelineClaimId.slice(0, 8)}` : 'new claim'} · {files.length} doc{files.length === 1 ? '' : 's'}
-              </Text>
-            </View>
-            <View style={[styles.contextBadgePlain]}>
-              <Text style={[styles.contextBadgePlainText, { color: colors.muted }]}>ollama · llama-3</Text>
-            </View>
-          </ScrollView>
-        </View>
-      )}
+      <AppHeader navigation={navigation} />
 
       <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollInner} keyboardShouldPersistTaps="handled">
+        {/* Upload Claim Documents Card */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+          <TouchableOpacity style={styles.cardHeader} onPress={toggleCard} activeOpacity={0.7}>
+            <View style={styles.cardHeaderLeft}>
+              <Upload size={18} color={colors.ink} style={{ marginRight: 8 }} />
+              <Text style={[styles.cardTitle, { color: colors.ink }]}>Upload claim documents</Text>
+              <View style={[styles.fileBadge, { backgroundColor: colors.surface2 }]}>
+                <Text style={[styles.fileBadgeText, { color: colors.muted }]}>{files.length} {files.length === 1 ? 'file' : 'files'}</Text>
+              </View>
+              {files.length > 0 && (
+                <TouchableOpacity
+                  onPress={clearFiles}
+                  style={{ marginLeft: 10, paddingHorizontal: 6, paddingVertical: 2 }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={{ fontSize: 11.5, color: colors.muted, textDecorationLine: 'underline' }}>Clear</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            {isCardExpanded ? <ChevronUp size={18} color={colors.muted} /> : <ChevronDown size={18} color={colors.muted} />}
+          </TouchableOpacity>
+
+          {isCardExpanded && (
+            <View style={styles.cardContent}>
+              {/* 3 Action Buttons Grid */}
+              <View style={styles.actionGrid}>
+                <TouchableOpacity
+                  style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
+                  onPress={handleCameraPick}
+                  activeOpacity={0.75}
+                >
+                  <Camera size={18} color={colors.muted} style={{ marginBottom: 4 }} />
+                  <Text style={[styles.srcBtnText, { color: colors.ink }]}>Camera</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
+                  onPress={handlePickGallery}
+                  activeOpacity={0.75}
+                >
+                  <ImageIcon size={18} color={colors.muted} style={{ marginBottom: 4 }} />
+                  <Text style={[styles.srcBtnText, { color: colors.ink }]}>Gallery</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
+                  onPress={() => handlePickFiles('.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx')}
+                  activeOpacity={0.75}
+                >
+                  <FileText size={18} color={colors.muted} style={{ marginBottom: 4 }} />
+                  <Text style={[styles.srcBtnText, { color: colors.ink }]}>Files</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Uploaded File List or Helper Subtitle */}
+              {files.length > 0 ? (
+                files.map((file: UploadFileItem) => {
+                  const name = file.name;
+                  const status = file.status || 'ready';
+
+                  return (
+                    <View key={file.id} style={[styles.fileRow, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
+                      <View style={styles.fileRowLeft}>
+                        <View style={styles.docIconBox}>
+                          <FileText size={16} color="#0d9488" />
+                        </View>
+                        <Text style={[styles.fileNameText, { color: colors.ink }]} numberOfLines={1} ellipsizeMode="middle">
+                          {name}
+                        </Text>
+                      </View>
+
+                      <View style={styles.fileRowRight}>
+                        <View style={[styles.readyTag, { backgroundColor: '#e6f7f0' }]}>
+                          <Text style={[styles.readyTagText, { color: '#047857' }]}>{status}</Text>
+                        </View>
+
+                        <TouchableOpacity
+                          onPress={() => removeFile(file.id)}
+                          style={styles.fileRemoveBtn}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityLabel="Remove file"
+                        >
+                          <X size={14} color={colors.muted} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })
+              ) : (
+                <Text style={[styles.uploadHelperText, { color: colors.muted }]}>
+                  Camera · Gallery · Files — upload claim documents to enable pipeline.
+                </Text>
+              )}
+
+              {/* Bottom Card Actions */}
+              <View style={styles.cardActions}>
+                <TouchableOpacity
+                  style={[
+                    styles.solidTealBtn,
+                    {
+                      flex: 1,
+                      backgroundColor: files.length > 0 ? '#0d9488' : isDark ? '#1e293b' : '#e2e8f0',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                    },
+                    (pipelineStarting || files.length === 0) && { opacity: files.length === 0 ? 0.7 : 0.8 },
+                  ]}
+                  onPress={() => handleStartPipeline(false)}
+                  disabled={files.length === 0 || pipelineStarting}
+                  activeOpacity={0.8}
+                >
+                  {pipelineStarting ? (
+                    <>
+                      <ActivityIndicator size="small" color="#ffffff" />
+                      <Text style={styles.solidTealBtnText}>Starting pipeline…</Text>
+                    </>
+                  ) : (
+                    <Text
+                      style={[
+                        styles.solidTealBtnText,
+                        files.length === 0 && { color: isDark ? '#64748b' : '#94a3b8' },
+                      ]}
+                    >
+                      Start pipeline
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
+
         {/* Prominent Action Required Banner if ANY claim has requested documents */}
         {topActionClaim && (
           <View style={[styles.actionBannerCard, { backgroundColor: isDark ? '#2D2012' : '#FFFBEB', borderColor: colors.amber }]}>
@@ -597,320 +750,298 @@ export const ChatHomeScreen = ({ navigation }: any) => {
           </View>
         )}
 
-        {/* Upload Claim Documents Card */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <TouchableOpacity style={styles.cardHeader} onPress={toggleCard} activeOpacity={0.7}>
-            <View style={styles.cardHeaderLeft}>
-              <Upload size={18} color={colors.ink} style={{ marginRight: 8 }} />
-              <Text style={[styles.cardTitle, { color: colors.ink }]}>Upload claim documents</Text>
-              <View style={[styles.fileBadge, { backgroundColor: colors.surface2 }]}>
-                <Text style={[styles.fileBadgeText, { color: colors.muted }]}>{files.length} {files.length === 1 ? 'file' : 'files'}</Text>
-              </View>
-              {files.length > 0 && (
-                <TouchableOpacity
-                  onPress={clearFiles}
-                  style={{ marginLeft: 10, paddingHorizontal: 6, paddingVertical: 2 }}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={{ fontSize: 11.5, color: colors.muted, textDecorationLine: 'underline' }}>Clear</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            {isCardExpanded ? <ChevronUp size={18} color={colors.muted} /> : <ChevronDown size={18} color={colors.muted} />}
-          </TouchableOpacity>
-
-          {isCardExpanded && (
-            <View style={styles.cardContent}>
-              {/* 4 Action Buttons Grid */}
-              <View style={styles.actionGrid}>
-                <TouchableOpacity
-                  style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                  onPress={handleCameraPick}
-                  activeOpacity={0.75}
-                >
-                  <Camera size={18} color={colors.muted} style={{ marginBottom: 4 }} />
-                  <Text style={[styles.srcBtnText, { color: colors.ink }]}>Camera</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                  onPress={handlePickGallery}
-                  activeOpacity={0.75}
-                >
-                  <ImageIcon size={18} color={colors.muted} style={{ marginBottom: 4 }} />
-                  <Text style={[styles.srcBtnText, { color: colors.ink }]}>Gallery</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                  onPress={() => handlePickFiles('.pdf,.jpg,.jpeg,.png,.doc,.docx,.csv,.xlsx')}
-                  activeOpacity={0.75}
-                >
-                  <FileText size={18} color={colors.muted} style={{ marginBottom: 4 }} />
-                  <Text style={[styles.srcBtnText, { color: colors.ink }]}>Files</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                  onPress={handlePickGallery}
-                  activeOpacity={0.75}
-                >
-                  <Smartphone size={18} color={colors.muted} style={{ marginBottom: 4 }} />
-                  <Text style={[styles.srcBtnText, { color: colors.ink }]}>Screenshot</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Uploaded File List or Helper Subtitle */}
-              {files.length > 0 ? (
-                files.map((file: UploadFileItem) => {
-                  const name = file.name;
-                  const docType = file.docType || 'policy_card';
-                  const score = file.conf ? file.conf.toFixed(2) : '0.90';
-                  const status = file.status || 'ready';
-
-                  return (
-                    <View key={file.id} style={[styles.fileRow, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
-                      <View style={styles.fileRowLeft}>
-                        <View style={styles.docIconBox}>
-                          <FileText size={16} color="#0d9488" />
-                        </View>
-                        <Text style={[styles.fileNameText, { color: colors.ink }]} numberOfLines={1} ellipsizeMode="middle">
-                          {name}
-                        </Text>
-                      </View>
-
-                      <View style={styles.fileRowRight}>
-                        <View style={[styles.purpleTag, { backgroundColor: '#f3e8ff' }]}>
-                          <Text style={[styles.purpleTagText, { color: '#7e22ce' }]}>{`${docType} - ${score}`}</Text>
-                        </View>
-
-                        <View style={[styles.readyTag, { backgroundColor: '#e6f7f0' }]}>
-                          <Text style={[styles.readyTagText, { color: '#047857' }]}>{status}</Text>
-                        </View>
-
-                        <TouchableOpacity
-                          onPress={() => removeFile(file.id)}
-                          style={styles.fileRemoveBtn}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          accessibilityLabel="Remove file"
-                        >
-                          <X size={14} color={colors.muted} />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  );
-                })
-              ) : (
-                <Text style={[styles.uploadHelperText, { color: colors.muted }]}>
-                  Camera · Gallery · Files · Screenshot — upload claim documents to enable pipeline.
+        {/* Claim Processing Section - ONLY when pipeline is active/running/completed/failed */}
+        {isClaimProcessingActive ? (
+          <>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={[styles.sectionHeading, { color: colors.ink }]}>Claim Processing</Text>
+              <View style={[styles.statusPill, { backgroundColor: processingStatusBg }]}>
+                <Text style={[styles.statusPillText, { color: processingStatusText }]}>
+                  {processingStatusLabel}
                 </Text>
-              )}
-
-              {/* Bottom Card Actions */}
-              <View style={styles.cardActions}>
-                <TouchableOpacity
-                  style={[styles.outlineBtn, { borderColor: colors.line }]}
-                  onPress={() => navigation.navigate(Routes.WorkflowPipeline)}
-                >
-                  <Text style={[styles.outlineBtnText, { color: '#0d9488' }]}>Expand panel</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.solidTealBtn,
-                    {
-                      backgroundColor: files.length > 0 ? '#0d9488' : isDark ? '#1e293b' : '#e2e8f0',
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 6,
-                    },
-                    (pipelineStarting || files.length === 0) && { opacity: files.length === 0 ? 0.7 : 0.8 },
-                  ]}
-                  onPress={() => handleStartPipeline(false)}
-                  disabled={files.length === 0 || pipelineStarting}
-                  activeOpacity={0.8}
-                >
-                  {pipelineStarting ? (
-                    <>
-                      <ActivityIndicator size="small" color="#ffffff" />
-                      <Text style={styles.solidTealBtnText}>Starting pipeline…</Text>
-                    </>
-                  ) : (
-                    <Text
-                      style={[
-                        styles.solidTealBtnText,
-                        files.length === 0 && { color: isDark ? '#64748b' : '#94a3b8' },
-                      ]}
-                    >
-                      Start pipeline
-                    </Text>
-                  )}
-                </TouchableOpacity>
               </View>
             </View>
-          )}
-        </View>
 
-        {/* Pipeline Run Output Card */}
-        {(pipelineActive || pipelineRunning || pipelineComplete || messages.some(m => m.text.includes('pipeline'))) && (
-          <TouchableOpacity
-            style={[styles.pipelineCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
-            onPress={() => navigation.navigate(Routes.WorkflowPipeline)}
-            activeOpacity={0.85}
-          >
-            <View style={styles.pipelineHeader}>
-              <Text style={[styles.pipelineTitle, { color: colors.ink }]}>
-                {pipelineRunning ? 'Pipeline · claim ' : 'Latest claim processed · claim '}
-                <Text style={{ fontWeight: '700' }}>{pipelineClaimId ? pipelineClaimId.slice(0, 8) : 'running'}</Text>
-              </Text>
-              <Text style={[styles.pipelineSub, { color: colors.muted }]}>
-                {pipelineRunning ? `Running live backend pipeline (${pipelineProgress}%)` : 'OCR → Parse → Code → Predict → Validate'}
-              </Text>
-            </View>
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+              {/* Claim Meta Header */}
+              <View style={styles.claimMetaRow}>
+                <View style={[styles.docThumb, { backgroundColor: colors.brandSoft }]}>
+                  <FileText size={18} color={colors.brandDark} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={[styles.claimIdText, { color: colors.ink }]} numberOfLines={1}>
+                    Claim {activeProcessingClaimId ? `#${activeProcessingClaimId.replace(/-/g, '').slice(0, 8).toUpperCase()}` : 'In Progress'}
+                    {activeProcessingClaim?.who ? ` · ${activeProcessingClaim.who}` : ''}
+                  </Text>
+                  <Text style={[styles.claimSubText, { color: colors.muted }]}>
+                    {isPipelineRunning
+                      ? `Running live backend pipeline (${pipelineProgress}%)`
+                      : isPipelineComplete
+                      ? `Completed in ${pipelineSeconds ? `${pipelineSeconds}s` : '1.8s'}`
+                      : pipelineFailed
+                      ? 'Pipeline failed · tap retry to rerun'
+                      : `${activeProcessingClaim?.diagnosis || 'Processing Details'} · ${activeProcessingClaim?.hospital || 'Hospital Record'}`}
+                  </Text>
+                </View>
+              </View>
 
-            {/* 5-Step Progress Indicators */}
-            <View style={styles.progressSegments}>
-              {pipelineStepStates.map((st, i) => (
+              {/* Progress Bar */}
+              <View style={[styles.progressTrack, { backgroundColor: colors.line2 }]}>
                 <View
-                  key={i}
                   style={[
-                    styles.segment,
+                    styles.progressBar,
                     {
-                      backgroundColor: st === 'd' ? '#0d9488' : st === 'r' ? '#f59e0b' : colors.line,
+                      backgroundColor: pipelineFailed ? colors.red : isPipelineComplete ? colors.green : colors.brand,
+                      width: `${isPipelineComplete ? 100 : Math.max(pipelineProgress, isPipelineRunning ? 20 : 10)}%`,
                     },
                   ]}
                 />
-              ))}
+              </View>
+
+              {/* 5-Step Stepper Rail */}
+              <View style={styles.stepperContainer}>
+                {STEP_DATA.map((step, idx) => {
+                  const state = pipelineStepStates[idx] || (isPipelineComplete ? 'd' : idx === 0 ? (isPipelineRunning ? 'r' : 'q') : 'q');
+                  const isDone = state === 'd';
+                  const isRunning = state === 'r';
+                  const isFailed = state === 'f';
+                  const isLast = idx === STEP_DATA.length - 1;
+                  const stepDesc = pipelineStepMessages[idx] || step.defaultMsg;
+
+                  return (
+                    <View key={step.name} style={styles.stepRow}>
+                      {!isLast && (
+                        <View
+                          style={[
+                            styles.rail,
+                            { backgroundColor: isDone ? colors.brand : colors.line },
+                          ]}
+                        />
+                      )}
+
+                      <View
+                        style={[
+                          styles.bullet,
+                          {
+                            backgroundColor: isDone
+                              ? colors.brand
+                              : isFailed
+                              ? colors.red
+                              : colors.surface,
+                            borderColor: isDone || isRunning ? colors.brand : colors.line,
+                          },
+                        ]}
+                      >
+                        {isDone ? (
+                          <Check size={12} color="#ffffff" strokeWidth={3} />
+                        ) : isFailed ? (
+                          <X size={12} color="#ffffff" strokeWidth={3} />
+                        ) : isRunning ? (
+                          <ActivityIndicator size="small" color={colors.brand} />
+                        ) : (
+                          <Text style={[styles.bulletNum, { color: colors.muted }]}>{idx + 1}</Text>
+                        )}
+                      </View>
+
+                      <View style={styles.stepInfo}>
+                        <Text style={[styles.stepTitle, { color: colors.ink }]}>{step.name}</Text>
+                        <Text style={[styles.stepDesc, { color: isRunning ? colors.brandDark : colors.muted }]}>
+                          {stepDesc}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+
+              {/* Action Buttons */}
+              <View style={styles.processingActionRow}>
+                {activeProcessingClaimId && (
+                  <TouchableOpacity
+                    style={[styles.processingPrimaryBtn, { backgroundColor: colors.brand, flex: 1 }]}
+                    onPress={() => {
+                      selectClaim(activeProcessingClaimId);
+                      navigation.navigate(Routes.ClaimDetail, { claimId: activeProcessingClaimId });
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.processingPrimaryBtnText}>View Claim Details →</Text>
+                  </TouchableOpacity>
+                )}
+
+                {isPipelineComplete && (
+                  <TouchableOpacity
+                    style={[styles.processingOutlineBtn, { borderColor: colors.line, marginLeft: 8 }]}
+                    onPress={() => resetPipeline()}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.processingOutlineBtnText, { color: colors.muted }]}>Dismiss</Text>
+                  </TouchableOpacity>
+                )}
+
+                {pipelineFailed && (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.processingOutlineBtn, { borderColor: colors.red }]}
+                      onPress={retryPipeline}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.processingOutlineBtnText, { color: colors.red }]}>Retry</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.processingOutlineBtn, { borderColor: colors.line, marginLeft: 8 }]}
+                      onPress={() => resetPipeline()}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.processingOutlineBtnText, { color: colors.muted }]}>Dismiss</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            </View>
+          </>
+        ) : (!claims || claims.length === 0) ? (
+          /* Clean Mobile Onboarding Guide - Referenced from website 3-step flow */
+          <View style={[styles.guideCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <View style={styles.guideHeader}>
+              <View style={[styles.guideBadge, { backgroundColor: colors.brandSoft, borderColor: colors.line }]}>
+                <Sparkles size={12} color={colors.brandDark} />
+                <Text style={[styles.guideBadgeText, { color: colors.brandDark }]}>
+                  AI-Powered Medical Claim Engine
+                </Text>
+              </View>
+              <Text style={[styles.guideTitle, { color: colors.ink }]}>
+                Audit &amp; Settle in 3 Steps
+              </Text>
+              <Text style={[styles.guideSubtitle, { color: colors.muted }]}>
+                Upload hospital final bills or discharge summaries above to activate real-time OCR extraction and 1-click settlement reports.
+              </Text>
             </View>
 
-            <Text style={[styles.pipelineDoneText, { color: colors.ink }]}>
-              {pipelineComplete
-                ? `Done in ${pipelineSeconds ? `${pipelineSeconds} s` : ''} · ${pipelineClaimWho || 'Completed'}`
-                : `Processing backend pipeline (${pipelineSeconds ? `${pipelineSeconds}s · ` : ''}${pipelineProgress}%)`}
-            </Text>
-          </TouchableOpacity>
-        )}
-
-
-        {/* Welcome Starter Card */}
-        <View style={[styles.welcomeCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <Text style={[styles.welcomeText, { color: colors.ink }]}>
-            <Text style={{ fontWeight: '700' }}>Hi {firstName}</Text> — ask about any claim, or upload documents above to start a new one. Answers stream from the claim's indexed documents.
-          </Text>
-
-          {/* 2x2 Grid of Starter Prompt Boxes */}
-          <View style={styles.promptGrid}>
-            <TouchableOpacity
-              style={[styles.promptGridBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}
-              onPress={() => sendMessage('Summarise this claim')}
-            >
-              <Text style={[styles.promptGridText, { color: colors.ink }]}>Summarise this claim</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.promptGridBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}
-              onPress={() => sendMessage('What documents are missing?')}
-            >
-              <Text style={[styles.promptGridText, { color: colors.ink }]}>What documents are missing?</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.promptGridBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}
-              onPress={() => sendMessage('Why is the risk medium?')}
-            >
-              <Text style={[styles.promptGridText, { color: colors.ink }]}>Why is the risk medium?</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.promptGridBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}
-              onPress={() => sendMessage('Which rules failed?')}
-            >
-              <Text style={[styles.promptGridText, { color: colors.ink }]}>Which rules failed?</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* User Message Bubbles */}
-        {messages.map(msg => (
-          <React.Fragment key={msg.id}>
-            {msg.sender === 'user' ? (
-              <View style={styles.userBubbleWrapper}>
-                <View style={[styles.userBubble, { backgroundColor: '#0d9488' }]}>
-                  <Text style={styles.userBubbleText}>{msg.text}</Text>
+            <View style={styles.guideStepsList}>
+              <View style={styles.guideStepRow}>
+                <View style={[styles.guideStepNum, { backgroundColor: colors.brandSoft }]}>
+                  <Text style={[styles.guideStepNumText, { color: colors.brandDark }]}>1</Text>
+                </View>
+                <View style={styles.guideStepContent}>
+                  <Text style={[styles.guideStepTitle, { color: colors.ink }]}>Upload Claim Documents</Text>
+                  <Text style={[styles.guideStepDesc, { color: colors.muted }]}>
+                    Scan multi-page hospital bills, discharge summaries, or pharmacy receipts.
+                  </Text>
                 </View>
               </View>
-            ) : (
-              <View style={[styles.assistantCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                <Text style={[styles.assistantTitle, { color: colors.ink }]}>{msg.text}</Text>
-                {msg.sources && <Text style={[styles.sourceText, { color: colors.muted }]}>Sources: {msg.sources}</Text>}
+
+              <View style={styles.guideStepRow}>
+                <View style={[styles.guideStepNum, { backgroundColor: isDark ? '#164e63' : '#e0f2fe' }]}>
+                  <Text style={[styles.guideStepNumText, { color: isDark ? '#38bdf8' : '#0284c7' }]}>2</Text>
+                </View>
+                <View style={styles.guideStepContent}>
+                  <Text style={[styles.guideStepTitle, { color: colors.ink }]}>Neural OCR &amp; Table Parsing</Text>
+                  <Text style={[styles.guideStepDesc, { color: colors.muted }]}>
+                    Auto-extracts patient demographics, admission dates, itemized billing lines &amp; codes.
+                  </Text>
+                </View>
               </View>
-            )}
-          </React.Fragment>
-        ))}
-      </ScrollView>
 
-      {/* Composer Input Area */}
-      <View style={[styles.composerContainer, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.composerPillRow}
-        >
+              <View style={styles.guideStepRow}>
+                <View style={[styles.guideStepNum, { backgroundColor: colors.greenSoft }]}>
+                  <Text style={[styles.guideStepNumText, { color: colors.green }]}>3</Text>
+                </View>
+                <View style={styles.guideStepContent}>
+                  <Text style={[styles.guideStepTitle, { color: colors.ink }]}>IRDAI Audit &amp; Settlement</Text>
+                  <Text style={[styles.guideStepDesc, { color: colors.muted }]}>
+                    Inspect compliance scoring, discrepancy checks, and instant TPA settlement reports.
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={[styles.guideFooter, { borderTopColor: colors.line2 }]}>
+              <ShieldCheck size={14} color={colors.green} />
+              <Text style={[styles.guideFooterText, { color: colors.muted }]}>
+                256-Bit Encrypted · IRDAI Rule Compliant · HIPAA Ready
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* Recent Claims Section */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={[styles.sectionHeading, { color: colors.ink }]}>Recent Claims</Text>
           <TouchableOpacity
-            style={[styles.suggestionChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
-            onPress={() => sendMessage('Summarise this claim')}
+            onPress={() => navigation.navigate('MainTabs', { screen: Routes.ClaimsTab })}
+            activeOpacity={0.7}
           >
-            <Text style={[styles.suggestionChipText, { color: colors.ink }]}>Summarise this claim</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.suggestionChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
-            onPress={() => sendMessage('What documents are missing?')}
-          >
-            <Text style={[styles.suggestionChipText, { color: colors.ink }]}>What documents are missing?</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.suggestionChip, { backgroundColor: colors.surface, borderColor: colors.line }]}
-            onPress={() => sendMessage('Why is the risk medium?')}
-          >
-            <Text style={[styles.suggestionChipText, { color: colors.ink }]}>Why is the risk medium?</Text>
-          </TouchableOpacity>
-        </ScrollView>
-
-        <View style={styles.inputRow}>
-          <TouchableOpacity
-            style={styles.attachBtn}
-            onPress={() => {
-              setIsCardExpanded(true);
-              handlePickFiles();
-            }}
-          >
-            <Paperclip size={20} color={colors.muted} />
-          </TouchableOpacity>
-
-          <TextInput
-            style={[styles.composerInput, { backgroundColor: colors.surface2, color: colors.ink, borderColor: colors.line }]}
-            placeholder="Ask about this claim..."
-            placeholderTextColor={colors.muted}
-            value={input}
-            onChangeText={setInput}
-            onSubmitEditing={handleSend}
-          />
-
-          <TouchableOpacity
-            style={[styles.sendCircleBtn, { backgroundColor: '#0d9488' }]}
-            onPress={handleSend}
-          >
-            <Send size={16} color="#ffffff" style={{ marginLeft: 2 }} />
+            <Text style={[styles.sectionActionText, { color: colors.brandDark }]}>View all →</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={[styles.phiNoticeText, { color: colors.muted }]}>
-          PHI (SSN · phone · email · MRN · DOB · policy) is scrubbed before anything reaches an LLM.
-        </Text>
-      </View>
+        {claims && claims.length > 0 ? (
+          <View style={[styles.recentClaimsCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            {claims.slice(0, 3).map((claim, idx) => {
+              const isLast = idx === Math.min(claims.length, 3) - 1;
+              const isReq = Boolean(
+                claim.hasActionRequest ||
+                claim.status === 'docs_requested' ||
+                (claim as any).rawStatus === 'DOCUMENTS_REQUESTED'
+              );
+              const isDone = claim.status === 'complete' || claim.status === 'approved' || claim.status === 'settled';
+              const isFail = (claim as any).status === 'FAILED' || (claim as any).rawStatus?.includes('FAIL');
+
+              const statusBg = isReq ? colors.amberSoft : isDone ? colors.greenSoft : isFail ? colors.redSoft : colors.brandSoft;
+              const statusText = isReq ? colors.amber : isDone ? colors.green : isFail ? colors.red : colors.brandDark;
+              const statusLabel = isReq ? 'DOCS REQ' : isDone ? 'COMPLETE' : isFail ? 'FAILED' : 'RUNNING';
+
+              return (
+                <TouchableOpacity
+                  key={claim.id}
+                  style={[
+                    styles.recentClaimItem,
+                    !isLast && { borderBottomWidth: 1, borderBottomColor: colors.line2 },
+                  ]}
+                  onPress={() => {
+                    selectClaim(claim.id);
+                    navigation.navigate(Routes.ClaimDetail, { claimId: claim.id });
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.recentClaimThumb, { backgroundColor: isReq ? colors.amberSoft : colors.brandSoft }]}>
+                    {isReq ? (
+                      <AlertTriangle size={18} color={colors.amber} />
+                    ) : (
+                      <FileText size={18} color={colors.brandDark} />
+                    )}
+                  </View>
+
+                  <View style={styles.recentClaimInfo}>
+                    <Text style={[styles.recentClaimWho, { color: colors.ink }]} numberOfLines={1}>
+                      {claim.who || 'Claim'} · {claim.dept || 'Medical'}
+                    </Text>
+                    <Text style={[styles.recentClaimMeta, { color: colors.muted }]} numberOfLines={1}>
+                      #{claim.id.slice(0, 8)} · {claim.amt ? `₹${Number(claim.amt).toLocaleString('en-IN')}` : 'amount pending'}
+                    </Text>
+                  </View>
+
+                  <View style={[styles.recentClaimBadge, { backgroundColor: statusBg }]}>
+                    <Text style={[styles.recentClaimBadgeText, { color: statusText }]}>
+                      {statusLabel}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : (
+          <View style={[styles.emptyClaimsCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <FileText size={26} color={colors.muted} style={{ marginBottom: 6 }} />
+            <Text style={[styles.emptyClaimsTitle, { color: colors.ink }]}>No claims uploaded yet</Text>
+            <Text style={[styles.emptyClaimsSubtitle, { color: colors.muted }]}>
+              Use the upload panel above to scan or attach medical bills and discharge summaries.
+            </Text>
+          </View>
+        )}
+
+      </ScrollView>
 
       {/* ALL FEATURES MODAL SHEET */}
       <Modal
@@ -1333,13 +1464,122 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   solidTealBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
-  pipelineCard: { padding: 14, borderRadius: 14, borderWidth: 1, marginVertical: 4 },
-  pipelineHeader: { marginBottom: 10 },
-  pipelineTitle: { fontSize: 14.5, fontWeight: '500' },
-  pipelineSub: { fontSize: 11.5, marginTop: 2 },
-  progressSegments: { flexDirection: 'row', gap: 6, marginVertical: 10 },
-  segment: { flex: 1, height: 4, borderRadius: 2 },
-  pipelineDoneText: { fontSize: 12.5 },
+  // Claim Processing Stepper Styles
+  claimMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  docThumb: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  claimIdText: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  claimSubText: {
+    fontSize: 11.5,
+    marginTop: 2,
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  progressBar: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  stepperContainer: {
+    paddingLeft: 4,
+    marginBottom: 4,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    position: 'relative',
+    paddingBottom: 16,
+  },
+  rail: {
+    position: 'absolute',
+    left: 11,
+    top: 24,
+    bottom: 0,
+    width: 2,
+  },
+  bullet: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  bulletNum: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  stepInfo: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  stepTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  stepDesc: {
+    fontSize: 11.5,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  processingActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+  },
+  processingPrimaryBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  processingPrimaryBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  processingOutlineBtn: {
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  processingOutlineBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  statusPill: {
+    paddingHorizontal: 9,
+    paddingVertical: 3.5,
+    borderRadius: 99,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
 
 
   welcomeCard: { padding: 14, borderRadius: 14, borderWidth: 1, marginVertical: 4 },
@@ -1354,50 +1594,160 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   promptGridText: { fontSize: 12.5, fontWeight: '500', lineHeight: 16 },
-  userBubbleWrapper: { alignItems: 'flex-end', marginVertical: 4 },
-  userBubble: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 18,
-    borderBottomRightRadius: 4,
-    maxWidth: '85%',
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+    marginBottom: 2,
   },
-  userBubbleText: { color: '#ffffff', fontSize: 13.5, fontWeight: '500' },
-  assistantCard: { padding: 14, borderRadius: 14, borderWidth: 1, marginVertical: 4 },
-  assistantTitle: { fontSize: 13.5, lineHeight: 19 },
-  sourceText: { fontSize: 11, marginTop: 6 },
-  composerContainer: {
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 10,
-    borderTopWidth: 1,
+  sectionHeading: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
-  composerPillRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 8 },
-  suggestionChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
-  suggestionChipText: { fontSize: 12, fontWeight: '500' },
-  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  attachBtn: { padding: 6 },
-  composerInput: {
-    flex: 1,
-    height: 42,
-    borderRadius: 21,
-    paddingHorizontal: 16,
-    fontSize: 13.5,
+  sectionActionText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  recentClaimsCard: {
+    borderRadius: 14,
     borderWidth: 1,
+    overflow: 'hidden',
   },
-  sendCircleBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  recentClaimItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 13,
+    gap: 11,
+  },
+  recentClaimThumb: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  phiNoticeText: {
-    fontSize: 10.5,
-    textAlign: 'center',
-    marginTop: 8,
-    lineHeight: 14,
+  recentClaimInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  recentClaimWho: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  recentClaimMeta: {
+    fontSize: 11.5,
+    marginTop: 2,
+  },
+  recentClaimBadge: {
     paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 99,
+  },
+  recentClaimBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  emptyClaimsCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyClaimsTitle: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  emptyClaimsSubtitle: {
+    fontSize: 11.5,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+
+  // Onboarding Guide Styles
+  guideCard: {
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginVertical: 4,
+  },
+  guideHeader: {
+    marginBottom: 14,
+  },
+  guideBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 99,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  guideBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  guideTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  guideSubtitle: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  guideStepsList: {
+    gap: 12,
+  },
+  guideStepRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  guideStepNum: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  guideStepNumText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  guideStepContent: {
+    flex: 1,
+  },
+  guideStepTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  guideStepDesc: {
+    fontSize: 11.5,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  guideFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  guideFooterText: {
+    fontSize: 10.5,
+    fontWeight: '500',
   },
 
   // Modal Sheets

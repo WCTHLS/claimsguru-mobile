@@ -486,6 +486,11 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       attempt: 1,
       totalSeconds: null,
       docs: [],
+      claimId: '',
+      claimWho: '',
+      claimDept: '',
+      claimAmt: 0,
+      progressPercentage: 0,
     });
   },
 }));

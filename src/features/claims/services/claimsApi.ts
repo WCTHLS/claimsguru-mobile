@@ -212,10 +212,7 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
     uiStatus = 'submitted';
   } else if (
     statusUpper === 'RUNNING' ||
-    statusUpper === 'UPLOADED' ||
     statusUpper === 'STARTING' ||
-    statusUpper === 'QUEUED' ||
-    statusUpper === 'OCR_PARTIAL' ||
     statusUpper === 'OCR_PROCESSING' ||
     statusUpper === 'IN_PROGRESS' ||
     statusUpper === 'PROCESSING' ||

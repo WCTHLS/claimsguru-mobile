@@ -196,13 +196,17 @@ export const PatientActivityScreen = ({ route, navigation }: any) => {
   // Initial claim filter: route param if specified, otherwise 'all'
   const initialFilter = route?.params?.claimId ? route.params.claimId : 'all';
   const [selectedClaimFilter, setSelectedClaimFilter] = useState<string>(initialFilter);
-  const [activeCategoryFilter, setActiveCategoryFilter] = useState<'all' | 'upload' | 'pipeline' | 'review' | 'submission' | 'chat'>('all');
   const [openDiffIdx, setOpenDiffIdx] = useState<string | null>(null);
 
   const [eventsByClaim, setEventsByClaim] = useState<Record<string, TimelineEvent[]>>({});
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Stable key for claim IDs to prevent re-fetching on progress/status polling mutations
+  const claimIdsKey = useMemo(() => (claims || []).map(c => c.id).sort().join(','), [claims]);
+  const prevClaimIdsKeyRef = React.useRef<string>('');
+  const isFetchingRef = React.useRef<boolean>(false);
 
   // Load user's claims on mount if store is empty
   useEffect(() => {
@@ -213,22 +217,31 @@ export const PatientActivityScreen = ({ route, navigation }: any) => {
 
   // Fetch real audit logs for all known claims from the backend
   const fetchAllAuditLogs = useCallback(async (isRefresh = false) => {
-    const claimsToFetch = claims.length > 0 ? claims : [];
-    if (claimsToFetch.length === 0) {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
+    let targetList = useClaimsStore.getState().claims;
+    if (targetList.length === 0) {
       // If store is still empty, load claims first
       await loadClaims(isRefresh);
+      targetList = useClaimsStore.getState().claims;
     }
 
-    const targetList = useClaimsStore.getState().claims;
     if (targetList.length === 0) {
       setEventsByClaim({});
+      isFetchingRef.current = false;
       return;
     }
 
     if (isRefresh) {
       setRefreshing(true);
     } else {
-      setLoading(true);
+      setEventsByClaim(prev => {
+        if (Object.keys(prev).length === 0) {
+          setLoading(true);
+        }
+        return prev;
+      });
     }
     setError(null);
 
@@ -255,12 +268,17 @@ export const PatientActivityScreen = ({ route, navigation }: any) => {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      isFetchingRef.current = false;
     }
-  }, [claims, loadClaims]);
+  }, [loadClaims]);
 
   useEffect(() => {
-    fetchAllAuditLogs();
-  }, [claims.length, fetchAllAuditLogs]);
+    // Only fetch on initial mount or when the set of claim IDs changes
+    if (claimIdsKey !== prevClaimIdsKeyRef.current) {
+      prevClaimIdsKeyRef.current = claimIdsKey;
+      fetchAllAuditLogs();
+    }
+  }, [claimIdsKey, fetchAllAuditLogs]);
 
   // Combine and sort events
   const allEventsCombined = useMemo(() => {
@@ -290,7 +308,7 @@ export const PatientActivityScreen = ({ route, navigation }: any) => {
     return deduped;
   }, [eventsByClaim]);
 
-  // Filter events by selected claim and category
+  // Filter events by selected claim
   const filteredEvents = useMemo(() => {
     let list = allEventsCombined;
 
@@ -299,13 +317,8 @@ export const PatientActivityScreen = ({ route, navigation }: any) => {
       list = list.filter(e => e.claimId === selectedClaimFilter || e.claimId.toLowerCase().startsWith(selectedClaimFilter.toLowerCase()));
     }
 
-    // Filter by category
-    if (activeCategoryFilter !== 'all') {
-      list = list.filter(e => e.cat === activeCategoryFilter);
-    }
-
     return list;
-  }, [allEventsCombined, selectedClaimFilter, activeCategoryFilter]);
+  }, [allEventsCombined, selectedClaimFilter]);
 
   // Group filtered events by day header preserving chronological order
   const dayGroups: TimelineDayGroup[] = useMemo(() => {
@@ -502,53 +515,8 @@ export const PatientActivityScreen = ({ route, navigation }: any) => {
           </ScrollView>
         </View>
 
-        {/* Category Filter Chips */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryChipsScroll}
-        >
-          {(['all', 'upload', 'pipeline', 'review', 'submission', 'chat'] as const).map(f => {
-            const isSel = activeCategoryFilter === f;
-            const labels = {
-              all: 'All',
-              upload: 'Uploads',
-              pipeline: 'Pipeline',
-              review: 'Reviews',
-              submission: 'Submissions',
-              chat: 'Chat',
-            };
-            return (
-              <TouchableOpacity
-                key={f}
-                style={[
-                  styles.categoryChip,
-                  {
-                    backgroundColor: isSel ? colors.brandSoft : colors.surface,
-                    borderColor: isSel ? colors.brand : colors.line,
-                  },
-                ]}
-                onPress={() => setActiveCategoryFilter(f)}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    {
-                      color: isSel ? colors.brandDark : colors.ink,
-                      fontWeight: isSel ? '700' : '500',
-                    },
-                  ]}
-                >
-                  {labels[f]}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        {/* Loading Spinner */}
-        {loading && (
+        {/* Loading Spinner - only shown initially if no events exist yet */}
+        {loading && allEventsCombined.length === 0 && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="small" color={colors.brand} />
             <Text style={[styles.loadingText, { color: colors.muted }]}>
@@ -558,7 +526,7 @@ export const PatientActivityScreen = ({ route, navigation }: any) => {
         )}
 
         {/* Error Banner */}
-        {!loading && error && (
+        {!loading && error && allEventsCombined.length === 0 && (
           <View style={[styles.errorBanner, { backgroundColor: colors.surface, borderColor: colors.red }]}>
             <AlertCircle size={18} color={colors.red} style={{ marginTop: 2 }} />
             <View style={{ flex: 1 }}>
@@ -596,8 +564,7 @@ export const PatientActivityScreen = ({ route, navigation }: any) => {
         )}
 
         {/* Real Timeline Rendered by Day */}
-        {!loading &&
-          dayGroups.map(group => {
+        {dayGroups.map(group => {
             return (
               <View key={group.day} style={styles.dayBlock}>
                 {/* Day Header */}
@@ -742,7 +709,7 @@ const styles = StyleSheet.create({
   patientTitle: { fontSize: 15, fontWeight: '700' },
   patientSub: { fontSize: 11.5, marginTop: 2 },
   claimPickerRow: {
-    marginBottom: 8,
+    marginBottom: 12,
   },
   claimChipsScroll: {
     flexDirection: 'row',
@@ -766,19 +733,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   miniBadgeText: { fontSize: 10, fontWeight: '700' },
-  categoryChipsScroll: {
-    flexDirection: 'row',
-    gap: 6,
-    paddingBottom: 4,
-    marginBottom: 8,
-  },
-  categoryChip: {
-    paddingVertical: 5,
-    paddingHorizontal: 11,
-    borderRadius: 99,
-    borderWidth: 1,
-  },
-  categoryChipText: { fontSize: 11.5 },
   loadingContainer: {
     paddingVertical: 20,
     alignItems: 'center',

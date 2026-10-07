@@ -1,13 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MessageSquare, FileText, Search, Clock, LayoutGrid } from 'lucide-react-native';
+import { Home, FileText, Clock, LayoutGrid } from 'lucide-react-native';
 import { useTheme } from '../../core/theme/ThemeContext';
 import { Routes } from './routes';
 
 interface GlobalBottomTabBarProps {
   navigation: any;
-  activeTab?: 'chat' | 'claims' | 'search' | 'history' | 'all';
+  activeTab?: 'home' | 'chat' | 'claims' | 'search' | 'history' | 'all';
 }
 
 export const GlobalBottomTabBar = ({ navigation, activeTab = 'claims' }: GlobalBottomTabBarProps) => {
@@ -16,9 +16,9 @@ export const GlobalBottomTabBar = ({ navigation, activeTab = 'claims' }: GlobalB
 
   const tabs = [
     {
-      key: 'chat',
-      label: 'Chat',
-      icon: MessageSquare,
+      key: 'home',
+      label: 'Home',
+      icon: Home,
       onPress: () => navigation.navigate('MainTabs', { screen: Routes.ChatTab }),
     },
     {
@@ -26,12 +26,6 @@ export const GlobalBottomTabBar = ({ navigation, activeTab = 'claims' }: GlobalB
       label: 'Claims',
       icon: FileText,
       onPress: () => navigation.navigate('MainTabs', { screen: Routes.ClaimsTab }),
-    },
-    {
-      key: 'search',
-      label: 'Search',
-      icon: Search,
-      onPress: () => navigation.navigate('MainTabs', { screen: Routes.SearchTab }),
     },
     {
       key: 'history',
@@ -60,7 +54,7 @@ export const GlobalBottomTabBar = ({ navigation, activeTab = 'claims' }: GlobalB
       ]}
     >
       {tabs.map(tab => {
-        const isActive = activeTab === tab.key;
+        const isActive = activeTab === tab.key || (tab.key === 'home' && activeTab === 'chat');
         const IconComponent = tab.icon;
         const iconColor = isActive ? colors.brand : colors.muted;
 
