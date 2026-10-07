@@ -25,20 +25,9 @@ import {
   Camera,
   Image as ImageIcon,
   FileText,
-  Smartphone,
   X,
   FileCode,
 } from 'lucide-react-native';
-
-const DOCTYPES = [
-  'discharge_summary',
-  'hospital_bill',
-  'pharmacy_bill',
-  'scan_report',
-  'policy_card',
-  'id_proof',
-  'other',
-];
 
 const LAT: Record<string, string> = {
   digital: '2–5 s',
@@ -60,15 +49,12 @@ export const UploadPanelScreen = ({ navigation }: any) => {
     clearFiles,
     clearLogs,
     checkUserSession,
-    setDocType,
-    setClaimType,
     uploadToBackend,
   } = useUploadStore();
   const { startPipeline, complete: pipelineComplete, resetPipeline } = usePipelineStore();
   const { addOrUpdateClaim } = useClaimsStore();
   const auth = useAuthStore();
 
-  const [selectedDocTypePicker, setSelectedDocTypePicker] = useState<string | null>(null);
   const [duplicateClaimId, setDuplicateClaimId] = useState<string | null>(null);
   const [isReprocessing, setIsReprocessing] = useState(false);
 
@@ -319,15 +305,6 @@ export const UploadPanelScreen = ({ navigation }: any) => {
               <FileText size={18} color={colors.muted} strokeWidth={1.8} />
               <Text style={[styles.srcText, { color: colors.muted }]}>Files</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.srcBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-              onPress={handlePickGallery}
-              activeOpacity={0.75}
-            >
-              <Smartphone size={18} color={colors.muted} strokeWidth={1.8} />
-              <Text style={[styles.srcText, { color: colors.muted }]}>Screenshot</Text>
-            </TouchableOpacity>
           </View>
 
           {/* Attached Header */}
@@ -353,7 +330,6 @@ export const UploadPanelScreen = ({ navigation }: any) => {
             ) : (
               files.map((file, idx) => {
                 const isLast = idx === files.length - 1;
-                const isPickerOpen = selectedDocTypePicker === file.id;
 
                 return (
                   <View
@@ -389,28 +365,6 @@ export const UploadPanelScreen = ({ navigation }: any) => {
                           </Text>
                         </Text>
 
-                        {/* Doc Type Selector */}
-                        <View style={styles.docTypeRow}>
-                          <Text style={[styles.docTypeLabel, { color: colors.muted }]}>doc_type</Text>
-                          <TouchableOpacity
-                            style={[
-                              styles.docTypeBadge,
-                              { backgroundColor: colors.surface2, borderColor: colors.line },
-                            ]}
-                            onPress={() =>
-                              setSelectedDocTypePicker(isPickerOpen ? null : file.id)
-                            }
-                            activeOpacity={0.7}
-                          >
-                            <Text style={[styles.docTypeText, { color: colors.brandDark }]}>
-                              {file.docType}
-                            </Text>
-                          </TouchableOpacity>
-                          <Text style={[styles.docTypeConf, { color: colors.muted }]}>
-                            {file.conf.toFixed(2)}
-                          </Text>
-                        </View>
-
                         {/* Progress Bar */}
                         <View style={[styles.progTrack, { backgroundColor: colors.line }]}>
                           <View
@@ -434,50 +388,11 @@ export const UploadPanelScreen = ({ navigation }: any) => {
                         <X size={16} color={colors.muted} />
                       </TouchableOpacity>
                     </View>
-
-                    {/* Doc Type Picker Dropdown Chips */}
-                    {isPickerOpen && (
-                      <View style={styles.pickerGrid}>
-                        {DOCTYPES.map(dt => (
-                          <TouchableOpacity
-                            key={dt}
-                            style={[
-                              styles.pickerChip,
-                              {
-                                backgroundColor:
-                                  file.docType === dt ? colors.brandSoft : colors.surface2,
-                                borderColor: file.docType === dt ? colors.brand : colors.line,
-                              },
-                            ]}
-                            onPress={() => {
-                              setDocType(file.id, dt);
-                              setSelectedDocTypePicker(null);
-                            }}
-                          >
-                            <Text
-                              style={[
-                                styles.pickerChipText,
-                                {
-                                  color: file.docType === dt ? colors.brandDark : colors.ink,
-                                  fontWeight: file.docType === dt ? '700' : '500',
-                                },
-                              ]}
-                            >
-                              {dt}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    )}
                   </View>
                 );
               })
             )}
           </View>
-
-          <Text style={[styles.noteText, { color: colors.muted }]}>
-            Each file gets an auto-detected <Text style={styles.mono}>doc_type</Text> with confidence — override it if the router got it wrong.
-          </Text>
 
           {/* Activity Log Section */}
           <View style={styles.secRow}>
@@ -525,59 +440,14 @@ export const UploadPanelScreen = ({ navigation }: any) => {
               ))
             )}
           </View>
-
-          {/* Claim Type Section */}
-          <View style={styles.secRow}>
-            <Text style={[styles.secTitle, { color: colors.ink }]}>Claim type</Text>
-          </View>
-
-          <View style={styles.claimTypeRow}>
-            {(['Reimbursement', 'Cashless', 'Pre-authorisation'] as const).map(type => {
-              const isSelected = claimType === type;
-              return (
-                <TouchableOpacity
-                  key={type}
-                  style={[
-                    styles.typeChip,
-                    {
-                      backgroundColor: isSelected ? colors.brandSoft : colors.surface,
-                      borderColor: isSelected ? colors.brand : colors.line,
-                    },
-                  ]}
-                  onPress={() => setClaimType(type)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.typeChipText,
-                      {
-                        color: isSelected ? colors.brandDark : colors.ink,
-                        fontWeight: isSelected ? '700' : '500',
-                      },
-                    ]}
-                  >
-                    {type}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
         </ScrollView>
 
         {/* Sticky Bottom Actions Bar */}
         <View style={[styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
           <TouchableOpacity
-            style={[styles.outlineBtn, { borderColor: colors.line }]}
-            onPress={() => navigation.navigate(Routes.ChatTab)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>Back to chat</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
             style={[
               styles.primaryBtn,
-              { backgroundColor: colors.brand, opacity: isReady ? 1 : 0.5 },
+              { flex: 1, backgroundColor: colors.brand, opacity: isReady ? 1 : 0.5 },
             ]}
             onPress={() => handleStartPipeline(false)}
             disabled={!isReady}
@@ -745,29 +615,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2,
   },
-  docTypeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 6,
-  },
-  docTypeLabel: {
-    fontSize: 11,
-  },
-  docTypeBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  docTypeText: {
-    fontFamily: 'monospace',
-    fontSize: 10.5,
-    fontWeight: '600',
-  },
-  docTypeConf: {
-    fontSize: 10.5,
-  },
   progTrack: {
     height: 4,
     borderRadius: 99,
@@ -780,30 +627,6 @@ const styles = StyleSheet.create({
   },
   rmBtn: {
     padding: 4,
-  },
-  pickerGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 10,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#eef2f6',
-  },
-  pickerChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 99,
-    borderWidth: 1,
-  },
-  pickerChipText: {
-    fontSize: 10.5,
-  },
-  noteText: {
-    fontSize: 11,
-    lineHeight: 15,
-    marginBottom: 12,
-    marginHorizontal: 2,
   },
   mono: {
     fontFamily: 'monospace',
@@ -838,41 +661,14 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     flex: 1,
   },
-  claimTypeRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  typeChip: {
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: 99,
-    borderWidth: 1,
-  },
-  typeChipText: {
-    fontSize: 11.5,
-  },
   bottomBar: {
     flexDirection: 'row',
     paddingHorizontal: 13,
     paddingVertical: 10,
     borderTopWidth: 1,
-    gap: 9,
-  },
-  outlineBtn: {
-    flex: 0.38,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  outlineBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
   },
   primaryBtn: {
-    flex: 0.62,
+    flex: 1,
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',

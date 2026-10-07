@@ -182,8 +182,8 @@ export const SignInScreen = ({ navigation }: any) => {
         } catch (localErr: any) {
           const msg = localErr instanceof Error ? localErr.message : String(localErr);
           if (
-            msg.toLowerCase().includes('user not found') ||
-            msg.toLowerCase().includes('no account')
+            useEntra &&
+            (msg.toLowerCase().includes('user not found') || msg.toLowerCase().includes('no account'))
           ) {
             authRes = await loginWithEntraNative({
               email: identifier.trim(),

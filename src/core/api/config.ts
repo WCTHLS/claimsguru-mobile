@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { getMetroHostIp } from '../config/authConfig';
 
 /**
  * ClaimGPT / ClaimsGuru API Gateway configuration
@@ -13,7 +14,10 @@ export const PREPROD_DEPLOYED_URL =
 const ENV_URL = process.env.EXPO_PUBLIC_API_URL;
 let resolvedHost = PREPROD_DEPLOYED_URL;
 
-if (ENV_URL) {
+const metroHost = getMetroHostIp();
+if (metroHost) {
+  resolvedHost = `http://${metroHost}:8000`;
+} else if (ENV_URL) {
   const clean = ENV_URL.replace(/\/+$/, '');
   if (Platform.OS === 'android' && (clean.includes('localhost') || clean.includes('127.0.0.1'))) {
     resolvedHost = clean.replace('localhost', '10.0.2.2').replace('127.0.0.1', '10.0.2.2');

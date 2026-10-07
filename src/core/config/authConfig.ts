@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Platform, NativeModules } from 'react-native';
 
 /**
  * Authentication Configuration for ClaimsGuru Mobile
@@ -11,6 +11,22 @@ export interface EntraMobileConfig {
   authority: string;
   redirectUri: string;
   scopes: string;
+}
+
+/**
+ * Detect host machine IP when running on a physical mobile device via Expo / Metro.
+ */
+export function getMetroHostIp(): string | null {
+  try {
+    const scriptURL = NativeModules?.SourceCode?.scriptURL;
+    if (typeof scriptURL === 'string') {
+      const match = scriptURL.match(/^https?:\/\/([^:/]+)/);
+      if (match && match[1] && match[1] !== 'localhost' && match[1] !== '127.0.0.1') {
+        return match[1];
+      }
+    }
+  } catch {}
+  return null;
 }
 
 /**
@@ -51,12 +67,19 @@ export const PREPROD_DEPLOYED_URL =
 
 /**
  * Get candidate backend URLs based on environment and running platform.
- * Supports preprod Azure deployed ingress, tunnels, and local LAN IP.
+ * Supports local development on physical devices, tunnels, emulators, and cloud preprod.
  */
 export function getBackendCandidateUrls(): string[] {
   const envUrl = process.env.EXPO_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE;
   const candidates: string[] = [];
 
+  // 1. Auto-detected host IP from Expo Metro bundler connection (for physical iPhones/Androids)
+  const metroHost = getMetroHostIp();
+  if (metroHost) {
+    candidates.push(`http://${metroHost}:8000`);
+  }
+
+  // 2. Configured environment URL
   if (envUrl) {
     const clean = envUrl.replace(/\/+$/, '');
     candidates.push(clean);
