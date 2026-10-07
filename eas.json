@@ -18,7 +18,8 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://cg-preprod-cin-ingress.purpleocean-4441f644.centralindia.azurecontainerapps.io",
-        "EXPO_PUBLIC_ENABLE_ENTRA_ID": "false"
+        "EXPO_PUBLIC_ENABLE_ENTRA_ID": "false",
+        "EAS_BUILD_NO_EXPO_GO_WARNING": "true"
       }
     },
     "preview-simulator": {
@@ -28,7 +29,8 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://cg-preprod-cin-ingress.purpleocean-4441f644.centralindia.azurecontainerapps.io",
-        "EXPO_PUBLIC_ENABLE_ENTRA_ID": "false"
+        "EXPO_PUBLIC_ENABLE_ENTRA_ID": "false",
+        "EAS_BUILD_NO_EXPO_GO_WARNING": "true"
       }
     },
     "production": {
@@ -38,7 +40,8 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://cg-preprod-cin-ingress.purpleocean-4441f644.centralindia.azurecontainerapps.io",
-        "EXPO_PUBLIC_ENABLE_ENTRA_ID": "false"
+        "EXPO_PUBLIC_ENABLE_ENTRA_ID": "false",
+        "EAS_BUILD_NO_EXPO_GO_WARNING": "true"
       }
     }
   },
