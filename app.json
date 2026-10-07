@@ -18,7 +18,8 @@
       "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "ClaimsGuru needs access to your camera to capture and attach medical bills and discharge summaries.",
-        "NSPhotoLibraryUsageDescription": "ClaimsGuru needs access to your photos to attach existing medical documents and reports."
+        "NSPhotoLibraryUsageDescription": "ClaimsGuru needs access to your photos to attach existing medical documents and reports.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
