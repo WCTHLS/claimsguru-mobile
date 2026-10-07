@@ -3,6 +3,8 @@ export interface CodeItem {
   desc: string;
   meta: string;
   confidence?: number;
+  code_includes?: string;
+  other_matches?: any[];
 }
 
 export const ICD_CODES: CodeItem[] = [

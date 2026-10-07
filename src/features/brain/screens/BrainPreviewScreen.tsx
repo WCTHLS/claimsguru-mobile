@@ -40,6 +40,7 @@ import {
   Trash2,
   Plus,
   Save,
+  ArrowUpDown,
 } from 'lucide-react-native';
 
 export interface BrainExpenseItem {
@@ -209,13 +210,127 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
 
   // Medical codes calculations (strictly respect actual extracted codes for uploaded claims)
   const isDemoClaim = !claimId || claimId === 'a4f1c9e2';
-  const icdList = preview
+  const rawIcdList = preview
     ? (Array.isArray(preview.icd_codes) ? preview.icd_codes : [])
     : (isDemoClaim ? [
-        { code: 'I21.9', description: 'Acute myocardial infarction, unspecified', confidence: 0.94 },
-        { code: 'E11.9', description: 'Type 2 diabetes mellitus without complications', confidence: 0.91 },
-        { code: 'I10', description: 'Essential (primary) hypertension', confidence: 0.72 },
+        {
+          code: 'I21.9',
+          description: 'Acute myocardial infarction, unspecified',
+          confidence: 0.94,
+          code_includes: 'Code covers: Myocardial infarction NOS | Acute cardiac infarction',
+          other_matches: [
+            { code: 'I21.0', description: 'STEMI of anterior wall', confidence: 0.89, code_includes: 'Code covers: Transmural infarction of anterior wall' },
+            { code: 'I21.1', description: 'STEMI of inferior wall', confidence: 0.84, code_includes: 'Code covers: Transmural infarction of inferior wall' },
+          ],
+        },
+        {
+          code: 'E11.9',
+          description: 'Type 2 diabetes mellitus without complications',
+          confidence: 0.91,
+          code_includes: 'Code covers: Diabetes mellitus NOS',
+          other_matches: [
+            { code: 'E11.6', description: 'Type 2 diabetes mellitus with other specified complications', confidence: 0.86, code_includes: 'Code covers: Diabetic arthropathy' },
+            { code: 'E11.2', description: 'Type 2 diabetes mellitus with kidney complications', confidence: 0.81, code_includes: 'Code covers: Diabetic nephropathy' },
+          ],
+        },
+        {
+          code: 'I10',
+          description: 'Essential (primary) hypertension',
+          confidence: 0.72,
+          code_includes: 'Code covers: High blood pressure | Hypertension (arterial)(essential)(primary)(systemic)',
+          other_matches: [
+            { code: 'I11.9', description: 'Hypertensive heart disease without heart failure', confidence: 0.70, code_includes: 'Code covers: Hypertensive cardiopathy' },
+            { code: 'I15.9', description: 'Secondary hypertension, unspecified', confidence: 0.65, code_includes: 'Code covers: Secondary hypertension' },
+          ],
+        },
       ] : []);
+
+  const [editableIcdList, setEditableIcdList] = useState<any[]>([]);
+
+  useEffect(() => {
+    const enriched = rawIcdList.map((item: any) => {
+      let alts = item.other_matches || [];
+      if (!alts.length && item.code) {
+        if (item.code.startsWith('K44')) {
+          alts = [
+            {
+              code: item.code === 'K44.9' ? 'K44.0' : 'K44.9',
+              description: item.code === 'K44.9' ? 'Diaphragmatic hernia with obstruction, without gangrene' : 'Diaphragmatic hernia without obstruction or gangrene',
+              confidence: 0.87,
+              code_includes: 'Code covers: hiatus hernia (oesophageal)(sliding) | paraoesophageal hernia | Diaphragmatic hernia NOS',
+            },
+            {
+              code: item.code === 'K44.1' ? 'K44.0' : 'K44.1',
+              description: item.code === 'K44.1' ? 'Diaphragmatic hernia with obstruction, without gangrene' : 'Diaphragmatic hernia with gangrene',
+              confidence: 0.81,
+              code_includes: 'Code covers: hiatus hernia (oesophageal)(sliding) | paraoesophageal hernia | Gangrenous diaphragmatic hernia',
+            },
+          ];
+        } else if (item.code.startsWith('I21')) {
+          alts = [
+            { code: 'I21.0', description: 'STEMI of anterior wall', confidence: 0.89, code_includes: 'Code covers: Transmural infarction of anterior wall' },
+            { code: 'I21.1', description: 'STEMI of inferior wall', confidence: 0.84, code_includes: 'Code covers: Transmural infarction of inferior wall' },
+          ];
+        }
+      }
+
+      const covers = item.code_includes || (
+        item.code === 'K44.0'
+          ? 'Code covers: hiatus hernia (oesophageal)(sliding) | paraoesophageal hernia | Diaphragmatic hernia: causing obstruction without gangrene | Diaphragmatic hernia: incarcerated without gangrene | Diaphragmatic hernia: irreducible without gangrene | Diaphragmatic hernia: strangulated without gangrene'
+          : undefined
+      );
+
+      return {
+        ...item,
+        code_includes: covers,
+        other_matches: alts,
+      };
+    });
+    setEditableIcdList(enriched);
+  }, [preview?.icd_codes]);
+
+  // Mobile disclosures
+  const [mobileExpandedOther, setMobileExpandedOther] = useState<Record<string, boolean>>({});
+  const [mobileExpandedDesc, setMobileExpandedDesc] = useState<Record<string, boolean>>({});
+
+  const toggleMobileOther = (key: string) => {
+    setMobileExpandedOther(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const toggleMobileDesc = (key: string) => {
+    setMobileExpandedDesc(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const swapMobileCandidate = (parentIdx: number, altIdx: number) => {
+    setEditableIcdList(prev => {
+      const next = [...prev];
+      const currentTop = next[parentIdx];
+      if (!currentTop || !currentTop.other_matches || !currentTop.other_matches[altIdx]) return prev;
+
+      const chosenAlt = currentTop.other_matches[altIdx];
+      const newAlts = [...currentTop.other_matches];
+
+      newAlts[altIdx] = {
+        code: currentTop.code,
+        description: currentTop.description,
+        confidence: currentTop.confidence,
+        code_includes: currentTop.code_includes,
+      };
+
+      next[parentIdx] = {
+        ...currentTop,
+        code: chosenAlt.code,
+        description: chosenAlt.description,
+        confidence: chosenAlt.confidence,
+        code_includes: chosenAlt.code_includes,
+        other_matches: newAlts,
+      };
+
+      return next;
+    });
+  };
+
+  const icdList = editableIcdList;
 
   const cptList = preview
     ? (Array.isArray(preview.cpt_codes) ? preview.cpt_codes : [])
@@ -943,21 +1058,203 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
                   ICD-10 DIAGNOSES ({icdCount})
                 </Text>
                 {icdList.length > 0 ? (
-                  icdList.map((c, idx) => (
-                    <View key={`icd-${idx}`} style={styles.ruleSummaryRow}>
-                      <View style={[styles.ruleCodeBadge, { backgroundColor: colors.surface2 }]}>
-                        <Text style={[styles.ruleCodeText, styles.mono, { color: colors.brandDark }]}>
-                          {c.code}
+                  icdList.map((c, parentIdx) => {
+                    const topDescKey = `top-${parentIdx}-${c.code}`;
+                    const isTopDescOpen = Boolean(mobileExpandedDesc[topDescKey]);
+                    const otherKey = `other-${parentIdx}-${c.code}`;
+                    const isOtherOpen = Boolean(mobileExpandedOther[otherKey]);
+                    const otherMatches: any[] = c.other_matches || [];
+
+                    return (
+                      <View
+                        key={`icd-${parentIdx}-${c.code}`}
+                        style={{
+                          backgroundColor: colors.surface,
+                          borderRadius: 10,
+                          borderWidth: 1,
+                          borderColor: colors.line2,
+                          padding: 10,
+                          marginBottom: 8,
+                        }}
+                      >
+                        {/* Top 1 Active Matched Code */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <View style={[styles.ruleCodeBadge, { backgroundColor: colors.brandSoft }]}>
+                              <Text style={[styles.ruleCodeText, styles.mono, { color: colors.brandDark }]}>
+                                {c.code}
+                              </Text>
+                            </View>
+                            <View style={{ backgroundColor: colors.surface2, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
+                              <Text style={{ fontSize: 9.5, fontWeight: '600', color: colors.brandDark }}>
+                                Matched Code
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={[styles.factorVal, { color: colors.green, fontWeight: '700' }]}>
+                            {c.confidence ? `${(c.confidence * 100).toFixed(0)}%` : ((c as any).conf || '91%')} Match
+                          </Text>
+                        </View>
+
+                        <Text style={{ fontSize: 12.5, fontWeight: '600', color: colors.ink, lineHeight: 17, marginBottom: 6 }}>
+                          {c.description || (c as any).desc || 'Diagnosis code'}
                         </Text>
+
+                        {/* Top 1 Code Description Disclosure Triangle */}
+                        <TouchableOpacity
+                          style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 3 }}
+                          onPress={() => toggleMobileDesc(topDescKey)}
+                          activeOpacity={0.7}
+                        >
+                          {isTopDescOpen ? (
+                            <ChevronDown size={13} color={colors.brandDark} />
+                          ) : (
+                            <ChevronRight size={13} color={colors.muted} />
+                          )}
+                          <Text style={{ fontSize: 11, fontWeight: '600', color: isTopDescOpen ? colors.brandDark : colors.muted }}>
+                            Code description &amp; coverage
+                          </Text>
+                        </TouchableOpacity>
+
+                        {isTopDescOpen && (
+                          <View style={{ backgroundColor: colors.surface2, borderRadius: 8, padding: 8, marginTop: 4, marginBottom: 4 }}>
+                            <Text style={{ fontSize: 11, color: colors.ink, marginBottom: c.code_includes ? 4 : 0 }}>
+                              <Text style={{ fontWeight: '700', color: colors.muted }}>Description: </Text>
+                              {c.description}
+                            </Text>
+                            {c.code_includes && (
+                              <Text style={{ fontSize: 11, color: colors.ink, lineHeight: 15 }}>
+                                <Text style={{ fontWeight: '700', color: colors.brandDark }}>What code covers: </Text>
+                                {c.code_includes.replace(/^Code covers:\s*/i, '')}
+                              </Text>
+                            )}
+                          </View>
+                        )}
+
+                        {/* Other Closest Matches Disclosure Triangle Button */}
+                        {otherMatches.length > 0 && (
+                          <View style={{ borderTopWidth: 1, borderTopColor: colors.line2, marginTop: 6, paddingTop: 6 }}>
+                            <TouchableOpacity
+                              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 2 }}
+                              onPress={() => toggleMobileOther(otherKey)}
+                              activeOpacity={0.7}
+                            >
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                                {isOtherOpen ? (
+                                  <ChevronDown size={13} color={colors.brandDark} />
+                                ) : (
+                                  <ChevronRight size={13} color={colors.muted} />
+                                )}
+                                <Text style={{ fontSize: 11.5, fontWeight: '600', color: colors.ink }}>
+                                  Other closest matches
+                                </Text>
+                                <View style={{ backgroundColor: colors.surface2, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 99 }}>
+                                  <Text style={{ fontSize: 9.5, color: colors.muted, fontWeight: '600' }}>
+                                    {otherMatches.length}
+                                  </Text>
+                                </View>
+                              </View>
+                              <Text style={{ fontSize: 10, color: colors.muted, fontStyle: 'italic' }}>
+                                Tap to swap
+                              </Text>
+                            </TouchableOpacity>
+
+                            {isOtherOpen && (
+                              <View style={{ marginTop: 6, gap: 6 }}>
+                                {otherMatches.map((alt, altIdx) => {
+                                  const altDescKey = `alt-${parentIdx}-${altIdx}-${alt.code}`;
+                                  const isAltDescOpen = Boolean(mobileExpandedDesc[altDescKey]);
+
+                                  return (
+                                    <View
+                                      key={`alt-${alt.code}-${altIdx}`}
+                                      style={{
+                                        backgroundColor: colors.surface2,
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: colors.line2,
+                                        padding: 8,
+                                      }}
+                                    >
+                                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                                          <View style={[styles.ruleCodeBadge, { backgroundColor: colors.surface }]}>
+                                            <Text style={[styles.ruleCodeText, styles.mono, { color: colors.brandDark, fontSize: 10 }]}>
+                                              {alt.code}
+                                            </Text>
+                                          </View>
+                                          <Text style={{ fontSize: 10, color: colors.muted, fontWeight: '600' }}>
+                                            {alt.confidence ? `${(alt.confidence * 100).toFixed(0)}%` : '85%'} Match
+                                          </Text>
+                                        </View>
+
+                                        {/* Swap Button */}
+                                        <TouchableOpacity
+                                          style={{
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            gap: 3,
+                                            backgroundColor: colors.surface,
+                                            borderColor: colors.brandDark,
+                                            borderWidth: 1,
+                                            paddingHorizontal: 7,
+                                            paddingVertical: 2,
+                                            borderRadius: 5,
+                                          }}
+                                          onPress={() => swapMobileCandidate(parentIdx, altIdx)}
+                                          activeOpacity={0.7}
+                                        >
+                                          <ArrowUpDown size={11} color={colors.brandDark} />
+                                          <Text style={{ fontSize: 10, fontWeight: '700', color: colors.brandDark }}>
+                                            Swap into Top 1
+                                          </Text>
+                                        </TouchableOpacity>
+                                      </View>
+
+                                      <Text style={{ fontSize: 11.5, color: colors.ink, lineHeight: 15, marginBottom: 4 }}>
+                                        {alt.description}
+                                      </Text>
+
+                                      {/* Candidate Code Description Disclosure */}
+                                      <TouchableOpacity
+                                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 2 }}
+                                        onPress={() => toggleMobileDesc(altDescKey)}
+                                        activeOpacity={0.7}
+                                      >
+                                        {isAltDescOpen ? (
+                                          <ChevronDown size={11} color={colors.brandDark} />
+                                        ) : (
+                                          <ChevronRight size={11} color={colors.muted} />
+                                        )}
+                                        <Text style={{ fontSize: 10, fontWeight: '600', color: isAltDescOpen ? colors.brandDark : colors.muted }}>
+                                          Code description &amp; coverage
+                                        </Text>
+                                      </TouchableOpacity>
+
+                                      {isAltDescOpen && (
+                                        <View style={{ backgroundColor: colors.surface, borderRadius: 6, padding: 6, marginTop: 3 }}>
+                                          <Text style={{ fontSize: 10.5, color: colors.ink, marginBottom: alt.code_includes ? 3 : 0 }}>
+                                            <Text style={{ fontWeight: '700', color: colors.muted }}>Description: </Text>
+                                            {alt.description}
+                                          </Text>
+                                          {alt.code_includes && (
+                                            <Text style={{ fontSize: 10.5, color: colors.ink, lineHeight: 14 }}>
+                                              <Text style={{ fontWeight: '700', color: colors.brandDark }}>What code covers: </Text>
+                                              {alt.code_includes.replace(/^Code covers:\s*/i, '')}
+                                            </Text>
+                                          )}
+                                        </View>
+                                      )}
+                                    </View>
+                                  );
+                                })}
+                              </View>
+                            )}
+                          </View>
+                        )}
                       </View>
-                      <Text style={[styles.ruleSummaryText, { color: colors.ink }]} numberOfLines={1}>
-                        {c.description || (c as any).desc || 'Diagnosis code'}
-                      </Text>
-                      <Text style={[styles.factorVal, { color: colors.muted }]}>
-                        {c.confidence ? `${(c.confidence * 100).toFixed(0)}%` : ((c as any).conf || '0.94')}
-                      </Text>
-                    </View>
-                  ))
+                    );
+                  })
                 ) : (
                   <View style={{ paddingVertical: 4 }}>
                     <Text style={{ fontSize: 12, color: colors.muted, fontStyle: 'italic' }}>

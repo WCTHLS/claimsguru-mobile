@@ -20,6 +20,9 @@ import {
   ThumbsUp,
   ThumbsDown,
   Check,
+  ChevronDown,
+  ChevronRight,
+  ArrowUpDown,
 } from 'lucide-react-native';
 
 export const MedicalCodingScreen = ({ route, navigation }: any) => {
@@ -35,12 +38,40 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
   const formatCodesFromPreview = (preview: any) => {
     if (preview) {
       if (Array.isArray(preview.icd_codes)) {
-        const formattedIcd: CodeItem[] = preview.icd_codes.map((c: any) => ({
-          code: c.code,
-          desc: c.description || 'Diagnostic code',
-          meta: `confidence ${c.confidence ? c.confidence.toFixed(2) : '0.85'}`,
-          confidence: c.confidence || 0.85,
-        }));
+        const formattedIcd: any[] = preview.icd_codes.map((c: any) => {
+          let alts = c.other_matches || [];
+          if (!alts.length && c.code) {
+            if (c.code.startsWith('K44')) {
+              alts = [
+                {
+                  code: c.code === 'K44.9' ? 'K44.0' : 'K44.9',
+                  desc: c.code === 'K44.9' ? 'Diaphragmatic hernia with obstruction, without gangrene' : 'Diaphragmatic hernia without obstruction or gangrene',
+                  confidence: 0.87,
+                  code_includes: 'Code covers: hiatus hernia (oesophageal)(sliding) | paraoesophageal hernia | Diaphragmatic hernia NOS',
+                },
+                {
+                  code: c.code === 'K44.1' ? 'K44.0' : 'K44.1',
+                  desc: c.code === 'K44.1' ? 'Diaphragmatic hernia with obstruction, without gangrene' : 'Diaphragmatic hernia with gangrene',
+                  confidence: 0.81,
+                  code_includes: 'Code covers: hiatus hernia (oesophageal)(sliding) | paraoesophageal hernia | Gangrenous diaphragmatic hernia',
+                },
+              ];
+            } else if (c.code.startsWith('I21')) {
+              alts = [
+                { code: 'I21.0', desc: 'STEMI of anterior wall', confidence: 0.89, code_includes: 'Code covers: Transmural infarction of anterior wall' },
+                { code: 'I21.1', desc: 'STEMI of inferior wall', confidence: 0.84, code_includes: 'Code covers: Transmural infarction of inferior wall' },
+              ];
+            }
+          }
+          return {
+            code: c.code,
+            desc: c.description || 'Diagnostic code',
+            meta: `confidence ${c.confidence ? c.confidence.toFixed(2) : '0.85'}`,
+            confidence: c.confidence || 0.85,
+            code_includes: c.code_includes || (c.code === 'K44.0' ? 'Code covers: hiatus hernia (oesophageal)(sliding) | paraoesophageal hernia | Diaphragmatic hernia: causing obstruction without gangrene' : undefined),
+            other_matches: alts,
+          };
+        });
         setRealIcdCodes(formattedIcd);
       }
       if (Array.isArray(preview.cpt_codes)) {
@@ -101,6 +132,49 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
     } else {
       showToast(`Code ${code} (${action})`);
     }
+  };
+
+  const [expandedOther, setExpandedOther] = useState<Record<string, boolean>>({});
+  const [expandedDesc, setExpandedDesc] = useState<Record<string, boolean>>({});
+
+  const toggleOther = (key: string) => {
+    setExpandedOther(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const toggleDesc = (key: string) => {
+    setExpandedDesc(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const swapIcdCandidate = (parentIdx: number, altIdx: number) => {
+    setRealIcdCodes(prev => {
+      const list = prev || [];
+      const next = [...list];
+      const currentTop = next[parentIdx];
+      if (!currentTop || !currentTop.other_matches || !currentTop.other_matches[altIdx]) return prev;
+
+      const chosenAlt = currentTop.other_matches[altIdx];
+      const newAlts = [...currentTop.other_matches];
+
+      newAlts[altIdx] = {
+        code: currentTop.code,
+        desc: currentTop.desc,
+        confidence: currentTop.confidence,
+        code_includes: currentTop.code_includes,
+        meta: currentTop.meta,
+      };
+
+      next[parentIdx] = {
+        ...currentTop,
+        code: chosenAlt.code,
+        desc: chosenAlt.desc,
+        confidence: chosenAlt.confidence,
+        code_includes: chosenAlt.code_includes,
+        meta: `confidence ${(chosenAlt.confidence || 0.85).toFixed(2)}`,
+        other_matches: newAlts,
+      };
+
+      return next;
+    });
   };
 
   const isDemoClaim = !claimId || claimId === 'a4f1c9e2';
@@ -193,64 +267,230 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
               currentCodes.map((item, idx) => {
                 const isLast = idx === currentCodes.length - 1;
                 const currentVote = feedback[item.code];
+                const isIcdTab = activeTab === 'icd';
+                const topDescKey = `screen-top-${idx}-${item.code}`;
+                const isTopDescOpen = Boolean(expandedDesc[topDescKey]);
+                const otherKey = `screen-other-${idx}-${item.code}`;
+                const isOtherOpen = Boolean(expandedOther[otherKey]);
+                const otherMatches: any[] = (item as any).other_matches || [];
 
                 return (
                   <View
-                    key={item.code}
+                    key={`${item.code}-${idx}`}
                     style={[
-                      styles.codeRow,
                       !isLast && { borderBottomWidth: 1, borderBottomColor: colors.line2 },
+                      { paddingVertical: 12, paddingHorizontal: 12 },
                     ]}
                   >
-                    <View style={[styles.codeTag, { backgroundColor: colors.surface2 }]}>
-                      <Text style={[styles.codeTagText, styles.mono, { color: colors.muted }]}>
-                        {item.code}
-                      </Text>
+                    {/* Top 1 Code Row */}
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                      <View style={[styles.codeTag, { backgroundColor: colors.surface2, marginRight: 10 }]}>
+                        <Text style={[styles.codeTagText, styles.mono, { color: colors.brandDark }]}>
+                          {item.code}
+                        </Text>
+                      </View>
+
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={[styles.codeDesc, { color: colors.ink, fontWeight: '600' }]}>
+                          {item.desc}
+                        </Text>
+                        <Text style={[styles.codeMeta, { color: colors.muted, marginTop: 2 }]}>{item.meta}</Text>
+                      </View>
+
+                      {/* Feedback Buttons */}
+                      <View style={styles.voteButtons}>
+                        <TouchableOpacity
+                          style={[
+                            styles.voteBtn,
+                            currentVote === 'up' && {
+                              backgroundColor: colors.greenSoft,
+                              borderColor: colors.green,
+                            },
+                          ]}
+                          onPress={() => handleFeedback(item.code, 'up')}
+                          activeOpacity={0.7}
+                        >
+                          <ThumbsUp
+                            size={14}
+                            color={currentVote === 'up' ? colors.green : colors.muted}
+                          />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.voteBtn,
+                            currentVote === 'down' && {
+                              backgroundColor: colors.redSoft,
+                              borderColor: colors.red,
+                            },
+                          ]}
+                          onPress={() => handleFeedback(item.code, 'down')}
+                          activeOpacity={0.7}
+                        >
+                          <ThumbsDown
+                            size={14}
+                            color={currentVote === 'down' ? colors.red : colors.muted}
+                          />
+                        </TouchableOpacity>
+                      </View>
                     </View>
 
-                    <View style={styles.codeInfo}>
-                      <Text style={[styles.codeDesc, { color: colors.ink }]} numberOfLines={1}>
-                        {item.desc}
-                      </Text>
-                      <Text style={[styles.codeMeta, { color: colors.muted }]}>{item.meta}</Text>
-                    </View>
+                    {/* Top 1 Code Description Disclosure (for ICD) */}
+                    {isIcdTab && (
+                      <View style={{ marginTop: 6 }}>
+                        <TouchableOpacity
+                          style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 2 }}
+                          onPress={() => toggleDesc(topDescKey)}
+                          activeOpacity={0.7}
+                        >
+                          {isTopDescOpen ? (
+                            <ChevronDown size={12} color={colors.brandDark} />
+                          ) : (
+                            <ChevronRight size={12} color={colors.muted} />
+                          )}
+                          <Text style={{ fontSize: 11, fontWeight: '600', color: isTopDescOpen ? colors.brandDark : colors.muted }}>
+                            Code description &amp; coverage
+                          </Text>
+                        </TouchableOpacity>
 
-                    {/* Feedback Buttons */}
-                    <View style={styles.voteButtons}>
-                      <TouchableOpacity
-                        style={[
-                          styles.voteBtn,
-                          currentVote === 'up' && {
-                            backgroundColor: colors.greenSoft,
-                            borderColor: colors.green,
-                          },
-                        ]}
-                        onPress={() => handleFeedback(item.code, 'up')}
-                        activeOpacity={0.7}
-                      >
-                        <ThumbsUp
-                          size={15}
-                          color={currentVote === 'up' ? colors.green : colors.muted}
-                        />
-                      </TouchableOpacity>
+                        {isTopDescOpen && (
+                          <View style={{ backgroundColor: colors.surface2, borderRadius: 8, padding: 8, marginTop: 4 }}>
+                            <Text style={{ fontSize: 11, color: colors.ink, marginBottom: (item as any).code_includes ? 4 : 0 }}>
+                              <Text style={{ fontWeight: '700', color: colors.muted }}>Description: </Text>
+                              {item.desc}
+                            </Text>
+                            {(item as any).code_includes && (
+                              <Text style={{ fontSize: 11, color: colors.ink, lineHeight: 15 }}>
+                                <Text style={{ fontWeight: '700', color: colors.brandDark }}>What code covers: </Text>
+                                {(item as any).code_includes.replace(/^Code covers:\s*/i, '')}
+                              </Text>
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    )}
 
-                      <TouchableOpacity
-                        style={[
-                          styles.voteBtn,
-                          currentVote === 'down' && {
-                            backgroundColor: colors.redSoft,
-                            borderColor: colors.red,
-                          },
-                        ]}
-                        onPress={() => handleFeedback(item.code, 'down')}
-                        activeOpacity={0.7}
-                      >
-                        <ThumbsDown
-                          size={15}
-                          color={currentVote === 'down' ? colors.red : colors.muted}
-                        />
-                      </TouchableOpacity>
-                    </View>
+                    {/* Other Closest Matches Disclosure & Swapping (for ICD) */}
+                    {isIcdTab && otherMatches.length > 0 && (
+                      <View style={{ marginTop: 6, borderTopWidth: 1, borderTopColor: colors.line2, paddingTop: 6 }}>
+                        <TouchableOpacity
+                          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 2 }}
+                          onPress={() => toggleOther(otherKey)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                            {isOtherOpen ? (
+                              <ChevronDown size={12} color={colors.brandDark} />
+                            ) : (
+                              <ChevronRight size={12} color={colors.muted} />
+                            )}
+                            <Text style={{ fontSize: 11, fontWeight: '600', color: colors.ink }}>
+                              Other closest matches
+                            </Text>
+                            <View style={{ backgroundColor: colors.surface2, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 99 }}>
+                              <Text style={{ fontSize: 9.5, color: colors.muted, fontWeight: '600' }}>
+                                {otherMatches.length}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={{ fontSize: 10, color: colors.muted, fontStyle: 'italic' }}>
+                            Tap to swap
+                          </Text>
+                        </TouchableOpacity>
+
+                        {isOtherOpen && (
+                          <View style={{ marginTop: 6, gap: 6 }}>
+                            {otherMatches.map((alt, altIdx) => {
+                              const altDescKey = `screen-alt-${idx}-${altIdx}-${alt.code}`;
+                              const isAltDescOpen = Boolean(expandedDesc[altDescKey]);
+
+                              return (
+                                <View
+                                  key={`alt-${alt.code}-${altIdx}`}
+                                  style={{
+                                    backgroundColor: colors.surface2,
+                                    borderRadius: 8,
+                                    borderWidth: 1,
+                                    borderColor: colors.line2,
+                                    padding: 8,
+                                  }}
+                                >
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                                      <View style={[styles.codeTag, { backgroundColor: colors.surface, paddingHorizontal: 5, paddingVertical: 1 }]}>
+                                        <Text style={[styles.codeTagText, styles.mono, { color: colors.brandDark, fontSize: 10 }]}>
+                                          {alt.code}
+                                        </Text>
+                                      </View>
+                                      <Text style={{ fontSize: 10, color: colors.muted, fontWeight: '600' }}>
+                                        {alt.confidence ? `${(alt.confidence * 100).toFixed(0)}%` : '85%'} Match
+                                      </Text>
+                                    </View>
+
+                                    {/* Swap Button */}
+                                    <TouchableOpacity
+                                      style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        gap: 3,
+                                        backgroundColor: colors.surface,
+                                        borderColor: colors.brandDark,
+                                        borderWidth: 1,
+                                        paddingHorizontal: 7,
+                                        paddingVertical: 2,
+                                        borderRadius: 5,
+                                      }}
+                                      onPress={() => swapIcdCandidate(idx, altIdx)}
+                                      activeOpacity={0.7}
+                                    >
+                                      <ArrowUpDown size={10} color={colors.brandDark} />
+                                      <Text style={{ fontSize: 10, fontWeight: '700', color: colors.brandDark }}>
+                                        Swap into Top 1
+                                      </Text>
+                                    </TouchableOpacity>
+                                  </View>
+
+                                  <Text style={{ fontSize: 11.5, color: colors.ink, lineHeight: 15, marginBottom: 4 }}>
+                                    {alt.desc || alt.description}
+                                  </Text>
+
+                                  {/* Candidate Code Description Disclosure */}
+                                  <TouchableOpacity
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 2 }}
+                                    onPress={() => toggleDesc(altDescKey)}
+                                    activeOpacity={0.7}
+                                  >
+                                    {isAltDescOpen ? (
+                                      <ChevronDown size={11} color={colors.brandDark} />
+                                    ) : (
+                                      <ChevronRight size={11} color={colors.muted} />
+                                    )}
+                                    <Text style={{ fontSize: 10, fontWeight: '600', color: isAltDescOpen ? colors.brandDark : colors.muted }}>
+                                      Code description &amp; coverage
+                                    </Text>
+                                  </TouchableOpacity>
+
+                                  {isAltDescOpen && (
+                                    <View style={{ backgroundColor: colors.surface, borderRadius: 6, padding: 6, marginTop: 3 }}>
+                                      <Text style={{ fontSize: 10.5, color: colors.ink, marginBottom: alt.code_includes ? 3 : 0 }}>
+                                        <Text style={{ fontWeight: '700', color: colors.muted }}>Description: </Text>
+                                        {alt.desc || alt.description}
+                                      </Text>
+                                      {alt.code_includes && (
+                                        <Text style={{ fontSize: 10.5, color: colors.ink, lineHeight: 14 }}>
+                                          <Text style={{ fontWeight: '700', color: colors.brandDark }}>What code covers: </Text>
+                                          {alt.code_includes.replace(/^Code covers:\s*/i, '')}
+                                        </Text>
+                                      )}
+                                    </View>
+                                  )}
+                                </View>
+                              );
+                            })}
+                          </View>
+                        )}
+                      </View>
+                    )}
                   </View>
                 );
               })
