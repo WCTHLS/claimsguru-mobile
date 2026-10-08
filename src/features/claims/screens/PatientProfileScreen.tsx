@@ -395,7 +395,7 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
           />
           <Text style={[styles.patientName, { color: colors.ink }]}>{displayPatientName}</Text>
           <Text style={[styles.patientSub, { color: colors.muted }]}>
-            {displayGender} · born {maskVal('dob', displayDob)}
+            {displayGender}{displayDob && displayDob !== '-' ? ` · ${maskVal('dob', displayDob)}` : ''}
           </Text>
 
           <View style={styles.pillsRow}>

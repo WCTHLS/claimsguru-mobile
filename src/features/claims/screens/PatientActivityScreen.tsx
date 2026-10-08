@@ -16,6 +16,7 @@ import { useAuthStore } from '../../../state/useAuthStore';
 import { useClaimsStore } from '../../../state/useClaimsStore';
 import { claimsApi, BackendAuditEvent } from '../services/claimsApi';
 import { UserAvatar } from '../../../core/components/UserAvatar';
+import { AppHeader } from '../../../core/components/AppHeader';
 import { Routes } from '../../../app/navigation/routes';
 
 interface TimelineEvent {
@@ -344,33 +345,60 @@ export const PatientActivityScreen = ({ route, navigation }: any) => {
   const displayPatientName = currentClaimObj?.who && currentClaimObj.who !== 'Sample' ? currentClaimObj.who : userName;
   const displayPolicyNo = currentClaimObj?.policyNo || policyNumber || 'P-0007000';
 
+  const isTabScreen = route?.name === Routes.SessionsTab;
+
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bg }]} edges={['top']}>
-      {/* App Bar */}
-      <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <ChevronLeft size={22} color={colors.ink} />
-        </TouchableOpacity>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: isTabScreen ? colors.surface : colors.bg }]} edges={['top']}>
+      {isTabScreen ? (
+        <>
+          {/* Unified Top Header Bar */}
+          <AppHeader navigation={navigation} />
 
-        <View style={styles.appBarCenter}>
-          <Text style={[styles.appBarTitle, { color: colors.ink }]}>Patient activity</Text>
-          <Text style={[styles.appBarSub, { color: colors.muted }]} numberOfLines={1}>
-            {selectedClaimFilter === 'all'
-              ? `All claims (${claims.length})`
-              : `Claim ${selectedClaimFilter.slice(0, 8)}`}
-          </Text>
-        </View>
+          {/* In-Page Activity Title Bar */}
+          <View style={[styles.tabTitleBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
+            <View style={styles.tabTitleCenter}>
+              <Text style={[styles.appBarTitle, { color: colors.ink }]}>Activity</Text>
+              <Text style={[styles.appBarSub, { color: colors.muted }]} numberOfLines={1}>
+                {selectedClaimFilter === 'all'
+                  ? `All claims (${claims.length})`
+                  : `Claim ${selectedClaimFilter.slice(0, 8)}`}
+              </Text>
+            </View>
 
-        <View style={[styles.countPill, { backgroundColor: colors.brandSoft }]}>
-          <Text style={[styles.countPillText, { color: colors.brandDark }]}>
-            {totalEventsCount} events
-          </Text>
+            <View style={[styles.countPill, { backgroundColor: colors.brandSoft }]}>
+              <Text style={[styles.countPillText, { color: colors.brandDark }]}>
+                {totalEventsCount} events
+              </Text>
+            </View>
+          </View>
+        </>
+      ) : (
+        /* Top App Bar with back button when in stack navigation */
+        <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => navigation.goBack()}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <ChevronLeft size={22} color={colors.ink} />
+          </TouchableOpacity>
+
+          <View style={styles.appBarCenter}>
+            <Text style={[styles.appBarTitle, { color: colors.ink }]}>Patient activity</Text>
+            <Text style={[styles.appBarSub, { color: colors.muted }]} numberOfLines={1}>
+              {selectedClaimFilter === 'all'
+                ? `All claims (${claims.length})`
+                : `Claim ${selectedClaimFilter.slice(0, 8)}`}
+            </Text>
+          </View>
+
+          <View style={[styles.countPill, { backgroundColor: colors.brandSoft }]}>
+            <Text style={[styles.countPillText, { color: colors.brandDark }]}>
+              {totalEventsCount} events
+            </Text>
+          </View>
         </View>
-      </View>
+      )}
 
       <ScrollView
         style={styles.content}
@@ -684,6 +712,17 @@ export const PatientActivityScreen = ({ route, navigation }: any) => {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
+  tabTitleBar: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  tabTitleCenter: {
+    flex: 1,
+  },
   appBar: {
     height: 52,
     flexDirection: 'row',

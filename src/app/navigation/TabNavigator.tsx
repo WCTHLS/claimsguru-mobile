@@ -9,7 +9,7 @@ import { BottomTabParamList } from './types';
 // Screens
 import { ChatHomeScreen } from '../../features/chat/screens/ChatHomeScreen';
 import { ClaimsListScreen } from '../../features/claims/screens/ClaimsListScreen';
-import { DocumentGridScreen } from '../../features/claims/screens/DocumentGridScreen';
+import { PatientActivityScreen } from '../../features/claims/screens/PatientActivityScreen';
 import { AllFeaturesDirectoryScreen } from '../../features/profile/screens/AllFeaturesDirectoryScreen';
 
 const Tab = createBottomTabNavigator<BottomTabParamList>();
@@ -59,7 +59,7 @@ export const TabNavigator = () => {
       />
       <Tab.Screen
         name={Routes.SessionsTab}
-        component={DocumentGridScreen}
+        component={PatientActivityScreen}
         options={{
           tabBarLabel: 'History',
           tabBarIcon: ({ color, size }) => (
