@@ -78,7 +78,22 @@ export const useClaimsStore = create<ClaimsState>((set, get) => ({
       const auth = useAuthStore.getState();
       const patientId = patientIdOverride || auth.userId || undefined;
       const res = await claimsApi.getClaims(0, 100, patientId);
-      const backendClaims = res.claims || [];
+      let backendClaims = res.claims || [];
+
+      // If no claims found with current userId, but user email is known, try refreshing user profile from backend
+      // This self-heals any mismatched or cross-environment user IDs (e.g. Preprod vs Local DB)
+      if (backendClaims.length === 0 && auth.userEmail) {
+        try {
+          const { fetchUserProfile } = require('../core/api/authApi');
+          const profile = await fetchUserProfile(auth.userEmail);
+          if (profile && profile.user_id && profile.user_id !== auth.userId) {
+            const retryRes = await claimsApi.getClaims(0, 100, profile.user_id);
+            if (retryRes.claims && retryRes.claims.length > 0) {
+              backendClaims = retryRes.claims;
+            }
+          }
+        } catch {}
+      }
 
       set({
         claims: backendClaims,

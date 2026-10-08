@@ -79,6 +79,16 @@ export function getBackendCandidateUrls(): string[] {
     candidates.push(`http://${metroHost}:8000`);
   }
 
+  const isLocalTarget = Boolean(
+    envUrl &&
+      (envUrl.includes('localhost') ||
+        envUrl.includes('127.0.0.1') ||
+        envUrl.includes('10.0.2.2') ||
+        envUrl.includes('192.168.') ||
+        envUrl.includes('172.') ||
+        envUrl.includes('10.'))
+  );
+
   // 2. Configured environment URL
   if (envUrl) {
     const clean = envUrl.replace(/\/+$/, '');
@@ -98,7 +108,13 @@ export function getBackendCandidateUrls(): string[] {
   }
   candidates.push('http://localhost:8000');
   candidates.push('http://127.0.0.1:8000');
-  candidates.push(PREPROD_DEPLOYED_URL);
+
+  // Only fall back to cloud preprod if NOT explicitly targeting a local backend,
+  // or if explicitly opted-in via EXPO_PUBLIC_ALLOW_CLOUD_FALLBACK=true.
+  const allowCloudFallback = process.env.EXPO_PUBLIC_ALLOW_CLOUD_FALLBACK === 'true';
+  if (!isLocalTarget || allowCloudFallback) {
+    candidates.push(PREPROD_DEPLOYED_URL);
+  }
 
   return Array.from(new Set(candidates));
 }
