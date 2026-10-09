@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "606330301595",
+    "project_id": "claimsguru-cee8c",
+    "storage_bucket": "claimsguru-cee8c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:606330301595:android:bed29d66e54affdd332a3e",
+        "android_client_info": {
+          "package_name": "com.claimsguru.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCYJSTNC5yHx8Dw_Kg5Vc-qVvelKpS-Y-Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

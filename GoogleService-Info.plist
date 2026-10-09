@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyAwtCi6hbxM__Euqu2ZNlsz49nOEdUMy9c</string>
+	<key>GCM_SENDER_ID</key>
+	<string>606330301595</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.claimsguru.ios</string>
+	<key>PROJECT_ID</key>
+	<string>claimsguru-cee8c</string>
+	<key>STORAGE_BUCKET</key>
+	<string>claimsguru-cee8c.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:606330301595:ios:d61e894fb2dd8986332a3e</string>
+</dict>
+</plist>

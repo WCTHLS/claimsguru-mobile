@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { View, ActivityIndicator, TouchableOpacity, Text } from 'react-native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Bell, X } from 'lucide-react-native';
 import { useTheme } from '../../core/theme/ThemeContext';
 import { useAuthStore } from '../../state/useAuthStore';
 import { appStorage } from '../../core/storage/appStorage';
+import { usePushNotifications } from '../../core/notifications/usePushNotifications';
+import { InAppNotificationBanner } from '../../core/notifications/InAppNotificationBanner';
 import { Routes } from './routes';
 import { RootStackParamList } from './types';
+
+export const navigationRef = createNavigationContainerRef<any>();
 
 // Navigators & Screens
 import { TabNavigator } from './TabNavigator';
@@ -132,6 +137,19 @@ export const RootNavigator = () => {
     };
   }, []);
 
+  // Attach Push Notifications at top-level (must be before any early return)
+  const { activeBanner, dismissBanner } = usePushNotifications((data) => {
+    try {
+      if (data?.claimId && navigationRef.isReady()) {
+        navigationRef.navigate(Routes.ClaimDetail, { claimId: data.claimId });
+      } else if (data?.screen && navigationRef.isReady()) {
+        navigationRef.navigate(data.screen);
+      }
+    } catch (e) {
+      console.warn('[Push] Error handling notification tap:', e);
+    }
+  });
+
   if (!isReady) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }}>
@@ -141,83 +159,101 @@ export const RootNavigator = () => {
   }
 
   return (
-    <NavigationContainer
-      linking={linking}
-      initialState={initialState}
-    >
-      <Stack.Navigator
-        initialRouteName={isAuthenticated ? "MainTabs" : Routes.SignIn}
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: colors.bg },
-        }}
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <NavigationContainer
+        ref={navigationRef}
+        linking={linking}
+        initialState={initialState}
       >
-        <Stack.Screen name={Routes.SignIn} component={SignInScreen} />
-        <Stack.Screen name="MainTabs" component={TabNavigator} />
-        <Stack.Screen name={Routes.SignUp} component={SignUpScreen} />
-        <Stack.Screen name={Routes.SearchTab} component={SearchScreen} />
+        <Stack.Navigator
+          initialRouteName={isAuthenticated ? "MainTabs" : Routes.SignIn}
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.bg },
+          }}
+        >
+          <Stack.Screen name={Routes.SignIn} component={SignInScreen} />
+          <Stack.Screen name="MainTabs" component={TabNavigator} />
+          <Stack.Screen name={Routes.SignUp} component={SignUpScreen} />
+          <Stack.Screen name={Routes.SearchTab} component={SearchScreen} />
 
-        <Stack.Screen
-          name={Routes.UploadPanel}
-          component={UploadPanelScreen}
+          <Stack.Screen
+            name={Routes.UploadPanel}
+            component={UploadPanelScreen}
+          />
+          <Stack.Screen
+            name={Routes.WorkflowPipeline}
+            component={WorkflowPipelineScreen}
+          />
+          <Stack.Screen
+            name={Routes.ClaimDetail}
+            component={ClaimDetailScreen}
+          />
+          <Stack.Screen
+            name={Routes.BrainPreview}
+            component={BrainPreviewScreen}
+          />
+          <Stack.Screen
+            name={Routes.RiskDetail}
+            component={RiskDetailScreen}
+          />
+          <Stack.Screen
+            name={Routes.FraudDetail}
+            component={FraudDetailScreen}
+          />
+          <Stack.Screen
+            name={Routes.ValidationRules}
+            component={ValidationRulesScreen}
+          />
+          <Stack.Screen
+            name={Routes.MedicalCoding}
+            component={MedicalCodingScreen}
+          />
+          <Stack.Screen
+            name={Routes.DocumentGrid}
+            component={DocumentGridScreen}
+          />
+          <Stack.Screen
+            name={Routes.PreviewDocuments}
+            component={PreviewDocumentsScreen}
+          />
+          <Stack.Screen
+            name={Routes.PatientProfile}
+            component={PatientProfileScreen}
+          />
+          <Stack.Screen
+            name={Routes.PatientActivity}
+            component={PatientActivityScreen}
+          />
+          <Stack.Screen
+            name={Routes.Submission}
+            component={SubmissionScreen}
+          />
+          <Stack.Screen
+            name={Routes.ProfileSettings}
+            component={ProfileSettingsScreen}
+          />
+          <Stack.Screen
+            name={Routes.OpsConsole}
+            component={OpsConsoleScreen}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+
+      {/* Floating In-App Heads-Up Banner Overlay (WhatsApp / iOS style) */}
+      {activeBanner && (
+        <InAppNotificationBanner
+          banner={activeBanner}
+          onDismiss={dismissBanner}
+          onPress={() => {
+            const claimId = activeBanner.data?.claimId;
+            dismissBanner();
+            if (claimId && navigationRef.isReady()) {
+              navigationRef.navigate(Routes.ClaimDetail, { claimId });
+            }
+          }}
         />
-        <Stack.Screen
-          name={Routes.WorkflowPipeline}
-          component={WorkflowPipelineScreen}
-        />
-        <Stack.Screen
-          name={Routes.ClaimDetail}
-          component={ClaimDetailScreen}
-        />
-        <Stack.Screen
-          name={Routes.BrainPreview}
-          component={BrainPreviewScreen}
-        />
-        <Stack.Screen
-          name={Routes.RiskDetail}
-          component={RiskDetailScreen}
-        />
-        <Stack.Screen
-          name={Routes.FraudDetail}
-          component={FraudDetailScreen}
-        />
-        <Stack.Screen
-          name={Routes.ValidationRules}
-          component={ValidationRulesScreen}
-        />
-        <Stack.Screen
-          name={Routes.MedicalCoding}
-          component={MedicalCodingScreen}
-        />
-        <Stack.Screen
-          name={Routes.DocumentGrid}
-          component={DocumentGridScreen}
-        />
-        <Stack.Screen
-          name={Routes.PreviewDocuments}
-          component={PreviewDocumentsScreen}
-        />
-        <Stack.Screen
-          name={Routes.PatientProfile}
-          component={PatientProfileScreen}
-        />
-        <Stack.Screen
-          name={Routes.PatientActivity}
-          component={PatientActivityScreen}
-        />
-        <Stack.Screen
-          name={Routes.Submission}
-          component={SubmissionScreen}
-        />
-        <Stack.Screen
-          name={Routes.ProfileSettings}
-          component={ProfileSettingsScreen}
-        />
-        <Stack.Screen
-          name={Routes.OpsConsole}
-          component={OpsConsoleScreen}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+      )}
+    </View>
   );
 };
