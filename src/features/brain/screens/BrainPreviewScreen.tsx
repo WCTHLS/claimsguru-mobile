@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,8 +10,11 @@ import {
   TextInput,
   Alert,
   Modal,
+  Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { Routes } from '../../../app/navigation/routes';
 import { VALIDATION_RULES } from '../../../mocks/rules.mock';
@@ -40,6 +43,13 @@ import {
   Plus,
   Save,
   ArrowUpDown,
+  UploadCloud,
+  Lock,
+  Camera,
+  Image as ImageIcon,
+  CheckCircle2,
+  Edit3,
+  ShieldAlert,
 } from 'lucide-react-native';
 
 export interface BrainExpenseItem {
@@ -105,9 +115,16 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   const [admissionDate, setAdmissionDate] = useState('');
   const [dischargeDate, setDischargeDate] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
+  const [policyNumber, setPolicyNumber] = useState('');
   const [isDetailsDirty, setIsDetailsDirty] = useState(false);
   const [savingDetails, setSavingDetails] = useState(false);
   const [detailsSaved, setDetailsSaved] = useState(false);
+
+  // Policy missing check & Fast OCR upload state
+  const [isExtractingPolicy, setIsExtractingPolicy] = useState(false);
+  const [showPolicyUploadModal, setShowPolicyUploadModal] = useState(false);
+  const [showPolicyRequiredModal, setShowPolicyRequiredModal] = useState(false);
+  const policyInputRef = useRef<TextInput>(null);
 
   // Initialize editable fields from preview and store
   useEffect(() => {
@@ -124,7 +141,23 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
     setAdmissionDate(p.admission_date || s?.admission_date || c?.admissionDate || '07-02-2024');
     setDischargeDate(p.discharge_date || s?.discharge_date || c?.dischargeDate || '22-02-2024');
     setDiagnosis(p.diagnosis || s?.diagnosis || c?.diagnosis || c?.dept || 'Hypothyroidism Chronic Type 2 Pulmon');
+    const pol = (
+      p.policy_number ||
+      p.policy_id ||
+      s?.policy_number ||
+      preview?.policy_id ||
+      c?.policyNo ||
+      ''
+    ).trim();
+    setPolicyNumber(pol);
   }, [preview, claimId, isDetailsDirty]);
+
+  const isPolicyMissing =
+    !policyNumber ||
+    policyNumber.toLowerCase() === 'n/a' ||
+    policyNumber.toLowerCase() === 'none' ||
+    policyNumber.toLowerCase() === 'missing' ||
+    policyNumber.toLowerCase() === 'unknown';
 
   // Fetch or refresh claim preview from backend
   useEffect(() => {
@@ -531,6 +564,7 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
         admission_date: admissionDate.trim(),
         discharge_date: dischargeDate.trim(),
         diagnosis: diagnosis.trim(),
+        policy_number: policyNumber.trim(),
       };
 
       const success = await claimsApi.updateClaimFields(claimId, payload);
@@ -556,6 +590,7 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
             dept: diagnosis.trim() || currentClaim.dept,
             admissionDate: admissionDate.trim() || currentClaim.admissionDate,
             dischargeDate: dischargeDate.trim() || currentClaim.dischargeDate,
+            policyNo: policyNumber.trim() || currentClaim.policyNo,
           });
         }
 
@@ -571,6 +606,142 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
     } finally {
       setSavingDetails(false);
     }
+  };
+
+  const handlePickPolicyDoc = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*'],
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        setShowPolicyUploadModal(false);
+        await runPolicyOcr({
+          name: asset.name,
+          type: asset.mimeType || 'application/pdf',
+          uri: asset.uri,
+        });
+      }
+    } catch (err: any) {
+      console.warn('[BrainPreviewScreen] Document picker error:', err);
+      showToast('Document selection failed');
+    }
+  };
+
+  const handlePickPolicyPhoto = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: false,
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        setShowPolicyUploadModal(false);
+        const name = asset.fileName || `HealthCard_${Date.now()}.jpg`;
+        await runPolicyOcr({
+          name,
+          type: asset.mimeType || 'image/jpeg',
+          uri: asset.uri,
+        });
+      }
+    } catch (err: any) {
+      console.warn('[BrainPreviewScreen] Image picker error:', err);
+      showToast('Photo selection failed');
+    }
+  };
+
+  const handleTakePolicyPhoto = async () => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        showToast('Camera permission is required');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        setShowPolicyUploadModal(false);
+        const name = `HealthCard_Camera_${Date.now()}.jpg`;
+        await runPolicyOcr({
+          name,
+          type: asset.mimeType || 'image/jpeg',
+          uri: asset.uri,
+        });
+      }
+    } catch (err: any) {
+      console.warn('[BrainPreviewScreen] Camera error:', err);
+      showToast('Camera capture failed');
+    }
+  };
+
+  const runPolicyOcr = async (fileObj: { name: string; type?: string; uri?: string; blob?: any }) => {
+    setIsExtractingPolicy(true);
+    showToast('Extracting policy details with Fast OCR...');
+    try {
+      const res = await claimsApi.extractPolicyFromDoc(claimId, fileObj);
+      if (res.success && (res.policy_id || res.insurer)) {
+        const extractedPolicy = (res.policy_id || '').trim();
+        if (extractedPolicy) {
+          setPolicyNumber(extractedPolicy);
+          await claimsApi.updateClaimFields(claimId, {
+            policy_number: extractedPolicy,
+            ...(res.insurer ? { insurance_company: res.insurer } : {}),
+          });
+          const currentClaim = useClaimsStore.getState().claims.find(c => c.id === claimId || c.id.startsWith(claimId));
+          if (currentClaim) {
+            useClaimsStore.getState().addOrUpdateClaim({
+              ...currentClaim,
+              policyNo: extractedPolicy,
+            });
+          }
+          const refreshed = await claimsApi.getClaimPreview(claimId);
+          if (refreshed) {
+            setPreview(refreshed);
+            useClaimsStore.getState().setClaimPreview(claimId, refreshed);
+          }
+          showToast(`Policy #${extractedPolicy} verified & linked!`);
+        } else {
+          showToast('Document processed. Please enter policy number manually.');
+          setDetailsOpen(true);
+          setTimeout(() => policyInputRef.current?.focus(), 300);
+        }
+      } else {
+        showToast('Could not auto-extract Policy ID. Please enter manually.');
+        setDetailsOpen(true);
+        setTimeout(() => policyInputRef.current?.focus(), 300);
+      }
+    } catch (err: any) {
+      console.warn('[BrainPreviewScreen] OCR extraction error:', err);
+      showToast('OCR extraction failed. You can enter Policy ID manually.');
+      setDetailsOpen(true);
+      setTimeout(() => policyInputRef.current?.focus(), 300);
+    } finally {
+      setIsExtractingPolicy(false);
+    }
+  };
+
+  const handleFocusPolicyInput = () => {
+    setShowPolicyRequiredModal(false);
+    setDetailsOpen(true);
+    setTimeout(() => {
+      policyInputRef.current?.focus();
+    }, 250);
+  };
+
+  const handleGenerateIrdai = () => {
+    if (isPolicyMissing) {
+      setShowPolicyRequiredModal(true);
+      return;
+    }
+    navigation.navigate(Routes.Submission, { claimId, preview });
   };
 
   return (
@@ -648,6 +819,55 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
             </TouchableOpacity>
           </View>
 
+          {/* Policy Document / Health Card Missing Notice Card (Web Feature on Mobile) */}
+          {isPolicyMissing && (
+            <View style={[styles.policyNoticeCard, { backgroundColor: colors.amberSoft, borderColor: colors.amber + '40' }]}>
+              <View style={styles.policyNoticeHeader}>
+                <View style={[styles.policyNoticeIconWrap, { backgroundColor: colors.amber + '25' }]}>
+                  <AlertTriangle size={17} color={colors.amber} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                    <Text style={[styles.policyNoticeTitle, { color: colors.ink }]}>Policy / Health Card Missing</Text>
+                    <View style={[styles.policyNoticeBadge, { backgroundColor: colors.amber + '30' }]}>
+                      <Text style={[styles.policyNoticeBadgeText, { color: colors.amber }]}>REQUIRED</Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.policyNoticeDesc, { color: colors.muted }]}>
+                    Required for TPA & IRDAI reports. Upload the patient's Policy Schedule or Health Card, or enter the policy number below.
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.policyNoticeActions}>
+                <TouchableOpacity
+                  style={[styles.policyUploadBtn, { backgroundColor: colors.brand }]}
+                  onPress={() => setShowPolicyUploadModal(true)}
+                  disabled={isExtractingPolicy}
+                  activeOpacity={0.8}
+                >
+                  {isExtractingPolicy ? (
+                    <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 6 }} />
+                  ) : (
+                    <UploadCloud size={15} color="#ffffff" style={{ marginRight: 6 }} />
+                  )}
+                  <Text style={styles.policyUploadBtnText}>
+                    {isExtractingPolicy ? 'Extracting OCR...' : 'Upload Policy / Card'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.policyEnterBtn, { borderColor: colors.line, backgroundColor: colors.surface }]}
+                  onPress={handleFocusPolicyInput}
+                  activeOpacity={0.7}
+                >
+                  <Edit3 size={14} color={colors.ink} style={{ marginRight: 5 }} />
+                  <Text style={[styles.policyEnterBtnText, { color: colors.ink }]}>Enter Policy ID</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {/* Accordion 0: Patient & Claim Details (Editable Form) */}
           <View style={[styles.accCard, { backgroundColor: colors.surface, borderColor: isDetailsDirty ? colors.brand : colors.line }]}>
             <TouchableOpacity
@@ -711,6 +931,45 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
                       </>
                     )}
                   </TouchableOpacity>
+                </View>
+
+                {/* Field 0: Policy Number / Health Card ID */}
+                <View style={styles.fieldGroup}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={[styles.fieldLabel, { color: colors.muted, marginBottom: 0 }]}>
+                      Policy Number / Card ID
+                    </Text>
+                    {isPolicyMissing ? (
+                      <View style={[styles.inlineBadge, { backgroundColor: colors.redSoft }]}>
+                        <Text style={[styles.inlineBadgeText, { color: colors.red }]}>MISSING</Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.inlineBadge, { backgroundColor: colors.greenSoft }]}>
+                        <Text style={[styles.inlineBadgeText, { color: colors.green }]}>VERIFIED</Text>
+                      </View>
+                    )}
+                  </View>
+                  <TextInput
+                    ref={policyInputRef}
+                    style={[
+                      styles.fieldInput,
+                      {
+                        backgroundColor: colors.surface2,
+                        borderColor: isPolicyMissing ? colors.amber : colors.line,
+                        color: colors.ink,
+                        fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+                        fontWeight: '600',
+                      },
+                    ]}
+                    value={policyNumber}
+                    onChangeText={text => {
+                      setPolicyNumber(text);
+                      setIsDetailsDirty(true);
+                    }}
+                    placeholder="e.g. POL-161114/01/2024/002345"
+                    placeholderTextColor={colors.muted}
+                    autoCapitalize="characters"
+                  />
                 </View>
 
                 {/* Field 1: Patient Name */}
@@ -1667,10 +1926,19 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.primaryBtn, { backgroundColor: colors.brand }]}
-            onPress={() => navigation.navigate(Routes.Submission, { claimId, preview })}
+            style={[
+              styles.primaryBtn,
+              {
+                backgroundColor: isPolicyMissing ? colors.amber : colors.brand,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+              },
+            ]}
+            onPress={handleGenerateIrdai}
             activeOpacity={0.85}
           >
+            {isPolicyMissing && <Lock size={14} color="#ffffff" style={{ marginRight: 6 }} />}
             <Text style={styles.primaryBtnText}>Generate IRDAI form</Text>
           </TouchableOpacity>
         </View>
@@ -1724,6 +1992,151 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
               >
                 <Trash2 size={16} color="#ffffff" style={{ marginRight: 6 }} />
                 <Text style={styles.modalDeleteBtnText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Policy Document / Health Card Fast OCR Upload Modal */}
+      <Modal
+        visible={showPolicyUploadModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isExtractingPolicy) setShowPolicyUploadModal(false);
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.uploadModalCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <View style={styles.uploadModalHeader}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text style={[styles.uploadModalTitle, { color: colors.ink }]}>
+                  Upload Policy / Health Card
+                </Text>
+                <Text style={{ fontSize: 11.5, color: colors.muted, marginTop: 2 }}>
+                  Fast OCR will extract Policy Number &amp; Insurer instantly
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  if (!isExtractingPolicy) setShowPolicyUploadModal(false);
+                }}
+                disabled={isExtractingPolicy}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <XIcon size={20} color={colors.muted} />
+              </TouchableOpacity>
+            </View>
+
+            {isExtractingPolicy ? (
+              <View style={{ alignItems: 'center', paddingVertical: 28 }}>
+                <ActivityIndicator size="large" color={colors.brand} />
+                <Text style={{ marginTop: 14, fontSize: 13, fontWeight: '600', color: colors.ink }}>
+                  Extracting policy details with Fast OCR…
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.muted, marginTop: 4 }}>
+                  Verifying policy clauses and metadata
+                </Text>
+              </View>
+            ) : (
+              <View style={{ gap: 8, marginTop: 4 }}>
+                <TouchableOpacity
+                  style={[styles.uploadOptionBtn, { backgroundColor: colors.surface2, borderColor: colors.line }]}
+                  onPress={handlePickPolicyDoc}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.uploadOptionIconWrap, { backgroundColor: colors.brandSoft }]}>
+                    <FileText size={18} color={colors.brandDark} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.uploadOptionTitle, { color: colors.ink }]}>Browse File (PDF / Image)</Text>
+                    <Text style={[styles.uploadOptionSub, { color: colors.muted }]}>Select policy schedule or e-card from device</Text>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.uploadOptionBtn, { backgroundColor: colors.surface2, borderColor: colors.line }]}
+                  onPress={handleTakePolicyPhoto}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.uploadOptionIconWrap, { backgroundColor: colors.brandSoft }]}>
+                    <Camera size={18} color={colors.brandDark} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.uploadOptionTitle, { color: colors.ink }]}>Take Photo of Physical Card</Text>
+                    <Text style={[styles.uploadOptionSub, { color: colors.muted }]}>Snap health insurance card with camera</Text>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.uploadOptionBtn, { backgroundColor: colors.surface2, borderColor: colors.line }]}
+                  onPress={handlePickPolicyPhoto}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.uploadOptionIconWrap, { backgroundColor: colors.brandSoft }]}>
+                    <ImageIcon size={18} color={colors.brandDark} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.uploadOptionTitle, { color: colors.ink }]}>Photo Library</Text>
+                    <Text style={[styles.uploadOptionSub, { color: colors.muted }]}>Choose card photo from gallery</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Policy Required Interception Modal */}
+      <Modal
+        visible={showPolicyRequiredModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPolicyRequiredModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.policyReqModalCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <View style={[styles.policyReqIconCircle, { backgroundColor: colors.amberSoft }]}>
+              <ShieldAlert size={28} color={colors.amber} />
+            </View>
+
+            <Text style={[styles.policyReqTitle, { color: colors.ink }]}>
+              Policy Number Required
+            </Text>
+
+            <Text style={[styles.policyReqDesc, { color: colors.muted }]}>
+              TPA Comprehensive Audit Reports and official IRDAI claim forms require a valid Policy Number. Please upload your health card or enter the policy number to generate the report.
+            </Text>
+
+            <View style={styles.policyReqActionCol}>
+              <TouchableOpacity
+                style={[styles.policyReqPrimaryBtn, { backgroundColor: colors.brand }]}
+                onPress={() => {
+                  setShowPolicyRequiredModal(false);
+                  setShowPolicyUploadModal(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <UploadCloud size={16} color="#ffffff" style={{ marginRight: 6 }} />
+                <Text style={styles.policyReqPrimaryBtnText}>Upload Policy / Health Card</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.policyReqSecondaryBtn, { borderColor: colors.line, backgroundColor: colors.surface2 }]}
+                onPress={handleFocusPolicyInput}
+                activeOpacity={0.7}
+              >
+                <Edit3 size={15} color={colors.ink} style={{ marginRight: 6 }} />
+                <Text style={[styles.policyReqSecondaryBtnText, { color: colors.ink }]}>Enter Policy Number Manually</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.policyReqDismissBtn}
+                onPress={() => setShowPolicyRequiredModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.policyReqDismissBtnText, { color: colors.muted }]}>Dismiss</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2297,5 +2710,195 @@ const styles = StyleSheet.create({
     minHeight: 46,
     textAlignVertical: 'top',
     paddingTop: 8,
+  },
+  // Policy Notice Card
+  policyNoticeCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 13,
+    marginBottom: 11,
+  },
+  policyNoticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 10,
+  },
+  policyNoticeIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  policyNoticeTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
+  },
+  policyNoticeBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 6,
+  },
+  policyNoticeBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  policyNoticeDesc: {
+    fontSize: 11.5,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+  policyNoticeActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 2,
+  },
+  policyUploadBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 9,
+  },
+  policyUploadBtnText: {
+    color: '#ffffff',
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  policyEnterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 9,
+    borderWidth: 1,
+  },
+  policyEnterBtnText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+  },
+  inlineBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  inlineBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  // Upload Sheet Modal
+  uploadModalCard: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 18,
+  },
+  uploadModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  uploadModalTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  uploadOptionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 8,
+    gap: 12,
+  },
+  uploadOptionIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadOptionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  uploadOptionSub: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  policyReqModalCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 20,
+    alignItems: 'center',
+  },
+  policyReqIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  policyReqTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  policyReqDesc: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 18,
+  },
+  policyReqActionCol: {
+    width: '100%',
+    gap: 8,
+  },
+  policyReqPrimaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    borderRadius: 10,
+  },
+  policyReqPrimaryBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  policyReqSecondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  policyReqSecondaryBtnText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  policyReqDismissBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  policyReqDismissBtnText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 });

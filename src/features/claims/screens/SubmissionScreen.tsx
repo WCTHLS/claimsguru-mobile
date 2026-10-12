@@ -245,6 +245,21 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
       return;
     }
 
+    const effectivePolicy = (fPolicy || policyId || claim.policyNo || '').trim();
+    const isPolicyMissing =
+      !effectivePolicy ||
+      effectivePolicy.toLowerCase() === 'n/a' ||
+      effectivePolicy.toLowerCase() === 'none' ||
+      effectivePolicy.toLowerCase() === 'missing';
+
+    if (isPolicyMissing) {
+      setPdfLoading(false);
+      setPdfBlobUrl(null);
+      setPdfError('Policy number is required to generate TPA and IRDAI reports. Please enter or scan your policy details.');
+      showToast('Policy number required to generate reports');
+      return;
+    }
+
     setPdfLoading(true);
     setPdfError(null);
 
@@ -1743,12 +1758,24 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                 <Text style={[styles.pdfErrorSub, { color: colors.muted }]}>
                   {pdfError}
                 </Text>
-                <TouchableOpacity
-                  style={[styles.pdfRetryBtn, { backgroundColor: colors.brand }]}
-                  onPress={() => loadIrdaPdf(renderStyle)}
-                >
-                  <Text style={styles.pdfRetryBtnText}>Retry</Text>
-                </TouchableOpacity>
+                {pdfError.toLowerCase().includes('policy') ? (
+                  <TouchableOpacity
+                    style={[styles.pdfRetryBtn, { backgroundColor: colors.brand, marginTop: 12 }]}
+                    onPress={() => {
+                      setShowPdfModal(false);
+                      setShowUploadBox(true);
+                    }}
+                  >
+                    <Text style={styles.pdfRetryBtnText}>Upload Policy / Health Card</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.pdfRetryBtn, { backgroundColor: colors.brand }]}
+                    onPress={() => loadIrdaPdf(renderStyle)}
+                  >
+                    <Text style={styles.pdfRetryBtnText}>Retry</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ) : Platform.OS === 'web' && pdfBlobUrl ? (
               <View style={styles.pdfFrameWrapper}>
