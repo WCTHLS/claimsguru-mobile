@@ -33,17 +33,27 @@ import {
   Settings,
   Terminal,
   LayoutGrid,
+  LogOut,
 } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useAuthStore } from '../../../state/useAuthStore';
 import { ALL_FEATURES, FeatureDef } from '../../chat/screens/ChatHomeScreen';
 import { AppHeader } from '../../../core/components/AppHeader';
+import { Routes } from '../../../app/navigation/routes';
 
 export const AllFeaturesDirectoryScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { role } = useAuthStore();
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const handleSignOut = () => {
+    useAuthStore.getState().signOut();
+    navigation.reset({
+      index: 0,
+      routes: [{ name: Routes.SignIn }],
+    });
+  };
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -101,16 +111,12 @@ export const AllFeaturesDirectoryScreen = ({ navigation }: any) => {
       <AppHeader navigation={navigation} />
 
       <ScrollView style={styles.content} contentContainerStyle={styles.scrollInner}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2, paddingHorizontal: 2 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, paddingHorizontal: 2 }}>
           <Text style={{ fontSize: 20, fontWeight: '800', color: colors.ink, letterSpacing: -0.3 }}>All Features</Text>
           <View style={[styles.countBadge, { backgroundColor: colors.brandSoft }]}>
             <Text style={[styles.countBadgeText, { color: colors.brandDark }]}>{ALL_FEATURES.length} screens</Text>
           </View>
         </View>
-
-        <Text style={[styles.subNote, { color: colors.muted }]}>
-          Role-aware navigation map. Tap any screen to open directly. Active role: <Text style={{ fontWeight: '700', color: colors.brandDark }}>{role}</Text>
-        </Text>
 
         {groups.map(grp => (
           <View key={grp.title} style={styles.groupContainer}>
@@ -157,6 +163,16 @@ export const AllFeaturesDirectoryScreen = ({ navigation }: any) => {
             </View>
           </View>
         ))}
+
+        {/* Log out button */}
+        <TouchableOpacity
+          style={[styles.signOutBtn, { borderColor: colors.line, backgroundColor: colors.surface }]}
+          onPress={handleSignOut}
+          activeOpacity={0.7}
+        >
+          <LogOut size={16} color={colors.red} style={{ marginRight: 8 }} />
+          <Text style={[styles.signOutText, { color: colors.red }]}>Log out</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* Toast */}
@@ -216,6 +232,20 @@ const styles = StyleSheet.create({
   featDesc: { fontSize: 11, marginTop: 1 },
   lockBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 4 },
   lockBadgeText: { fontSize: 9.5, fontWeight: '700' },
+  signOutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  signOutText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   toast: {
     position: 'absolute',
     left: 14,

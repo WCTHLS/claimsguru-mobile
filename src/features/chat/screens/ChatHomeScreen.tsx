@@ -91,8 +91,6 @@ export interface FeatureDef {
 }
 
 export const ALL_FEATURES: FeatureDef[] = [
-  { id: 'signin', g: 'Access', nav: Routes.SignIn, n: 'Sign in', d: 'Patient portal sign in · local & Entra', iconName: 'lock' },
-  { id: 'signup', g: 'Access', nav: Routes.SignUp, n: 'Register', d: 'Patient account creation · insurance profile', iconName: 'user-plus' },
   { id: 'home', g: 'Main', nav: Routes.ChatTab, n: 'Home', d: 'Patient portal dashboard & claim uploads', iconName: 'home' },
   { id: 'sessions', g: 'Main', nav: Routes.SessionsTab, n: 'History', d: 'Audit history & activity events', iconName: 'clock' },
   { id: 'claims', g: 'Claims', nav: Routes.ClaimsTab, n: 'Claims', d: 'Active & processed claims list', iconName: 'file-text' },

@@ -28,9 +28,7 @@ import { useTheme } from '../../../core/theme/ThemeContext';
 import { useAuthStore } from '../../../state/useAuthStore';
 import { deleteUserAccount } from '../../../core/api/authApi';
 import {
-  isRunningInExpoGo,
   registerForPushNotificationsAsync,
-  sendLocalPushNotification,
 } from '../../../core/notifications/notificationService';
 import { Routes } from '../../../app/navigation/routes';
 import { GlobalBottomTabBar } from '../../../app/navigation/GlobalBottomTabBar';
@@ -43,7 +41,6 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
 
   const [biometric, setBiometric] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
-  const [sendingTestPush, setSendingTestPush] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Active single role (default submitter)
@@ -202,55 +199,6 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
               thumbColor="#ffffff"
             />
           </View>
-
-          {/* Test Push Notification Trigger */}
-          {pushNotifications && (
-            <View style={{ borderTopWidth: 1, borderTopColor: colors.line, padding: 12 }}>
-              <TouchableOpacity
-                style={{
-                  backgroundColor: '#0d9488',
-                  paddingVertical: 10,
-                  paddingHorizontal: 14,
-                  borderRadius: 10,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                }}
-                disabled={sendingTestPush}
-                onPress={async () => {
-                  if (isRunningInExpoGo()) {
-                    Alert.alert(
-                      'Development Build Required',
-                      'Firebase Cloud Messaging push notifications require the custom Development Build APK.\n\nPlease install the ClaimsGuru APK and open that app instead of Expo Go.'
-                    );
-                    return;
-                  }
-                  setSendingTestPush(true);
-                  try {
-                    await sendLocalPushNotification({
-                      title: 'ClaimsGuru: Claim Approved ✅',
-                      body: 'Your cashless claim (#CG-8942) for ₹45,000 has been approved by Star Health.',
-                      subtitle: 'ClaimsGuru Instant Alert',
-                      data: { claimId: 'c3313984-2431-4a60-9586-371384e902af' },
-                    });
-                  } catch (e: any) {
-                    Alert.alert('Notification Error', e?.message || 'Could not send test push notification');
-                  } finally {
-                    setSendingTestPush(false);
-                  }
-                }}
-              >
-                <Bell size={16} color="#ffffff" />
-                <Text style={{ color: '#ffffff', fontWeight: '600', fontSize: 13 }}>
-                  {sendingTestPush ? 'Triggering Banner...' : 'Test WhatsApp-Style Notification Banner'}
-                </Text>
-              </TouchableOpacity>
-              <Text style={{ color: colors.muted, fontSize: 11, marginTop: 6, textAlign: 'center' }}>
-                Shows system heads-up banner with sound & vibration (FCM enabled)
-              </Text>
-            </View>
-          )}
         </View>
 
         {/* Section: Appearance (Dark mode toggle) */}
