@@ -22,7 +22,6 @@ import { formatINR } from '../../../core/utils/currency';
 import { GlobalBottomTabBar } from '../../../app/navigation/GlobalBottomTabBar';
 import {
   ChevronLeft,
-  MessageSquare,
   LayoutGrid,
   Clock,
   Shield,
@@ -76,7 +75,6 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   const [codingOpen, setCodingOpen] = useState(false);
   const [expensesOpen, setExpensesOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
-  const [readinessOpen, setReadinessOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
 
   // Expenses management state
@@ -184,7 +182,7 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   const rawRisk = preview?.predictions?.[0]?.rejection_score ?? summary?.risk_score;
   const riskScorePct = rawRisk !== undefined && rawRisk !== null
     ? Math.round(rawRisk <= 1 ? rawRisk * 100 : rawRisk)
-    : 58;
+    : 16;
   const riskCategory = preview?.predictions?.[0]?.risk_category || (riskScorePct > 60 ? 'HIGH' : riskScorePct > 30 ? 'MEDIUM' : 'LOW');
   const isLowRisk = riskCategory === 'LOW' || riskScorePct <= 30;
   const isHighRisk = riskCategory === 'HIGH' || riskScorePct > 60;
@@ -205,7 +203,7 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   const rulesTotal = rawValidations.length || (summary?.validation_total ?? 11);
   const rulesPassed = rawValidations.length
     ? rawValidations.filter(v => v.passed).length
-    : (summary?.validation_passed ?? 7);
+    : (summary?.validation_passed ?? 10);
   const rulesFailed = Math.max(0, rulesTotal - rulesPassed);
 
   // Medical codes calculations (strictly respect actual extracted codes for uploaded claims)
@@ -343,47 +341,6 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   const icdCount = icdList.length;
   const cptCount = cptList.length;
   const totalCodes = icdCount + cptCount;
-
-  // 4. Reimbursement readiness checklist state
-  const hasDischarge = Boolean(preview?.documents?.some(d => (d.doc_type || '').includes('discharge')) || parsed.discharge_date);
-  const hasBill = Boolean(preview?.documents?.some(d => (d.doc_type || '').includes('bill')) || parsed.hospital_name || preview?.billed_total);
-  const hasPolicy = Boolean(parsed.policy_number || parsed.insurance_policy_number || parsed.policy_id);
-  const hasPreAuth = Boolean(parsed.pre_auth_number || parsed.pre_authorization_number || parsed.pre_auth_ref);
-
-  const [readinessChecks, setReadinessChecks] = useState({
-    c1: true,
-    c2: true,
-    c3: true,
-    c4: false,
-  });
-
-  useEffect(() => {
-    if (preview) {
-      setReadinessChecks({
-        c1: hasDischarge || true,
-        c2: hasBill || true,
-        c3: hasPolicy || true,
-        c4: hasPreAuth,
-      });
-    }
-  }, [hasDischarge, hasBill, hasPolicy, hasPreAuth, preview]);
-
-  // Compute dynamic readiness percentage based on checklist
-  const totalChecks = 4;
-  const passedChecksCount = (readinessChecks.c1 ? 1 : 0) + (readinessChecks.c2 ? 1 : 0) + (readinessChecks.c3 ? 1 : 0) + (readinessChecks.c4 ? 1 : 0);
-  const readinessPct = Math.round((passedChecksCount / totalChecks) * 100);
-
-  // Verdict Card
-  const isLowVerdict = rulesFailed === 0 && isLowRisk;
-  const isHighVerdict = isHighRisk || rulesFailed >= 4;
-  const verdictStatus = isLowVerdict
-    ? 'READY FOR SUBMISSION'
-    : (isHighVerdict ? 'HIGH REJECTION RISK' : 'NEEDS REVIEW');
-  const verdictColor = isLowVerdict ? colors.green : isHighVerdict ? colors.red : colors.amber;
-  const verdictSoftBg = isLowVerdict ? colors.greenSoft : isHighVerdict ? colors.redSoft : colors.amberSoft;
-  const verdictSub = rulesFailed === 0
-    ? `All ${rulesTotal} rules passed · fraud ${fraudPillLabel} · ready`
-    : `${rulesFailed} rules failed · pre-authorisation missing · fraud ${fraudPillLabel}`;
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -636,15 +593,6 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
         <View style={styles.appBarRightActions}>
           <TouchableOpacity
             style={styles.iconBtn}
-            onPress={() => navigation.navigate(Routes.ChatTab)}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <MessageSquare size={20} color={colors.ink} strokeWidth={1.9} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.iconBtn, { marginLeft: 10 }]}
             onPress={() => navigation.navigate('MainTabs', { screen: Routes.AllFeaturesTab })}
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -655,19 +603,30 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
       </View>
 
       <View style={[styles.container, { backgroundColor: colors.surface2 }]}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* 4 Top KPI Cards Row */}
+        {loading && !preview ? (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 100 }}>
+            <ActivityIndicator size="large" color={colors.brand} />
+            <Text style={{ marginTop: 14, fontSize: 14, fontWeight: '600', color: colors.muted }}>
+              Loading AI Brain Preview…
+            </Text>
+          </View>
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+          {/* 3 Top KPI Cards Row */}
           <View style={styles.kpiRow}>
             <TouchableOpacity
-              style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
+              style={[
+                styles.kpiCard,
+                { backgroundColor: riskSoftBg, borderColor: riskColor },
+              ]}
               onPress={() => navigation.navigate(Routes.RiskDetail, { claimId, preview })}
               activeOpacity={0.75}
             >
               <Text style={[styles.kpiVal, { color: riskColor }]}>{riskScorePct}%</Text>
-              <Text style={[styles.kpiLabel, { color: colors.muted }]}>Risk</Text>
+              <Text style={[styles.kpiLabel, { color: riskColor, fontWeight: '600' }]}>Risk</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -687,19 +646,6 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
               <Text style={[styles.kpiVal, { color: colors.ink }]}>{rulesPassed}/{rulesTotal}</Text>
               <Text style={[styles.kpiLabel, { color: colors.muted }]}>Rules</Text>
             </TouchableOpacity>
-
-            <View style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-              <Text style={[styles.kpiVal, { color: colors.ink }]}>{readinessPct}%</Text>
-              <Text style={[styles.kpiLabel, { color: colors.muted }]}>Ready</Text>
-            </View>
-          </View>
-
-          {/* Verdict Card */}
-          <View style={[styles.verdictCard, { backgroundColor: verdictSoftBg }]}>
-            <Text style={[styles.verdictTitle, { color: verdictColor }]}>{verdictStatus}</Text>
-            <Text style={[styles.verdictSub, { color: verdictColor }]}>
-              {verdictSub}
-            </Text>
           </View>
 
           {/* Accordion 0: Patient & Claim Details (Editable Form) */}
@@ -1603,127 +1549,6 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
             )}
           </View>
 
-          {/* Accordion 4: Reimbursement Readiness */}
-          <View style={[styles.accCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-            <TouchableOpacity
-              style={styles.accHeader}
-              onPress={() => setReadinessOpen(!readinessOpen)}
-              activeOpacity={0.7}
-            >
-              <CheckSquare size={16} color={colors.ink} strokeWidth={2} />
-              <Text style={[styles.accTitle, { color: colors.ink }]}>Reimbursement readiness</Text>
-              <View style={[styles.pillBadge, { backgroundColor: colors.surface2 }]}>
-                <Text style={[styles.pillText, { color: colors.muted }]}>{readinessPct}%</Text>
-              </View>
-              <View style={{ marginLeft: 'auto' }}>
-                {readinessOpen ? (
-                  <ChevronDown size={16} color={colors.muted} strokeWidth={2} />
-                ) : (
-                  <ChevronRight size={16} color={colors.muted} strokeWidth={2} />
-                )}
-              </View>
-            </TouchableOpacity>
-
-            {readinessOpen && (
-              <View style={[styles.accInner, { borderTopColor: colors.line2 }]}>
-                {/* Progress Bar */}
-                <View style={[styles.progTrack, { backgroundColor: colors.line }]}>
-                  <View style={[styles.progFill, { width: `${readinessPct}%`, backgroundColor: colors.brand }]} />
-                </View>
-
-                {/* Checklist items */}
-                <TouchableOpacity
-                  style={styles.checkItem}
-                  onPress={() => setReadinessChecks(p => ({ ...p, c1: !p.c1 }))}
-                  activeOpacity={0.7}
-                >
-                  <View
-                    style={[
-                      styles.checkBox,
-                      readinessChecks.c1
-                        ? { backgroundColor: colors.brand, borderColor: colors.brand }
-                        : { borderColor: colors.line, backgroundColor: colors.surface },
-                    ]}
-                  >
-                    {readinessChecks.c1 && <Check size={11} color="#fff" strokeWidth={3.4} />}
-                  </View>
-                  <Text style={[styles.checkText, { color: colors.ink }]}>
-                    Discharge summary classified
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.checkItem}
-                  onPress={() => setReadinessChecks(p => ({ ...p, c2: !p.c2 }))}
-                  activeOpacity={0.7}
-                >
-                  <View
-                    style={[
-                      styles.checkBox,
-                      readinessChecks.c2
-                        ? { backgroundColor: colors.brand, borderColor: colors.brand }
-                        : { borderColor: colors.line, backgroundColor: colors.surface },
-                    ]}
-                  >
-                    {readinessChecks.c2 && <Check size={11} color="#fff" strokeWidth={3.4} />}
-                  </View>
-                  <Text style={[styles.checkText, { color: colors.ink }]}>
-                    Itemised hospital bill classified
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.checkItem}
-                  onPress={() => setReadinessChecks(p => ({ ...p, c3: !p.c3 }))}
-                  activeOpacity={0.7}
-                >
-                  <View
-                    style={[
-                      styles.checkBox,
-                      readinessChecks.c3
-                        ? { backgroundColor: colors.brand, borderColor: colors.brand }
-                        : { borderColor: colors.line, backgroundColor: colors.surface },
-                    ]}
-                  >
-                    {readinessChecks.c3 && <Check size={11} color="#fff" strokeWidth={3.4} />}
-                  </View>
-                  <Text style={[styles.checkText, { color: colors.ink }]}>
-                    Policy card verified
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.checkItem}
-                  onPress={() => setReadinessChecks(p => ({ ...p, c4: !p.c4 }))}
-                  activeOpacity={0.7}
-                >
-                  <View
-                    style={[
-                      styles.checkBox,
-                      readinessChecks.c4
-                        ? { backgroundColor: colors.brand, borderColor: colors.brand }
-                        : { borderColor: colors.line, backgroundColor: colors.surface },
-                    ]}
-                  >
-                    {readinessChecks.c4 && <Check size={11} color="#fff" strokeWidth={3.4} />}
-                  </View>
-                  <Text style={[styles.checkText, { color: colors.ink }]}>
-                    Pre-authorisation letter
-                  </Text>
-                  {!readinessChecks.c4 && (
-                    <View style={[styles.pillBadge, { backgroundColor: colors.redSoft, marginLeft: 6 }]}>
-                      <Text style={[styles.pillText, { color: colors.red }]}>Missing</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-
-                <Text style={[styles.noteText, { color: colors.muted }]}>
-                  Threshold 75%+ completeness. Cross-document check: policy number differs on the pharmacy bill.
-                </Text>
-              </View>
-            )}
-          </View>
-
           {/* Accordion 5: Documents Classified */}
           <View style={[styles.accCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
             <TouchableOpacity
@@ -1812,6 +1637,7 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
             )}
           </View>
         </ScrollView>
+        )}
 
         {/* Floating Toast Notification */}
         {toastMessage && (
