@@ -414,7 +414,6 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       setIsReprocessing(true);
     } else {
       setPipelineStarting(true);
-      showToast('Connecting to backend pipeline...');
     }
 
     try {
@@ -474,7 +473,6 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       );
 
       setPipelineStarting(false);
-      showToast('Processing claim on Home page…');
     } catch (err: any) {
       console.warn('[ChatHomeScreen] Pipeline upload failed:', err);
       setPipelineStarting(false);

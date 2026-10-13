@@ -13,7 +13,7 @@ import { useTheme } from '../../../core/theme/ThemeContext';
 import { Routes } from '../../../app/navigation/routes';
 import { useClaimsStore } from '../../../state/useClaimsStore';
 import { claimsApi, BackendClaimPreview } from '../../claims/services/claimsApi';
-import { ArrowLeft, AlertTriangle } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 
 export const RiskDetailScreen = ({ route, navigation }: any) => {
   const { colors } = useTheme();
@@ -75,13 +75,6 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Provenance Banner */}
-          <View style={[styles.banner, { backgroundColor: colors.amberSoft }]}>
-            <AlertTriangle size={16} color={colors.amber} style={{ marginTop: 2 }} />
-            <Text style={[styles.bannerText, { color: colors.amber }]}>
-              Model provenance: <Text style={styles.mono}>xgb_rejection.json</Text> trained with cross-document discrepancy features, policy exclusions, and provider velocity patterns.
-            </Text>
-          </View>
 
           {/* Rejection Risk Gauge Card */}
           <View style={[styles.card, styles.gaugeCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
