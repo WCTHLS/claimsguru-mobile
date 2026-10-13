@@ -27,7 +27,6 @@ import {
   ChevronLeft,
   LayoutGrid,
   Clock,
-  Shield,
   FileCode,
   CheckSquare,
   ChevronDown,
@@ -81,7 +80,6 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   // Accordion open/close states (all closed by default)
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [riskOpen, setRiskOpen] = useState(false);
-  const [fraudOpen, setFraudOpen] = useState(false);
   const [codingOpen, setCodingOpen] = useState(false);
   const [expensesOpen, setExpensesOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -222,16 +220,7 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   const riskColor = isLowRisk ? colors.green : isHighRisk ? colors.red : colors.amber;
   const riskSoftBg = isLowRisk ? colors.greenSoft : isHighRisk ? colors.redSoft : colors.amberSoft;
 
-  // 2. Fraud calculations
-  const rawFraud = preview?.fraud_analysis?.risk_level || preview?.predictions?.[0]?.risk_category || 'MED';
-  const fraudCategory = rawFraud.toUpperCase().includes('HIGH') ? 'HIGH' : rawFraud.toUpperCase().includes('LOW') ? 'LOW' : 'MED';
-  const fraudPillLabel = fraudCategory === 'MED' ? 'MEDIUM' : fraudCategory;
-  const isLowFraud = fraudCategory === 'LOW';
-  const isHighFraud = fraudCategory === 'HIGH';
-  const fraudColor = isLowFraud ? colors.green : isHighFraud ? colors.red : colors.amber;
-  const fraudSoftBg = isLowFraud ? colors.greenSoft : isHighFraud ? colors.redSoft : colors.amberSoft;
-
-  // 3. Validation rules calculations
+  // 2. Validation rules calculations
   const rawValidations: BackendClaimValidationRule[] = Array.isArray(preview?.validations) ? preview.validations : [];
   const rulesTotal = rawValidations.length || (summary?.validation_total ?? 11);
   const rulesPassed = rawValidations.length
@@ -802,15 +791,6 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
 
             <TouchableOpacity
               style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
-              onPress={() => navigation.navigate(Routes.FraudDetail, { claimId, preview })}
-              activeOpacity={0.75}
-            >
-              <Text style={[styles.kpiVal, { color: fraudColor }]}>{fraudCategory}</Text>
-              <Text style={[styles.kpiLabel, { color: colors.muted }]}>Fraud</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
               onPress={() => navigation.navigate(Routes.ValidationRules, { claimId, preview })}
               activeOpacity={0.75}
             >
@@ -1165,70 +1145,6 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
                 >
                   <Text style={[styles.accActionBtnText, { color: colors.brandDark }]}>
                     Open risk detail
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          {/* Accordion 2: Fraud Assessment */}
-          <View style={[styles.accCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-            <TouchableOpacity
-              style={styles.accHeader}
-              onPress={() => setFraudOpen(!fraudOpen)}
-              activeOpacity={0.7}
-            >
-              <Shield size={16} color={colors.ink} strokeWidth={2} />
-              <Text style={[styles.accTitle, { color: colors.ink }]}>Fraud assessment</Text>
-              <View style={[styles.pillBadge, { backgroundColor: fraudSoftBg }]}>
-                <Text style={[styles.pillText, { color: fraudColor }]}>{fraudPillLabel}</Text>
-              </View>
-              <View style={{ marginLeft: 'auto' }}>
-                {fraudOpen ? (
-                  <ChevronDown size={16} color={colors.muted} strokeWidth={2} />
-                ) : (
-                  <ChevronRight size={16} color={colors.muted} strokeWidth={2} />
-                )}
-              </View>
-            </TouchableOpacity>
-
-            {fraudOpen && (
-              <View style={[styles.accInner, { borderTopColor: colors.line2 }]}>
-                <View style={styles.segBar}>
-                  <View style={[styles.segPiece, { width: '34%', backgroundColor: colors.green }]} />
-                  <View style={[styles.segPiece, { width: '33%', backgroundColor: colors.amber }]} />
-                  <View style={[styles.segPiece, { width: '33%', backgroundColor: colors.red }]} />
-                </View>
-
-                <View style={styles.segLabelsRow}>
-                  <Text style={[styles.segLabel, { color: colors.muted }]}>LOW</Text>
-                  <Text style={[styles.segLabel, { color: colors.amber, fontWeight: '700' }]}>
-                    MEDIUM
-                  </Text>
-                  <Text style={[styles.segLabel, { color: colors.muted }]}>HIGH</Text>
-                </View>
-
-                <View style={styles.factorRow}>
-                  <View style={[styles.dot, { backgroundColor: colors.amber }]} />
-                  <Text style={[styles.factorText, { color: colors.ink }]}>
-                    <Text style={styles.mono}>velocity</Text> — 4 claims from this provider in 24 h
-                  </Text>
-                </View>
-
-                <View style={styles.factorRow}>
-                  <View style={[styles.dot, { backgroundColor: colors.green }]} />
-                  <Text style={[styles.factorText, { color: colors.ink }]}>
-                    <Text style={styles.mono}>duplicate · billing · provider · coding · identity</Text> — clear
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={[styles.accActionBtn, { borderColor: colors.line }]}
-                  onPress={() => navigation.navigate(Routes.FraudDetail, { claimId, preview })}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.accActionBtnText, { color: colors.brandDark }]}>
-                    Open fraud detail
                   </Text>
                 </TouchableOpacity>
               </View>

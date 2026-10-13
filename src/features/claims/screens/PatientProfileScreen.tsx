@@ -576,8 +576,9 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
                   displayLabel = 'FAILED';
                 }
 
-                const claimTitle = `${c.dept || c.diagnosis || 'Medical Claim'} · ${formatINR(c.amt)}`;
-                const claimSub = `${c.id.slice(0, 8)} · ${c.admissionDate ? 'admitted ' + c.admissionDate : (c.hospital || 'Inpatient')}`;
+                const claimPatientName = c.who || (c as any).patient_name || (c as any).patientName || displayPatientName || 'Patient';
+                const claimTitle = claimPatientName;
+                const claimSub = `${c.id.slice(0, 8)} · ${c.amt ? formatINR(c.amt) : 'amount pending'}${c.admissionDate ? ' · admitted ' + c.admissionDate : (c.hospital ? ' · ' + c.hospital : '')}`;
 
                 return (
                   <TouchableOpacity
