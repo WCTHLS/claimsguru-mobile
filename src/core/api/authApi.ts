@@ -556,55 +556,65 @@ export async function ensureValidAuthToken(): Promise<string> {
     const authState = useAuthStore.getState();
     const currentToken = authState.token;
 
-    if (currentToken && typeof currentToken === 'string' && currentToken.split('.').length === 3) {
-      const payload = decodeJwtPayload(currentToken);
-      const exp = typeof payload?.exp === 'number' ? payload.exp : 0;
-      const nowSec = Math.floor(Date.now() / 1000);
-      if (exp === 0 || exp > nowSec + 60) {
+    // 1. If user is already authenticated, preserve their active token/session without overwriting identity
+    if (authState.isAuthenticated && currentToken) {
+      if (typeof currentToken === 'string' && currentToken.split('.').length === 3) {
+        const payload = decodeJwtPayload(currentToken);
+        const exp = typeof payload?.exp === 'number' ? payload.exp : 0;
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (exp === 0 || exp > nowSec + 60) {
+          return currentToken;
+        }
+      } else {
+        // Active session token from native auth / mobile sync
         return currentToken;
       }
     }
 
-    // Authenticate with pre-prod demo credentials
-    const loginRes = await postToCandidateEndpoints(
-      ['/ingress/auth/login', '/auth/login'],
-      {
-        username: 'patient@claimsguru.com',
-        password: 'Password123!',
-        role: 'patient',
-      }
-    );
-
-    let token = loginRes.data?.access_token || loginRes.data?.token;
-    let regRes: any = null;
-
-    // If account not yet registered on this backend environment, register it
-    if (!token) {
-      regRes = await postToCandidateEndpoints(
-        ['/ingress/auth/register', '/auth/register'],
+    // 2. Only fallback to pre-prod demo credentials if the app has NO authenticated user at all
+    if (!authState.isAuthenticated && !authState.userId && !authState.userEmail) {
+      const loginRes = await postToCandidateEndpoints(
+        ['/ingress/auth/login', '/auth/login'],
         {
           username: 'patient@claimsguru.com',
           password: 'Password123!',
           role: 'patient',
-          first_name: 'Patient',
-          last_name: 'ClaimsGuru',
-          policy: 'P-0007401',
-          sum_insured: 500000,
         }
       );
-      token = regRes.data?.access_token || regRes.data?.token;
-    }
 
-    if (token) {
-      const current = useAuthStore.getState();
-      useAuthStore.setState({
-        token,
-        isAuthenticated: true,
-        userEmail: current.userEmail || regRes?.data?.email,
-        userName: current.userName && current.userName !== 'Parsing…' ? current.userName : (regRes?.data?.name || current.userName),
-        userId: current.userId || regRes?.data?.user_id,
-      });
-      return token;
+      let token = loginRes.data?.access_token || loginRes.data?.token;
+      let regRes: any = null;
+
+      // If account not yet registered on this backend environment, register it
+      if (!token) {
+        regRes = await postToCandidateEndpoints(
+          ['/ingress/auth/register', '/auth/register'],
+          {
+            username: 'patient@claimsguru.com',
+            password: 'Password123!',
+            role: 'patient',
+            first_name: 'Patient',
+            last_name: 'ClaimsGuru',
+            policy: 'P-0007401',
+            sum_insured: 500000,
+          }
+        );
+        token = regRes.data?.access_token || regRes.data?.token;
+      }
+
+      if (token) {
+        const current = useAuthStore.getState();
+        if (!current.isAuthenticated && !current.userId) {
+          useAuthStore.setState({
+            token,
+            isAuthenticated: true,
+            userEmail: current.userEmail || regRes?.data?.email || 'patient@claimsguru.com',
+            userName: current.userName && current.userName !== 'Parsing…' ? current.userName : (regRes?.data?.name || 'Patient ClaimsGuru'),
+            userId: current.userId || regRes?.data?.user_id,
+          });
+        }
+        return token;
+      }
     }
   } catch (err) {
     console.warn('[authApi] ensureValidAuthToken error:', err);

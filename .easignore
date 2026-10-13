@@ -3,3 +3,6 @@ ios/
 .expo/
 dist/
 node_modules/
+*.apk
+*.aab
+*.zip
