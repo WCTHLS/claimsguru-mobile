@@ -246,7 +246,14 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
 
         if (detail) {
           try {
-            useClaimsStore.getState().addOrUpdateClaim(transformBackendClaim(detail, preview));
+            const transformed = transformBackendClaim(detail, preview);
+            if (!backendCompleted) {
+              const stepMap: ('ocr' | 'parse' | 'code' | 'predict' | 'validate')[] = ['ocr', 'parse', 'code', 'predict', 'validate'];
+              const activeStep = stepMap[get().currentStepIndex] || 'code';
+              transformed.status = 'running';
+              transformed.step = activeStep;
+            }
+            useClaimsStore.getState().addOrUpdateClaim(transformed);
           } catch {}
         }
 
@@ -329,7 +336,10 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
 
           if (detail) {
             try {
-              useClaimsStore.getState().addOrUpdateClaim(transformBackendClaim(detail, preview));
+              const transformed = transformBackendClaim(detail, preview);
+              transformed.status = 'complete';
+              transformed.step = 'validate';
+              useClaimsStore.getState().addOrUpdateClaim(transformed);
             } catch {}
           }
 

@@ -95,9 +95,31 @@ export const useClaimsStore = create<ClaimsState>((set, get) => ({
         } catch {}
       }
 
+      // Reconcile with actively running pipeline to guarantee live status is never overwritten by stale DB read
+      let finalClaims = backendClaims;
+      try {
+        const { usePipelineStore } = require('./usePipelineStore');
+        const pipeline = usePipelineStore.getState();
+        if (pipeline.running && pipeline.claimId) {
+          const stepMap: ('ocr' | 'parse' | 'code' | 'predict' | 'validate')[] = ['ocr', 'parse', 'code', 'predict', 'validate'];
+          const activeStep = stepMap[pipeline.currentStepIndex] || 'code';
+          finalClaims = backendClaims.map(c => {
+            const isTarget = c.id === pipeline.claimId || c.id.startsWith(pipeline.claimId.slice(0, 8));
+            if (isTarget) {
+              return {
+                ...c,
+                status: 'running' as const,
+                step: activeStep,
+              };
+            }
+            return c;
+          });
+        }
+      } catch {}
+
       set({
-        claims: backendClaims,
-        selectedClaimId: backendClaims[0]?.id || '',
+        claims: finalClaims,
+        selectedClaimId: finalClaims[0]?.id || '',
         backendConnected: true,
         loading: false,
         refreshing: false,

@@ -25,7 +25,7 @@ import { UploadRequestedDocsModal } from '../components/UploadRequestedDocsModal
 export const ClaimsListScreen = ({ navigation }: any) => {
   const { colors, isDark } = useTheme();
   const { claims, selectClaim, loadClaims, refreshing, backendConnected } = useClaimsStore();
-  const { running: pipelineRunning, claimId: pipelineClaimId } = usePipelineStore();
+  const { running: pipelineRunning, claimId: pipelineClaimId, currentStepIndex } = usePipelineStore();
   const { userName, userId, userEmail, gender } = useAuthStore();
   const [activeFilter, setActiveFilter] = useState<'All' | 'Running' | 'FAILED'>('All');
   const [uploadModalClaim, setUploadModalClaim] = useState<ClaimItem | null>(null);
@@ -55,20 +55,48 @@ export const ClaimsListScreen = ({ navigation }: any) => {
     loadClaims();
   }, [userId, userEmail, userName]);
 
-  const totalCount = claims.length;
-  const inPipelineCount = claims.filter(c => c.status === 'running').length;
-  const failedCount = claims.filter(c => c.status === 'FAILED').length;
+  const isClaimActiveInPipeline = (claim: ClaimItem) => {
+    if (pipelineRunning && pipelineClaimId) {
+      if (
+        claim.id === pipelineClaimId ||
+        claim.id.startsWith(pipelineClaimId.slice(0, 8)) ||
+        pipelineClaimId.startsWith(claim.id.slice(0, 8))
+      ) {
+        return true;
+      }
+    }
+    return claim.status === 'running' || (claim.rawStatus || '').toUpperCase() === 'RUNNING';
+  };
 
-  const filteredClaims = claims.filter(c => {
+  const getLiveClaim = (claim: ClaimItem) => {
+    if (isClaimActiveInPipeline(claim)) {
+      const stepMap: ('ocr' | 'parse' | 'code' | 'predict' | 'validate')[] = ['ocr', 'parse', 'code', 'predict', 'validate'];
+      const activeStep = stepMap[currentStepIndex] || claim.step || 'code';
+      return {
+        ...claim,
+        status: 'running' as const,
+        step: activeStep,
+      };
+    }
+    return claim;
+  };
+
+  const liveClaims = claims.map(getLiveClaim);
+
+  const totalCount = liveClaims.length;
+  const inPipelineCount = liveClaims.filter(c => c.status === 'running').length;
+  const failedCount = liveClaims.filter(c => c.status === 'FAILED').length;
+
+  const filteredClaims = liveClaims.filter(c => {
     if (activeFilter === 'All') return true;
     if (activeFilter === 'Running') return c.status === 'running';
     if (activeFilter === 'FAILED') return c.status === 'FAILED';
     return true;
   });
 
-  const handleClaimPress = (claim: (typeof claims)[0]) => {
+  const handleClaimPress = (claim: ClaimItem) => {
     selectClaim(claim.id);
-    if (claim.status === 'running' && pipelineRunning && pipelineClaimId === claim.id) {
+    if (isClaimActiveInPipeline(claim)) {
       navigation.navigate(Routes.WorkflowPipeline);
     } else {
       navigation.navigate(Routes.ClaimDetail, { claimId: claim.id });
@@ -311,10 +339,7 @@ export const ClaimsListScreen = ({ navigation }: any) => {
             )}
           </View>
 
-          {/* Note from prototype */}
-          <Text style={[styles.disclaimerNote, { color: colors.muted }]}>
-            Only <Text style={styles.mono}>FAILED</Text> is a verified status literal; other labels are placeholders. <Text style={styles.mono}>current_step</Text> is real.
-          </Text>
+
         </ScrollView>
 
         {/* Floating Action Button (+) */}

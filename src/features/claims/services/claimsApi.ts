@@ -219,7 +219,12 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
     statusUpper === 'PARSING' ||
     statusUpper === 'CODING' ||
     statusUpper === 'PREDICTING' ||
-    statusUpper === 'VALIDATING'
+    statusUpper === 'VALIDATING' ||
+    statusUpper === 'UPLOADED' ||
+    statusUpper === 'QUEUED' ||
+    statusUpper === 'PENDING' ||
+    statusUpper === 'IN_PIPELINE' ||
+    statusUpper === 'INITIALIZING'
   ) {
     uiStatus = 'running';
   } else {
@@ -312,8 +317,19 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
   const fieldCount = (preview as any)?.completeness_pct || (preview?.expenses?.length ? `${preview.expenses.length} items · ` : '') + (Object.keys(fields).length > 0 ? `${Object.keys(fields).length} fields` : '');
   const fieldsParsed = fieldCount || (uiStatus === 'complete' ? '36 fields' : '—');
 
+  const rawStep = ((raw as any).current_step || (raw as any).step || '').toString().toLowerCase();
   let step: 'ocr' | 'parse' | 'code' | 'predict' | 'validate' | '—' = 'validate';
-  if (uiStatus === 'running') {
+  if (rawStep.includes('ocr')) {
+    step = 'ocr';
+  } else if (rawStep.includes('parse')) {
+    step = 'parse';
+  } else if (rawStep.includes('code') || rawStep.includes('icd')) {
+    step = 'code';
+  } else if (rawStep.includes('predict') || rawStep.includes('risk')) {
+    step = 'predict';
+  } else if (rawStep.includes('val')) {
+    step = 'validate';
+  } else if (uiStatus === 'running') {
     step = 'ocr';
   } else if (uiStatus === 'FAILED') {
     step = 'ocr';
