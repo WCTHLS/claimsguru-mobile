@@ -756,12 +756,16 @@ export const SignUpScreen = ({ route, navigation }: any) => {
                   >
                     <Phone size={16} color={colors.muted} style={styles.inputIcon} />
                     <TextInput
-                      style={[styles.input, { color: colors.ink }]}
+                      style={[styles.input, { color: colors.ink, letterSpacing: 0 }]}
                       placeholder="9876543210"
                       placeholderTextColor={colors.muted}
                       value={phone}
-                      onChangeText={setPhone}
-                      keyboardType="phone-pad"
+                      onChangeText={(val) => {
+                        const digits = val.replace(/\D/g, '').slice(0, 10);
+                        setPhone(digits);
+                      }}
+                      keyboardType="number-pad"
+                      maxLength={10}
                     />
                   </View>
                 </View>
@@ -1005,6 +1009,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13.5,
     height: '100%',
+    letterSpacing: 0,
   },
   segBar: {
     flexDirection: 'row',
