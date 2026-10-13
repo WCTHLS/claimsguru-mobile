@@ -18,6 +18,7 @@ interface ClaimsState {
   loadClaims: (refresh?: boolean, patientIdOverride?: string) => Promise<void>;
   indexClaim: (id: string) => Promise<void>;
   deleteClaim: (id: string) => Promise<void>;
+  removeDuplicateClaims: (oldClaimId?: string | null, documentNames?: string[]) => void;
   addOrUpdateClaim: (claim: Partial<ClaimItem> & { id: string }) => void;
   getClaim: (id: string) => ClaimItem | undefined;
   setClaimPreview: (id: string, preview: BackendClaimPreview) => void;
@@ -103,17 +104,29 @@ export const useClaimsStore = create<ClaimsState>((set, get) => ({
         if (pipeline.running && pipeline.claimId) {
           const stepMap: ('ocr' | 'parse' | 'code' | 'predict' | 'validate')[] = ['ocr', 'parse', 'code', 'predict', 'validate'];
           const activeStep = stepMap[pipeline.currentStepIndex] || 'code';
-          finalClaims = backendClaims.map(c => {
-            const isTarget = c.id === pipeline.claimId || c.id.startsWith(pipeline.claimId.slice(0, 8));
-            if (isTarget) {
-              return {
-                ...c,
-                status: 'running' as const,
-                step: activeStep,
-              };
+          const hasRunningInBackend = backendClaims.some(
+            c => c.id === pipeline.claimId || c.id.startsWith(pipeline.claimId.slice(0, 8))
+          );
+          if (hasRunningInBackend) {
+            finalClaims = backendClaims.map(c => {
+              const isTarget = c.id === pipeline.claimId || c.id.startsWith(pipeline.claimId.slice(0, 8));
+              if (isTarget) {
+                return {
+                  ...c,
+                  status: 'running' as const,
+                  step: activeStep,
+                };
+              }
+              return c;
+            });
+          } else {
+            const localRunning = get().claims.find(
+              c => c.id === pipeline.claimId || c.id.startsWith(pipeline.claimId.slice(0, 8))
+            );
+            if (localRunning) {
+              finalClaims = [{ ...localRunning, status: 'running', step: activeStep }, ...backendClaims];
             }
-            return c;
-          });
+          }
         }
       } catch {}
 
@@ -149,7 +162,7 @@ export const useClaimsStore = create<ClaimsState>((set, get) => ({
 
   deleteClaim: async id => {
     set(state => {
-      const remaining = state.claims.filter(c => c.id !== id);
+      const remaining = state.claims.filter(c => c.id !== id && !c.id.startsWith(id.slice(0, 8)) && !id.startsWith(c.id.slice(0, 8)));
       return {
         claims: remaining,
         selectedClaimId: remaining.length > 0 ? remaining[0].id : '',
@@ -160,6 +173,46 @@ export const useClaimsStore = create<ClaimsState>((set, get) => ({
       await claimsApi.deleteClaim(id);
     } catch (err) {
       console.warn(`[useClaimsStore] Failed to delete claim ${id} in backend:`, err);
+    }
+  },
+
+  removeDuplicateClaims: (oldClaimId?: string | null, documentNames?: string[]) => {
+    const names = (documentNames || []).map(n => n.trim().toLowerCase()).filter(Boolean);
+    const targetOldId = oldClaimId ? oldClaimId.toLowerCase() : null;
+
+    set(state => {
+      const remaining = state.claims.filter(c => {
+        const cId = (c.id || '').toLowerCase();
+        if (
+          targetOldId &&
+          (cId === targetOldId ||
+            cId.startsWith(targetOldId.slice(0, 8)) ||
+            targetOldId.startsWith(cId.slice(0, 8)))
+        ) {
+          return false;
+        }
+        if (names.length > 0 && c.documents && Array.isArray(c.documents)) {
+          const hasMatchingDoc = c.documents.some(d => {
+            const dName = (d.file_name || (d as any).original_filename || (d as any).name || '').trim().toLowerCase();
+            return dName && names.includes(dName);
+          });
+          if (hasMatchingDoc) return false;
+        }
+        return true;
+      });
+
+      return {
+        claims: remaining,
+        selectedClaimId: remaining.length > 0
+          ? (remaining.some(c => c.id === state.selectedClaimId) ? state.selectedClaimId : remaining[0].id)
+          : '',
+      };
+    });
+
+    if (oldClaimId) {
+      claimsApi.deleteClaim(oldClaimId).catch(err => {
+        console.warn(`[useClaimsStore] removeDuplicateClaims backend delete error:`, err);
+      });
     }
   },
 

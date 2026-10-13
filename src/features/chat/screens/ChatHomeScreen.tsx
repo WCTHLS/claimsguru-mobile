@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -192,6 +193,12 @@ export const ChatHomeScreen = ({ navigation }: any) => {
   useEffect(() => {
     loadClaims().catch(() => {});
   }, [userId, userEmail]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadClaims().catch(() => {});
+    }, [userId, userEmail])
+  );
 
   const actionRequiredClaims = (claims || []).filter(
     c => c.hasActionRequest || (c.rawStatus || '').toUpperCase() === 'DOCUMENTS_REQUESTED' || (c.status as any) === 'docs_requested'
@@ -410,8 +417,16 @@ export const ChatHomeScreen = ({ navigation }: any) => {
     }
     if (pipelineStarting && !force) return;
 
+    const oldDupId = duplicateClaimId;
+
     if (force) {
       setIsReprocessing(true);
+      if (oldDupId || files.length > 0) {
+        useClaimsStore.getState().removeDuplicateClaims(
+          oldDupId,
+          files.map(f => f.name)
+        );
+      }
     } else {
       setPipelineStarting(true);
     }
@@ -449,10 +464,18 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       setDuplicateClaimId(null);
       setIsReprocessing(false);
 
+      // Automatically remove old processed duplicate claim(s) from local claims store
+      if (force || oldDupId) {
+        useClaimsStore.getState().removeDuplicateClaims(
+          oldDupId,
+          filesToProcess.map(f => f.name)
+        );
+      }
+
       // 2. Add or update claim in Claims store
       useClaimsStore.getState().addOrUpdateClaim({
         id: targetClaimId,
-        who: 'Processing claim...',
+        who: filesToProcess[0]?.name ? `Processing ${filesToProcess[0].name}...` : 'Processing claim...',
         dept: 'General Medicine',
         amt: 184500,
         status: 'running',
@@ -460,6 +483,7 @@ export const ChatHomeScreen = ({ navigation }: any) => {
         indexed: false,
         claimType: 'Reimbursement',
         policyNo: auth.policyNumber || 'P-0007401',
+        documents: filesToProcess.map((f, idx) => ({ id: `doc-${idx}`, file_name: f.name })),
       });
 
       // 3. Start the real workflow on the backend and initiate pipeline store polling
@@ -1237,8 +1261,15 @@ export const ChatHomeScreen = ({ navigation }: any) => {
             navigation.navigate(Routes.ClaimDetail, { claimId: targetId });
           }
         }}
-        onUploadAnyway={() => {
-          handleStartPipeline(true);
+        onUploadAnyway={async () => {
+          const oldId = duplicateClaimId;
+          if (oldId) {
+            useClaimsStore.getState().removeDuplicateClaims(
+              oldId,
+              files.map(f => f.name)
+            );
+          }
+          await handleStartPipeline(true);
         }}
         isReprocessing={isReprocessing}
       />

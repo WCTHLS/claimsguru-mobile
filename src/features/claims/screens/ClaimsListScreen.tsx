@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -54,6 +55,12 @@ export const ClaimsListScreen = ({ navigation }: any) => {
     }
     loadClaims();
   }, [userId, userEmail, userName]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadClaims().catch(() => {});
+    }, [userId, userEmail])
+  );
 
   const isClaimActiveInPipeline = (claim: ClaimItem) => {
     if (pipelineRunning && pipelineClaimId) {

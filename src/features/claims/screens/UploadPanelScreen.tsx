@@ -77,9 +77,17 @@ export const UploadPanelScreen = ({ navigation }: any) => {
   const handleStartPipeline = async (force: boolean = false) => {
     if (!hasFiles || (uploading && !force)) return;
 
+    const oldDupId = duplicateClaimId;
+
     try {
       if (force) {
         setIsReprocessing(true);
+        if (oldDupId || files.length > 0) {
+          useClaimsStore.getState().removeDuplicateClaims(
+            oldDupId,
+            files.map(f => f.name)
+          );
+        }
       }
       const auth = useAuthStore.getState();
       const { claimId, isDuplicate } = await uploadToBackend({
@@ -98,6 +106,14 @@ export const UploadPanelScreen = ({ navigation }: any) => {
       setDuplicateClaimId(null);
       setIsReprocessing(false);
 
+      // Automatically remove old processed duplicate claim(s) from claims store
+      if (force || oldDupId) {
+        useClaimsStore.getState().removeDuplicateClaims(
+          oldDupId,
+          files.map(f => f.name)
+        );
+      }
+
       // Register active new claim in claims store
       addOrUpdateClaim({
         id: claimId,
@@ -108,6 +124,7 @@ export const UploadPanelScreen = ({ navigation }: any) => {
         step: 'ocr',
         indexed: false,
         claimType: claimType,
+        documents: files.map((f, idx) => ({ id: `doc-${idx}`, file_name: f.name })),
       });
 
       startPipeline(
@@ -475,8 +492,15 @@ export const UploadPanelScreen = ({ navigation }: any) => {
             navigation.navigate(Routes.ClaimDetail, { claimId: targetId });
           }
         }}
-        onUploadAnyway={() => {
-          handleStartPipeline(true);
+        onUploadAnyway={async () => {
+          const oldId = duplicateClaimId;
+          if (oldId) {
+            useClaimsStore.getState().removeDuplicateClaims(
+              oldId,
+              files.map(f => f.name)
+            );
+          }
+          await handleStartPipeline(true);
         }}
         isReprocessing={isReprocessing}
       />
