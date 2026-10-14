@@ -101,7 +101,6 @@ export const ALL_FEATURES: FeatureDef[] = [
   { id: 'detail', g: 'Claims', nav: Routes.ClaimDetail, n: 'Claim detail', d: 'Summary, policy info & diagnosis', iconName: 'file-text', params: { claimId: 'a4f1c9e2' } },
   { id: 'brainpreview', g: 'AI Brain', nav: Routes.BrainPreview, n: 'AI Brain', d: 'KPI strip, expenses, risk & readiness', iconName: 'cpu', params: { claimId: 'a4f1c9e2' } },
   { id: 'risk', g: 'AI Brain', nav: Routes.RiskDetail, n: 'Risk', d: 'Rejection probability & top risk drivers', iconName: 'activity', params: { claimId: 'a4f1c9e2' } },
-  { id: 'fraud', g: 'AI Brain', nav: Routes.FraudDetail, n: 'Fraud', d: '6 signal families · hybrid risk score', iconName: 'shield-alert', params: { claimId: 'a4f1c9e2' } },
   { id: 'validation', g: 'AI Brain', nav: Routes.ValidationRules, n: 'Validation', d: 'R001–R011 deterministic rules checklist', iconName: 'check-square', params: { claimId: 'a4f1c9e2' } },
   { id: 'coding', g: 'AI Brain', nav: Routes.MedicalCoding, n: 'Coding', d: 'ICD-10 & CPT procedure code review', iconName: 'code', params: { claimId: 'a4f1c9e2' } },
   { id: 'patient', g: 'Patient', nav: Routes.PatientProfile, n: 'Patient', d: 'Demographics, policy & KYC details', iconName: 'user' },

@@ -413,7 +413,7 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
                 styles.tagPillText,
                 { color: avgRiskPercent > 50 ? colors.red : (avgRiskPercent > 30 ? colors.amber : colors.green) }
               ]}>
-                Fraud {avgRiskPercent > 50 ? 'HIGH' : (avgRiskPercent > 30 ? 'MEDIUM' : 'LOW')}
+                Risk {avgRiskPercent > 50 ? 'HIGH' : (avgRiskPercent > 30 ? 'MEDIUM' : 'LOW')}
               </Text>
             </View>
           </View>

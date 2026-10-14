@@ -212,15 +212,7 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
         {/* Sticky Bottom Actions Bar */}
         <View style={[styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
           <TouchableOpacity
-            style={[styles.outlineBtn, { borderColor: colors.line }]}
-            onPress={() => navigation.navigate(Routes.FraudDetail, { claimId, preview })}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>Fraud</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.primaryBtn, { backgroundColor: colors.brand }]}
+            style={[styles.primaryBtn, { backgroundColor: colors.brand, flex: 1 }]}
             onPress={() => navigation.navigate(Routes.BrainPreview, { claimId, preview })}
             activeOpacity={0.85}
           >
