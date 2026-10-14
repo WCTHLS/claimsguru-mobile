@@ -75,7 +75,6 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   const cachedPreview = useClaimsStore(s => s.claimPreviews[claimId]);
   const [preview, setPreview] = useState<BackendClaimPreview | null>(route?.params?.preview || cachedPreview || null);
   const [loading, setLoading] = useState<boolean>(!preview);
-  const [rerunning, setRerunning] = useState<boolean>(false);
 
   // Accordion open/close states (all closed by default)
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -517,29 +516,6 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
       amt: newTotal,
     });
     showToast(`Added "${cat}" (${formatINR(parsed)})`);
-  };
-
-  const handleRerun = async () => {
-    setRerunning(true);
-    try {
-      if (claimId && claimId.length > 20) {
-        const valRes = await claimsApi.getClaimValidation(claimId);
-        const updatedPreview = await claimsApi.getClaimPreview(claimId);
-        if (updatedPreview) {
-          setPreview(updatedPreview);
-          useClaimsStore.getState().setClaimPreview(claimId, updatedPreview);
-        }
-        const p = valRes?.passed ?? rulesPassed;
-        const t = valRes?.total_rules ?? rulesTotal;
-        showToast(`Validation re-evaluated: ${p} of ${t} rules passed`);
-      } else {
-        showToast(`POST /validator/validate/… → ${rulesPassed} of ${rulesTotal} rules passed`);
-      }
-    } catch {
-      showToast(`Validation completed: ${rulesPassed} of ${rulesTotal} rules passed`);
-    } finally {
-      setRerunning(false);
-    }
   };
 
   const handleSaveDetails = async () => {
@@ -1824,23 +1800,8 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
           </View>
         )}
 
-        {/* Sticky Bottom Actions Bar: [Re-run validation]  [Generate IRDAI form] */}
+        {/* Sticky Bottom Actions Bar: [Generate IRDAI form] */}
         <View style={[styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
-          <TouchableOpacity
-            style={[styles.outlineBtn, { borderColor: colors.line }]}
-            onPress={handleRerun}
-            disabled={rerunning}
-            activeOpacity={0.7}
-          >
-            {rerunning ? (
-              <ActivityIndicator size="small" color={colors.brandDark} />
-            ) : (
-              <Text style={[styles.outlineBtnText, { color: colors.brandDark }]}>
-                Re-run validation
-              </Text>
-            )}
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={[
               styles.primaryBtn,
@@ -1849,6 +1810,7 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
+                flex: 1,
               },
             ]}
             onPress={handleGenerateIrdai}
@@ -2336,21 +2298,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     gap: 9,
   },
-  outlineBtn: {
-    flex: 0.42,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  outlineBtnText: {
-    fontSize: 13,
-    fontWeight: '650' as any,
-  },
   primaryBtn: {
-    flex: 0.58,
+    flex: 1,
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
