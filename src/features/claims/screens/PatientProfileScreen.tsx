@@ -34,7 +34,6 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
     phone,
     dob,
     gender,
-    sumInsured,
   } = useAuthStore();
 
   const { claims, loadClaims, claimPreviews, fetchClaimPreview } = useClaimsStore();
@@ -155,45 +154,6 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
     if (count === 0) return 15;
     return Math.round((sum / count) * 100);
   }, [claims, claimPreviews]);
-
-  // Real financial calculations for Sum Insured
-  const totalLimit = Number(sumInsured) || (isSampleUser ? 500000 : 0);
-
-  const approvedAmount = useMemo(() => {
-    return claims
-      .filter(c => {
-        const st = (c.status || '').toLowerCase();
-        const raw = ((c as any).rawStatus || '').toUpperCase();
-        return st === 'approved' || st === 'settled' || raw === 'APPROVED' || raw === 'SETTLED';
-      })
-      .reduce((sum, c) => sum + (Number(c.amt) || 0), 0);
-  }, [claims]);
-
-  const pendingAmount = useMemo(() => {
-    return claims
-      .filter(c => {
-        const st = (c.status || '').toLowerCase();
-        const raw = ((c as any).rawStatus || '').toUpperCase();
-        return (
-          st === 'submitted' ||
-          st === 'complete' ||
-          st === 'running' ||
-          raw === 'SUBMITTED' ||
-          raw === 'COMPLETED' ||
-          raw === 'VALIDATED' ||
-          raw === 'UPLOADED' ||
-          raw === 'PROCESSING'
-        );
-      })
-      .reduce((sum, c) => sum + (Number(c.amt) || 0), 0);
-  }, [claims]);
-
-  const utilizedAmount = approvedAmount + pendingAmount;
-
-  // Segment bar flex weights
-  const approvedFlex = totalLimit > 0 ? Math.min(1, approvedAmount / totalLimit) : 0;
-  const pendingFlex = totalLimit > 0 ? Math.min(1 - approvedFlex, pendingAmount / totalLimit) : 0;
-  const remainingFlex = Math.max(0, 1 - approvedFlex - pendingFlex);
 
   // Dynamic policy coverage year
   const policyYear = useMemo(() => {
@@ -472,25 +432,6 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
           </View>
         </View>
 
-        {/* Sum Insured Card */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-            <Text style={[styles.sectionTitle, { color: colors.ink }]}>Sum insured</Text>
-            <Text style={[styles.sumSub, { color: colors.muted }]}>
-              {formatINR(utilizedAmount)} of {formatINR(totalLimit)}
-            </Text>
-          </View>
-          <View style={styles.segBar}>
-            <View style={[styles.seg, { flex: Math.max(0.01, approvedFlex), backgroundColor: colors.green }]} />
-            <View style={[styles.seg, { flex: Math.max(0.01, pendingFlex), backgroundColor: colors.amber }]} />
-            <View style={[styles.seg, { flex: Math.max(0.01, remainingFlex), backgroundColor: colors.line }]} />
-          </View>
-          <View style={styles.utilRow}>
-            <Text style={[styles.utilItem, { color: colors.muted }]}>Approved: {formatINR(approvedAmount)}</Text>
-            <Text style={[styles.utilItem, { color: colors.muted }]}>Pending: {formatINR(pendingAmount)}</Text>
-          </View>
-        </View>
-
         {/* Tabs: Claims / Documents / Flags */}
         <View style={[styles.tabBar, { backgroundColor: colors.surface2 }]}>
           <TouchableOpacity
@@ -714,11 +655,6 @@ const styles = StyleSheet.create({
   kvKey: { fontSize: 12, flexShrink: 0, maxWidth: '42%', lineHeight: 17 },
   kvVal: { fontSize: 12, fontWeight: '600', textAlign: 'right', flex: 1, flexShrink: 1, lineHeight: 17 },
   mono: { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
-  sumSub: { fontSize: 11 },
-  segBar: { flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', marginVertical: 8 },
-  seg: { height: '100%' },
-  utilRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-  utilItem: { fontSize: 11 },
   tabBar: {
     flexDirection: 'row',
     padding: 3,
