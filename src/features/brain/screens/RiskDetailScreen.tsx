@@ -111,32 +111,13 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
                 <Text style={[styles.gaugeSub, { color: colors.muted }]}>{riskCategory}</Text>
               </View>
             </View>
-
-            {/* Model Tag Chips */}
-            <View style={styles.modelTagsRow}>
-              <View style={[styles.modelTag, { backgroundColor: colors.surface2 }]}>
-                <Text style={[styles.modelTagText, styles.mono, { color: colors.muted }]}>
-                  xgb_rejection.json
-                </Text>
-              </View>
-              <View style={[styles.modelTag, { backgroundColor: colors.surface2 }]}>
-                <Text style={[styles.modelTagText, styles.mono, { color: colors.muted }]}>
-                  lgbm_rejection.txt
-                </Text>
-              </View>
-              <View style={[styles.modelTag, { backgroundColor: colors.surface2 }]}>
-                <Text style={[styles.modelTagText, { color: colors.muted }]}>
-                  SHAP-weighted
-                </Text>
-              </View>
-            </View>
           </View>
 
           {/* Top Contributing Factors Header */}
           <View style={styles.secRow}>
             <Text style={[styles.secTitle, { color: colors.ink }]}>Top contributing factors</Text>
             <Text style={[styles.secMeta, styles.mono, { color: colors.muted }]}>
-              {topReasons.length ? `${topReasons.length} factors identified` : 'xgb_feature_importance.json'}
+              {topReasons.length ? `${topReasons.length} factor${topReasons.length === 1 ? '' : 's'} identified` : 'No factors identified'}
             </Text>
           </View>
 
@@ -146,7 +127,6 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
               topReasons.map((item, idx) => {
                 const isNeg = (item.weight || 0) < 0;
                 const dotColor = isNeg ? colors.green : (item.weight || 0) > 15 ? colors.red : colors.amber;
-                const weightLabel = isNeg ? `${item.weight}` : `+${item.weight || 10}`;
                 return (
                   <View
                     key={idx}
@@ -159,7 +139,6 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
                     <Text style={[styles.factorText, { color: colors.ink }]}>
                       {item.reason}
                     </Text>
-                    <Text style={[styles.factorVal, { color: colors.muted }]}>{weightLabel}</Text>
                   </View>
                 );
               })
@@ -170,7 +149,6 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
                   <Text style={[styles.factorText, { color: colors.ink }]}>
                     Pre-authorisation reference absent
                   </Text>
-                  <Text style={[styles.factorVal, { color: colors.muted }]}>+18</Text>
                 </View>
 
                 <View style={[styles.factorRow, { borderTopWidth: 1, borderTopColor: colors.line2 }]}>
@@ -178,7 +156,6 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
                   <Text style={[styles.factorText, { color: colors.ink }]}>
                     Bill date precedes admission date
                   </Text>
-                  <Text style={[styles.factorVal, { color: colors.muted }]}>+11</Text>
                 </View>
 
                 <View style={[styles.factorRow, { borderTopWidth: 1, borderTopColor: colors.line2 }]}>
@@ -186,7 +163,6 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
                   <Text style={[styles.factorText, { color: colors.ink }]}>
                     Pharmacy total above policy sub-limit
                   </Text>
-                  <Text style={[styles.factorVal, { color: colors.muted }]}>+7</Text>
                 </View>
 
                 <View style={[styles.factorRow, { borderTopWidth: 1, borderTopColor: colors.line2 }]}>
@@ -194,7 +170,6 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
                   <Text style={[styles.factorText, { color: colors.ink }]}>
                     Provider history clean
                   </Text>
-                  <Text style={[styles.factorVal, { color: colors.muted }]}>−9</Text>
                 </View>
 
                 <View style={[styles.factorRow, { borderTopWidth: 1, borderTopColor: colors.line2 }]}>
@@ -202,7 +177,6 @@ export const RiskDetailScreen = ({ route, navigation }: any) => {
                   <Text style={[styles.factorText, { color: colors.ink }]}>
                     Diagnosis–procedure pairing consistent
                   </Text>
-                  <Text style={[styles.factorVal, { color: colors.muted }]}>−6</Text>
                 </View>
               </>
             )}
@@ -311,21 +285,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 1,
   },
-  modelTagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 14,
-    justifyContent: 'center',
-  },
-  modelTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 3.5,
-    borderRadius: 99,
-  },
-  modelTagText: {
-    fontSize: 10.5,
-  },
   secRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -354,10 +313,6 @@ const styles = StyleSheet.create({
   factorText: {
     flex: 1,
     fontSize: 12,
-  },
-  factorVal: {
-    fontSize: 11.5,
-    fontWeight: '600',
   },
   bottomBar: {
     flexDirection: 'row',
