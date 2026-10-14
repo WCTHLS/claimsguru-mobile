@@ -86,6 +86,8 @@ interface PipelineState {
   claimWho: string;
   claimDept: string;
   claimAmt: number;
+  claimStatus?: string;
+  claimRawStatus?: string;
   startPipeline: (files: { name: string; docType: string; kind: string }[], claimIdOverride?: string) => void;
   retryPipeline: () => void;
   resetPipeline: () => void;
@@ -116,6 +118,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   claimWho: '',
   claimDept: '',
   claimAmt: 0,
+  claimStatus: undefined,
+  claimRawStatus: undefined,
 
   startPipeline: (files, claimIdOverride) => {
     if (activePollInterval) {
@@ -281,6 +285,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             running: false,
             failed: true,
             complete: false,
+            claimStatus: 'FAILED',
+            claimRawStatus: detail?.status || 'FAILED',
             totalSeconds: elapsed,
             claimWho: patientName || 'Workflow Error',
             stepMessages: [
@@ -334,11 +340,17 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             }
           }
 
+          let finalStatus = 'complete';
+          let finalRawStatus = detail?.status || 'COMPLETED';
           if (detail) {
             try {
               const transformed = transformBackendClaim(detail, preview);
-              transformed.status = 'complete';
+              if (transformed.status === 'running') {
+                transformed.status = 'complete';
+              }
               transformed.step = 'validate';
+              finalStatus = transformed.status;
+              finalRawStatus = transformed.rawStatus || detail.status;
               useClaimsStore.getState().addOrUpdateClaim(transformed);
             } catch {}
           }
@@ -349,7 +361,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             stepStates: ['d', 'd', 'd', 'd', 'd'],
             running: false,
             complete: true,
-            failed: false,
+            failed: finalStatus === 'FAILED',
+            claimStatus: finalStatus,
+            claimRawStatus: finalRawStatus,
             totalSeconds: elapsed,
             claimWho: patientName || 'Complete',
             claimDept: diagnosis,
@@ -500,6 +514,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       claimWho: '',
       claimDept: '',
       claimAmt: 0,
+      claimStatus: undefined,
+      claimRawStatus: undefined,
       progressPercentage: 0,
     });
   },

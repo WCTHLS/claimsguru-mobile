@@ -17,6 +17,7 @@ import { fetchUserProfile } from '../../../core/api/authApi';
 import { Routes } from '../../../app/navigation/routes';
 import { formatINR } from '../../../core/utils/currency';
 import { UserAvatar } from '../../../core/components/UserAvatar';
+import { getClaimStatusBadge } from '../services/claimsApi';
 
 export const PatientProfileScreen = ({ route, navigation }: any) => {
   const insets = useSafeAreaInsets();
@@ -537,44 +538,10 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
               </View>
             ) : (
               claims.map((c, i) => {
-                const st = (c.status || '').toLowerCase();
-                const raw = ((c as any).rawStatus || '').toUpperCase();
-                const isApproved = st === 'approved' || st === 'settled' || raw === 'APPROVED' || raw === 'SETTLED';
-                const isRejected = st === 'rejected' || raw === 'REJECTED';
-                const isSubmitted = st === 'submitted' || raw === 'SUBMITTED';
-                const isComplete = st === 'complete' || raw === 'COMPLETED' || raw === 'VALIDATED';
-                const isRunning = st === 'running';
-                const isFailed = st === 'FAILED' || raw.includes('FAIL');
-
-                let stColor = colors.green;
-                let stBg = colors.greenSoft;
-                let displayLabel = 'COMPLETE';
-
-                if (isApproved) {
-                  stColor = colors.green;
-                  stBg = colors.greenSoft;
-                  displayLabel = st === 'settled' || raw === 'SETTLED' ? 'SETTLED' : 'APPROVED';
-                } else if (isRejected) {
-                  stColor = colors.red;
-                  stBg = colors.redSoft;
-                  displayLabel = 'REJECTED';
-                } else if (isSubmitted) {
-                  stColor = colors.brandDark;
-                  stBg = colors.brandSoft;
-                  displayLabel = 'SUBMITTED';
-                } else if (isComplete) {
-                  stColor = colors.green;
-                  stBg = colors.greenSoft;
-                  displayLabel = 'COMPLETE';
-                } else if (isRunning) {
-                  stColor = colors.amber;
-                  stBg = colors.amberSoft;
-                  displayLabel = 'RUNNING';
-                } else if (isFailed) {
-                  stColor = colors.red;
-                  stBg = colors.redSoft;
-                  displayLabel = 'FAILED';
-                }
+                const badge = getClaimStatusBadge(c.status, (c as any).rawStatus, colors);
+                const stColor = badge.text;
+                const stBg = badge.bg;
+                const displayLabel = badge.label;
 
                 const claimPatientName = c.who || (c as any).patient_name || (c as any).patientName || displayPatientName || 'Patient';
                 const claimTitle = claimPatientName;

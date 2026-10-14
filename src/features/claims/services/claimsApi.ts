@@ -365,6 +365,94 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
   };
 }
 
+export interface ClaimStatusBadge {
+  bg: string;
+  text: string;
+  label: string;
+}
+
+export function getClaimStatusBadge(
+  status?: string,
+  rawStatus?: string,
+  colors?: {
+    green: string;
+    greenSoft: string;
+    red: string;
+    redSoft: string;
+    amber: string;
+    amberSoft: string;
+    brand: string;
+    brandDark: string;
+    brandSoft: string;
+    surface2?: string;
+    muted?: string;
+  }
+): ClaimStatusBadge {
+  const theme = colors || {
+    green: '#10b981',
+    greenSoft: '#d1fae5',
+    red: '#ef4444',
+    redSoft: '#fee2e2',
+    amber: '#f59e0b',
+    amberSoft: '#fef3c7',
+    brand: '#0d9488',
+    brandDark: '#0f766e',
+    brandSoft: '#ccfbf1',
+  };
+
+  const st = (status || '').toLowerCase().trim();
+  const raw = (rawStatus || '').toUpperCase().trim();
+
+  if (st === 'approved' || raw === 'APPROVED') {
+    return { bg: theme.greenSoft, text: theme.green, label: 'APPROVED' };
+  }
+  if (st === 'settled' || raw === 'SETTLED') {
+    return { bg: theme.greenSoft, text: theme.green, label: 'SETTLED' };
+  }
+  if (st === 'rejected' || raw === 'REJECTED') {
+    return { bg: theme.redSoft, text: theme.red, label: 'REJECTED' };
+  }
+  if (st === 'submitted' || raw === 'SUBMITTED') {
+    return { bg: theme.brandSoft, text: theme.brandDark, label: 'SUBMITTED' };
+  }
+  if (st === 'complete' || raw === 'COMPLETED' || raw === 'VALIDATED') {
+    return { bg: theme.greenSoft, text: theme.green, label: 'COMPLETE' };
+  }
+  if (
+    st === 'running' ||
+    raw === 'RUNNING' ||
+    raw === 'PROCESSING' ||
+    raw === 'UPLOADED' ||
+    raw === 'STARTING' ||
+    raw === 'OCR_PROCESSING' ||
+    raw === 'IN_PROGRESS' ||
+    raw === 'PARSING' ||
+    raw === 'CODING' ||
+    raw === 'PREDICTING' ||
+    raw === 'VALIDATING' ||
+    raw === 'QUEUED' ||
+    raw === 'IN_PIPELINE'
+  ) {
+    return { bg: theme.amberSoft, text: theme.amber, label: 'RUNNING' };
+  }
+  if (
+    st === 'documents_requested' ||
+    st === 'docs_requested' ||
+    raw === 'DOCUMENTS_REQUESTED' ||
+    raw === 'MODIFICATION_REQUESTED'
+  ) {
+    return { bg: theme.amberSoft, text: theme.amber, label: 'DOCS REQ' };
+  }
+  if (st === 'failed' || raw.includes('FAIL') || raw.includes('ERROR') || raw === 'WORKFLOW_FAILED') {
+    return { bg: theme.redSoft, text: theme.red, label: 'FAILED' };
+  }
+  return {
+    bg: theme.greenSoft,
+    text: theme.green,
+    label: raw || (st ? st.toUpperCase() : 'COMPLETE'),
+  };
+}
+
 async function prepareBlobForFormData(
   uri: string | undefined,
   existingBlob: any | undefined,

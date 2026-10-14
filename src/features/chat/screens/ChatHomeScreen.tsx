@@ -64,7 +64,7 @@ import { useTheme } from '../../../core/theme/ThemeContext';
 import { useUploadStore, UploadFileItem } from '../../../state/useUploadStore';
 import { usePipelineStore } from '../../../state/usePipelineStore';
 import { useClaimsStore } from '../../../state/useClaimsStore';
-import { claimsApi } from '../../claims/services/claimsApi';
+import { claimsApi, getClaimStatusBadge } from '../../claims/services/claimsApi';
 import { useAuthStore } from '../../../state/useAuthStore';
 import { fetchUserProfile } from '../../../core/api/authApi';
 import { Routes } from '../../../app/navigation/routes';
@@ -133,6 +133,8 @@ export const ChatHomeScreen = ({ navigation }: any) => {
     progressPercentage: pipelineProgress,
     totalSeconds: pipelineSeconds,
     claimWho: pipelineClaimWho,
+    claimStatus: pipelineClaimStatus,
+    claimRawStatus: pipelineClaimRawStatus,
     attempt: pipelineAttempt,
     startPipeline,
     retryPipeline,
@@ -146,10 +148,11 @@ export const ChatHomeScreen = ({ navigation }: any) => {
     }
   }, [userEmail, userId]);
 
-  // Reset any stale idle pipeline state when mounting Home screen
+  // Reset any stale idle pipeline state when mounting Home screen only if no active/completed claim exists
   useEffect(() => {
-    if (!usePipelineStore.getState().running) {
-      usePipelineStore.getState().resetPipeline();
+    const s = usePipelineStore.getState();
+    if (!s.running && !s.complete && !s.failed && !s.claimId) {
+      s.resetPipeline();
     }
   }, []);
 
@@ -212,43 +215,58 @@ export const ChatHomeScreen = ({ navigation }: any) => {
 
   const isPipelineComplete = Boolean(pipelineComplete && !isPipelineRunning);
 
-  // The Claim Processing section is ONLY rendered when a claim is actively being processed,
-  // or was just processed in the current session.
-  // When idle and no claim is running, this is FALSE so the home screen stays completely clean!
-  const isClaimProcessingActive = Boolean(
-    isPipelineRunning ||
-    (isPipelineComplete && Boolean(pipelineClaimId) && (pipelineProgress >= 100 || pipelineStepStates.every(s => s === 'd'))) ||
-    (pipelineFailed && Boolean(pipelineClaimId))
+  // Check if there is an actively running claim from the backend
+  const runningBackendClaim = (claims || []).find(
+    c => c.status === 'running' || (c.rawStatus || '').toUpperCase() === 'RUNNING' || (c.rawStatus || '').toUpperCase() === 'PROCESSING'
   );
 
-  const activeProcessingClaimId = isClaimProcessingActive ? (pipelineClaimId || null) : null;
+  const activeProcessingClaimId =
+    pipelineClaimId ||
+    (isPipelineRunning ? (usePipelineStore.getState().claimId || null) : null) ||
+    runningBackendClaim?.id ||
+    null;
+
   const activeProcessingClaim = activeProcessingClaimId
-    ? (claims || []).find(c => c.id === activeProcessingClaimId) || null
+    ? (claims || []).find(
+        c =>
+          c.id === activeProcessingClaimId ||
+          c.id.startsWith(activeProcessingClaimId.slice(0, 8)) ||
+          activeProcessingClaimId.startsWith(c.id.slice(0, 8))
+      ) || null
     : null;
 
-  const processingStatusLabel = pipelineFailed
-    ? 'FAILED'
-    : isPipelineComplete
-    ? 'COMPLETE'
-    : isPipelineRunning
-    ? 'RUNNING'
-    : 'READY';
+  // The Claim Processing section is rendered when a claim is actively being processed,
+  // running on backend, or was processed in the session.
+  const isClaimProcessingActive = Boolean(
+    isPipelineRunning ||
+    Boolean(runningBackendClaim) ||
+    (isPipelineComplete && Boolean(activeProcessingClaimId) && (pipelineProgress >= 100 || pipelineStepStates.every(s => s === 'd'))) ||
+    (pipelineFailed && Boolean(activeProcessingClaimId))
+  );
 
-  const processingStatusBg = pipelineFailed
-    ? colors.redSoft
-    : isPipelineComplete
-    ? colors.greenSoft
-    : isPipelineRunning
-    ? colors.brandSoft
-    : colors.surface2;
+  // Live status badge synced with backend claim, pipeline state, or fallback
+  const processingBadge = (() => {
+    if (isPipelineRunning) {
+      return getClaimStatusBadge('running', 'RUNNING', colors);
+    }
+    if (activeProcessingClaim) {
+      return getClaimStatusBadge(activeProcessingClaim.status, activeProcessingClaim.rawStatus, colors);
+    }
+    if (pipelineClaimStatus || pipelineClaimRawStatus) {
+      return getClaimStatusBadge(pipelineClaimStatus, pipelineClaimRawStatus, colors);
+    }
+    if (pipelineFailed) {
+      return getClaimStatusBadge('FAILED', 'FAILED', colors);
+    }
+    if (isPipelineComplete) {
+      return getClaimStatusBadge('complete', 'COMPLETED', colors);
+    }
+    return getClaimStatusBadge('ready', 'READY', colors);
+  })();
 
-  const processingStatusText = pipelineFailed
-    ? colors.red
-    : isPipelineComplete
-    ? colors.green
-    : isPipelineRunning
-    ? colors.brandDark
-    : colors.muted;
+  const processingStatusLabel = processingBadge.label;
+  const processingStatusBg = processingBadge.bg;
+  const processingStatusText = processingBadge.text;
 
 
   const showToast = (msg: string) => {
@@ -796,10 +814,20 @@ export const ChatHomeScreen = ({ navigation }: any) => {
                   <Text style={[styles.claimSubText, { color: colors.muted }]}>
                     {isPipelineRunning
                       ? `Running live backend pipeline (${pipelineProgress}%)`
+                      : processingStatusLabel === 'REJECTED'
+                      ? 'Claim rejected by insurer · review risk factors'
+                      : processingStatusLabel === 'SUBMITTED'
+                      ? 'Claim submitted to payer / TPA'
+                      : processingStatusLabel === 'APPROVED'
+                      ? 'Claim approved by insurer'
+                      : processingStatusLabel === 'SETTLED'
+                      ? 'Claim settled · reimbursement complete'
+                      : processingStatusLabel === 'DOCS REQ'
+                      ? 'Insurer requested missing documents'
+                      : processingStatusLabel === 'FAILED' || pipelineFailed
+                      ? 'Pipeline failed · tap retry to rerun'
                       : isPipelineComplete
                       ? `Completed in ${pipelineSeconds ? `${pipelineSeconds}s` : '1.8s'}`
-                      : pipelineFailed
-                      ? 'Pipeline failed · tap retry to rerun'
                       : `${activeProcessingClaim?.diagnosis || 'Processing Details'} · ${activeProcessingClaim?.hospital || 'Hospital Record'}`}
                   </Text>
                 </View>
@@ -811,8 +839,27 @@ export const ChatHomeScreen = ({ navigation }: any) => {
                   style={[
                     styles.progressBar,
                     {
-                      backgroundColor: pipelineFailed ? colors.red : isPipelineComplete ? colors.green : colors.brand,
-                      width: `${isPipelineComplete ? 100 : Math.max(pipelineProgress, isPipelineRunning ? 20 : 10)}%`,
+                      backgroundColor:
+                        pipelineFailed || processingStatusLabel === 'FAILED' || processingStatusLabel === 'REJECTED'
+                          ? colors.red
+                          : processingStatusLabel === 'SUBMITTED'
+                          ? colors.brandDark
+                          : processingStatusLabel === 'DOCS REQ'
+                          ? colors.amber
+                          : isPipelineComplete || processingStatusLabel === 'APPROVED' || processingStatusLabel === 'SETTLED' || processingStatusLabel === 'COMPLETE'
+                          ? colors.green
+                          : colors.brand,
+                      width: `${
+                        isPipelineComplete ||
+                        processingStatusLabel === 'FAILED' ||
+                        processingStatusLabel === 'REJECTED' ||
+                        processingStatusLabel === 'SUBMITTED' ||
+                        processingStatusLabel === 'APPROVED' ||
+                        processingStatusLabel === 'SETTLED' ||
+                        processingStatusLabel === 'COMPLETE'
+                          ? 100
+                          : Math.max(pipelineProgress, isPipelineRunning ? 20 : 10)
+                      }%`,
                     },
                   ]}
                 />
@@ -1005,12 +1052,10 @@ export const ChatHomeScreen = ({ navigation }: any) => {
                 claim.status === 'docs_requested' ||
                 (claim as any).rawStatus === 'DOCUMENTS_REQUESTED'
               );
-              const isDone = claim.status === 'complete' || claim.status === 'approved' || claim.status === 'settled';
-              const isFail = (claim as any).status === 'FAILED' || (claim as any).rawStatus?.includes('FAIL');
-
-              const statusBg = isReq ? colors.amberSoft : isDone ? colors.greenSoft : isFail ? colors.redSoft : colors.brandSoft;
-              const statusText = isReq ? colors.amber : isDone ? colors.green : isFail ? colors.red : colors.brandDark;
-              const statusLabel = isReq ? 'DOCS REQ' : isDone ? 'COMPLETE' : isFail ? 'FAILED' : 'RUNNING';
+              const badge = getClaimStatusBadge(claim.status, claim.rawStatus, colors);
+              const statusBg = badge.bg;
+              const statusText = badge.text;
+              const statusLabel = badge.label;
 
               return (
                 <TouchableOpacity

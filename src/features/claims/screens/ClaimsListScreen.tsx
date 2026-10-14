@@ -21,6 +21,7 @@ import { Routes } from '../../../app/navigation/routes';
 import { UserAvatar } from '../../../core/components/UserAvatar';
 import { AppHeader } from '../../../core/components/AppHeader';
 import { ClaimItem } from '../../../mocks/claims.mock';
+import { getClaimStatusBadge } from '../services/claimsApi';
 import { UploadRequestedDocsModal } from '../components/UploadRequestedDocsModal';
 
 export const ClaimsListScreen = ({ navigation }: any) => {
@@ -111,70 +112,7 @@ export const ClaimsListScreen = ({ navigation }: any) => {
   };
 
   const getStatusBadge = (status: string, rawStatus?: string) => {
-    const st = (status || '').toLowerCase();
-    const raw = (rawStatus || '').toUpperCase();
-
-    if (st === 'approved' || raw === 'APPROVED') {
-      return {
-        bg: colors.greenSoft,
-        text: colors.green,
-        label: 'APPROVED',
-      };
-    }
-    if (st === 'settled' || raw === 'SETTLED') {
-      return {
-        bg: colors.greenSoft,
-        text: colors.green,
-        label: 'SETTLED',
-      };
-    }
-    if (st === 'rejected' || raw === 'REJECTED') {
-      return {
-        bg: colors.redSoft,
-        text: colors.red,
-        label: 'REJECTED',
-      };
-    }
-    if (st === 'submitted' || raw === 'SUBMITTED') {
-      return {
-        bg: colors.brandSoft,
-        text: colors.brandDark,
-        label: 'SUBMITTED',
-      };
-    }
-    if (st === 'complete' || raw === 'COMPLETED' || raw === 'VALIDATED') {
-      return {
-        bg: colors.greenSoft,
-        text: colors.green,
-        label: 'COMPLETE',
-      };
-    }
-    if (st === 'running' || raw === 'RUNNING' || raw === 'PROCESSING' || raw === 'UPLOADED') {
-      return {
-        bg: colors.amberSoft,
-        text: colors.amber,
-        label: 'RUNNING',
-      };
-    }
-    if (st === 'documents_requested' || st === 'docs_requested' || raw === 'DOCUMENTS_REQUESTED' || raw === 'MODIFICATION_REQUESTED') {
-      return {
-        bg: colors.amberSoft,
-        text: colors.amber,
-        label: 'DOCS REQ',
-      };
-    }
-    if (st === 'failed' || st === 'FAILED' || raw.includes('FAIL')) {
-      return {
-        bg: colors.redSoft,
-        text: colors.red,
-        label: 'FAILED',
-      };
-    }
-    return {
-      bg: colors.greenSoft,
-      text: colors.green,
-      label: 'COMPLETE',
-    };
+    return getClaimStatusBadge(status, rawStatus, colors);
   };
 
   return (
