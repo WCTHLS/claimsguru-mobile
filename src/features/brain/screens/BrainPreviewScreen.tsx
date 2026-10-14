@@ -1067,14 +1067,12 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
                   preview.predictions[0].top_reasons.map((item, idx) => {
                     const isNeg = (item.weight || 0) < 0;
                     const dotColor = isNeg ? colors.green : (item.weight || 0) > 15 ? colors.red : colors.amber;
-                    const weightLabel = isNeg ? `${item.weight}` : `+${item.weight || 10}`;
                     return (
                       <View key={idx} style={styles.factorRow}>
                         <View style={[styles.dot, { backgroundColor: dotColor }]} />
                         <Text style={[styles.factorText, { color: colors.ink }]}>
                           {item.reason}
                         </Text>
-                        <Text style={[styles.factorVal, { color: colors.muted }]}>{weightLabel}</Text>
                       </View>
                     );
                   })
@@ -1085,7 +1083,6 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
                       <Text style={[styles.factorText, { color: colors.ink }]}>
                         Pre-authorisation reference absent
                       </Text>
-                      <Text style={[styles.factorVal, { color: colors.muted }]}>+18</Text>
                     </View>
 
                     <View style={styles.factorRow}>
@@ -1093,7 +1090,6 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
                       <Text style={[styles.factorText, { color: colors.ink }]}>
                         Bill date precedes admission date
                       </Text>
-                      <Text style={[styles.factorVal, { color: colors.muted }]}>+11</Text>
                     </View>
 
                     <View style={styles.factorRow}>
@@ -1101,7 +1097,6 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
                       <Text style={[styles.factorText, { color: colors.ink }]}>
                         Pharmacy total above policy sub-limit
                       </Text>
-                      <Text style={[styles.factorVal, { color: colors.muted }]}>+7</Text>
                     </View>
 
                     <View style={styles.factorRow}>
@@ -1109,7 +1104,6 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
                       <Text style={[styles.factorText, { color: colors.ink }]}>
                         Provider history clean
                       </Text>
-                      <Text style={[styles.factorVal, { color: colors.muted }]}>−9</Text>
                     </View>
                   </>
                 )}
