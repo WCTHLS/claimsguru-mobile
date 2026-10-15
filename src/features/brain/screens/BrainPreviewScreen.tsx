@@ -23,6 +23,7 @@ import { usePipelineStore } from '../../../state/usePipelineStore';
 import { claimsApi, BackendClaimPreview, BackendClaimValidationRule } from '../../claims/services/claimsApi';
 import { formatINR } from '../../../core/utils/currency';
 import { GlobalBottomTabBar } from '../../../app/navigation/GlobalBottomTabBar';
+import { IrdaiSubmissionFlowModal } from '../../claims/components/IrdaiSubmissionFlowModal';
 import {
   ChevronLeft,
   LayoutGrid,
@@ -121,6 +122,7 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   const [isExtractingPolicy, setIsExtractingPolicy] = useState(false);
   const [showPolicyUploadModal, setShowPolicyUploadModal] = useState(false);
   const [showPolicyRequiredModal, setShowPolicyRequiredModal] = useState(false);
+  const [showIrdaiModal, setShowIrdaiModal] = useState(false);
   const policyInputRef = useRef<TextInput>(null);
 
   // Initialize editable fields from preview and store
@@ -706,7 +708,7 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
       setShowPolicyRequiredModal(true);
       return;
     }
-    navigation.navigate(Routes.Submission, { claimId, preview, openPdf: true });
+    setShowIrdaiModal(true);
   };
 
   return (
@@ -2014,6 +2016,20 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
           </View>
         </View>
       </Modal>
+
+      {/* IRDAI Form Preview & Direct TPA Submission Modal */}
+      <IrdaiSubmissionFlowModal
+        visible={showIrdaiModal}
+        onClose={() => setShowIrdaiModal(false)}
+        claimId={claimId}
+        claimData={{
+          patientName: patientName || preview?.summary?.patient_name || preview?.parsed_fields?.patient_name,
+          policyNumber: policyNumber || preview?.parsed_fields?.policy_number,
+          insurer: (preview?.parsed_fields?.insurance_company || (preview?.summary as any)?.insurance_company || ''),
+          totalAmount: Number(billedAmount) || (preview as any)?.total_claim_amount || preview?.parsed_fields?.total_claim_amount || 0,
+        }}
+        navigation={navigation}
+      />
     </SafeAreaView>
   );
 };
