@@ -202,7 +202,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
   const [ocrSuccessBanner, setOcrSuccessBanner] = useState<string | null>(null);
   const [isSubmittingToPayer, setIsSubmittingToPayer] = useState(false);
 
-  const [showPdfModal, setShowPdfModal] = useState(Boolean(route?.params?.openPdf));
+  const [showPdfModal, setShowPdfModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [submissionReceiptId, setSubmissionReceiptId] = useState('');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -281,12 +281,6 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
       setPdfLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (route?.params?.openPdf) {
-      loadIrdaPdf();
-    }
-  }, [route?.params?.openPdf]);
 
   const handlePreviewPdf = () => {
     setShowPdfModal(true);
@@ -633,7 +627,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
     }, 250);
   };
 
-  const getSubmitButtonLabel = () => 'Submit Claim';
+  const getSubmitButtonLabel = () => 'Submit Claim to TPA';
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bg }]} edges={['top']}>
@@ -716,7 +710,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
                       },
                     ]}
                   >
-                    {styleOpt}
+                    {styleOpt === 'modern' ? 'irdai' : styleOpt}
                   </Text>
                 </TouchableOpacity>
               );
@@ -744,7 +738,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
           )}
 
           <Text style={[styles.subNote, { color: colors.muted }]}>
-            modern = IRDAI Claim Form (Part A &amp; B) · blank = 100% Blank (For Pen-Fill) · tpa = TPA Audit Report
+            irdai = IRDAI Claim Form (Part A &amp; B) · blank = 100% Blank (For Pen-Fill) · tpa = TPA Audit Report
           </Text>
 
           <TouchableOpacity
@@ -1670,12 +1664,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
             ]}
           >
             <TouchableOpacity
-              onPress={() => {
-                setShowPdfModal(false);
-                if (route?.params?.openPdf) {
-                  navigation.goBack();
-                }
-              }}
+              onPress={() => setShowPdfModal(false)}
               style={styles.pdfCloseBtn}
             >
               <XIcon size={20} color={colors.ink} />
@@ -1917,10 +1906,11 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.btnSolid, { backgroundColor: colors.brand }]}
+          style={[styles.btnSolid, { backgroundColor: colors.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }]}
           onPress={handleOpenSubmitModal}
           activeOpacity={0.85}
         >
+          <Send size={15} color="#ffffff" style={{ marginRight: 6 }} />
           <Text style={styles.btnSolidText}>{getSubmitButtonLabel()}</Text>
         </TouchableOpacity>
       </View>

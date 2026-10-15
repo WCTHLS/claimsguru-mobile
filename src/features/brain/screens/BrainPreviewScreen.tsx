@@ -706,7 +706,7 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
       setShowPolicyRequiredModal(true);
       return;
     }
-    navigation.navigate(Routes.Submission, { claimId, preview, openPdf: true });
+    navigation.navigate(Routes.Submission, { claimId, preview });
   };
 
   return (
