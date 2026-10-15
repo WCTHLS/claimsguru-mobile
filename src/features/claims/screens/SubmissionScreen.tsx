@@ -14,6 +14,7 @@ import {
   Linking,
   StatusBar,
   useWindowDimensions,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -1231,7 +1232,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
       <Modal
         transparent
         visible={showTpaModal}
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => {
           if (!isSubmittingToPayer) setShowTpaModal(false);
         }}
@@ -1246,47 +1247,51 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
             }
           }}
         >
-          <TouchableOpacity
-            activeOpacity={1}
-            style={[styles.tpaModalCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
-            onPress={(e) => e.stopPropagation?.()}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.tpaKbdWrap}
           >
-            {/* Top Drag Indicator */}
-            <View style={[styles.tpaDragHandle, { backgroundColor: colors.line2 }]} />
+            <TouchableOpacity
+              activeOpacity={1}
+              style={[styles.tpaModalCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
+              onPress={(e) => e.stopPropagation?.()}
+            >
+              {/* Top Drag Indicator */}
+              <View style={[styles.tpaDragHandle, { backgroundColor: colors.line2 }]} />
 
-            {/* Modal Header */}
-            <View style={[styles.tpaModalHeader, { borderBottomColor: colors.line }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                <View style={[styles.tpaHeaderIconWrap, { backgroundColor: colors.brandSoft }]}>
-                  <ShieldCheck size={22} color={colors.brandDark} />
+              {/* Modal Header */}
+              <View style={[styles.tpaModalHeader, { borderBottomColor: colors.line }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                  <View style={[styles.tpaHeaderIconWrap, { backgroundColor: colors.brandSoft }]}>
+                    <ShieldCheck size={20} color={colors.brandDark} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.tpaModalTitle, { color: colors.ink }]} numberOfLines={1}>
+                      Submit Claim to Insurer / TPA
+                    </Text>
+                    <Text style={[styles.tpaModalSubtitle, { color: colors.muted }]} numberOfLines={1}>
+                      Select insurer and verify policy details
+                    </Text>
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.tpaModalTitle, { color: colors.ink }]}>
-                    Submit Claim to Insurer / TPA
-                  </Text>
-                  <Text style={[styles.tpaModalSubtitle, { color: colors.muted }]}>
-                    Select insurer and verify policy details to dispatch claim
-                  </Text>
-                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (!isSubmittingToPayer) {
+                      setShowInlineTpaPicker(false);
+                      setShowTpaModal(false);
+                    }
+                  }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  style={{ padding: 4 }}
+                >
+                  <XIcon size={20} color={colors.muted} />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                onPress={() => {
-                  if (!isSubmittingToPayer) {
-                    setShowInlineTpaPicker(false);
-                    setShowTpaModal(false);
-                  }
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                style={{ padding: 4 }}
-              >
-                <XIcon size={20} color={colors.muted} />
-              </TouchableOpacity>
-            </View>
 
-            {/* Scrollable Body */}
-            <ScrollView
-              style={{ flexShrink: 1, maxHeight: 460 }}
-              contentContainerStyle={styles.tpaModalBody}
+              {/* Scrollable Body */}
+              <ScrollView
+                style={{ flexShrink: 1 }}
+                contentContainerStyle={styles.tpaModalBody}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
@@ -1381,14 +1386,14 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
               {/* Section 2: Policy ID Verification & Auto-Extract */}
               <View style={[styles.tpaCardBox, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
                 <View style={styles.tpaCardHdrRow}>
-                  <Text style={[styles.tpaFieldLabel, { color: colors.ink, marginBottom: 0 }]}>
+                  <Text style={[styles.tpaFieldLabel, { color: colors.ink, marginBottom: 0, flexShrink: 1 }]}>
                     Policy Number / Health Card ID <Text style={{ color: colors.red }}>*</Text>
                   </Text>
                   {policyFromOcr ? (
-                    <View style={[styles.tpaOcrBadge, { backgroundColor: colors.greenSoft, borderColor: colors.green + '40' }]}>
-                      <CheckCircle2 size={12} color={colors.green} />
+                    <View style={[styles.tpaOcrBadge, { backgroundColor: colors.greenSoft, borderColor: colors.green + '40', flexShrink: 0 }]}>
+                      <CheckCircle2 size={11} color={colors.green} />
                       <Text style={[styles.tpaOcrBadgeText, { color: colors.green }]}>
-                        Auto-detected via OCR
+                        Auto-detected
                       </Text>
                     </View>
                   ) : null}
@@ -1527,7 +1532,16 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
             </ScrollView>
 
             {/* Modal Bottom Actions */}
-            <View style={[styles.tpaModalFooter, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
+            <View
+              style={[
+                styles.tpaModalFooter,
+                {
+                  backgroundColor: colors.surface,
+                  borderTopColor: colors.line,
+                  paddingBottom: Math.max(insets.bottom, 16),
+                },
+              ]}
+            >
               <TouchableOpacity
                 style={[styles.tpaCancelBtn, { borderColor: colors.line, backgroundColor: colors.surface2 }]}
                 onPress={() => {
@@ -1562,8 +1576,9 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        </KeyboardAvoidingView>
+      </TouchableOpacity>
+    </Modal>
 
       {/* Submission Success Modal */}
       <Modal
@@ -2495,14 +2510,18 @@ const styles = StyleSheet.create({
   pdfFooterBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
 
   // Submit to TPA / Insurer Modal
+  tpaKbdWrap: {
+    width: '100%',
+    justifyContent: 'flex-end',
+  },
   tpaModalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'flex-end',
   },
   tpaModalCard: {
     width: '100%',
-    maxHeight: '92%',
+    maxHeight: '90%',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderWidth: 1,
@@ -2619,18 +2638,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 6,
     marginBottom: 8,
   },
   tpaOcrBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 8,
     borderWidth: 1,
   },
   tpaOcrBadgeText: {
     fontSize: 10,
+    fontWeight: '700',
     marginLeft: 4,
   },
   tpaPolicyInput: {
@@ -2738,30 +2760,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingTop: 12,
     borderTopWidth: 1,
   },
   tpaCancelBtn: {
     flex: 1,
-    height: 44,
-    borderRadius: 11,
+    height: 46,
+    borderRadius: 12,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   tpaCancelText: {
-    fontSize: 13,
+    fontSize: 13.5,
+    fontWeight: '600',
   },
   tpaSubmitBtn: {
     flex: 2,
-    height: 44,
-    borderRadius: 11,
+    height: 46,
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
   tpaSubmitText: {
-    fontSize: 13,
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#ffffff',
     marginLeft: 6,
   },
 });
