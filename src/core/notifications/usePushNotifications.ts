@@ -7,6 +7,7 @@ import {
   setupNotificationChannel,
 } from './notificationService';
 import { useAuthStore } from '../../state/useAuthStore';
+import { useNotificationStore } from '../../state/useNotificationStore';
 import { claimsApi } from '../../features/claims/services/claimsApi';
 import { API_BASE_URL } from '../api/config';
 
@@ -31,6 +32,17 @@ export function usePushNotifications(onNotificationTap?: (data: Record<string, a
   const showBanner = (banner: InAppBanner) => {
     if (bannerTimer.current) clearTimeout(bannerTimer.current);
     setActiveBanner(banner);
+
+    // Save into Notification Store history
+    try {
+      useNotificationStore.getState().addNotification({
+        id: banner.data?.notificationId,
+        title: banner.title,
+        message: banner.body,
+        claimId: banner.data?.claimId,
+      });
+    } catch {}
+
     bannerTimer.current = setTimeout(() => {
       setActiveBanner(null);
     }, 6000);
