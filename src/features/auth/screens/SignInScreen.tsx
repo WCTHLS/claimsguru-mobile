@@ -544,24 +544,6 @@ export const SignInScreen = ({ navigation }: any) => {
               </View>
             ) : null}
 
-            {/* SSO Section */}
-            <View style={styles.dividerRow}>
-              <View style={[styles.dividerLine, { backgroundColor: colors.line }]} />
-              <Text style={[styles.dividerText, { color: colors.muted }]}>Or sign in with</Text>
-              <View style={[styles.dividerLine, { backgroundColor: colors.line }]} />
-            </View>
-
-            <View style={styles.ssoGrid}>
-              <View
-                style={[
-                  styles.ssoBtn,
-                  { backgroundColor: colors.surface, borderColor: colors.line, flexBasis: '100%' },
-                ]}
-              >
-                <Text style={[styles.ssoBtnText, { color: colors.ink }]}>Google</Text>
-              </View>
-            </View>
-
             {/* Sign Up Link */}
             <View style={styles.signupPromptRow}>
               <Text style={[styles.signupPrompt, { color: colors.muted }]}>
@@ -967,41 +949,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 15,
     fontWeight: '700',
-  },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-  },
-  dividerText: {
-    fontSize: 11.5,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  ssoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 22,
-  },
-  ssoBtn: {
-    flexBasis: '48%',
-    flexGrow: 1,
-    height: 44,
-    borderWidth: 1,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ssoBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
   },
   signupPromptRow: {
     flexDirection: 'row',
