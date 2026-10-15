@@ -37,7 +37,7 @@ import { UserAvatar } from '../../../core/components/UserAvatar';
 export const ProfileSettingsScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { colors, isDark, toggleTheme } = useTheme();
-  const { role, userName, userEmail, userId, policyNumber, organization, gender, setUserDetails } = useAuthStore();
+  const { role, userName, userEmail, userId, organization, gender, setUserDetails } = useAuthStore();
 
   const [biometric, setBiometric] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
@@ -115,7 +115,7 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
           {/* User Name & Department */}
           <Text style={[styles.userName, { color: colors.ink }]}>{userName}</Text>
           <Text style={[styles.userDepartment, { color: colors.muted }]}>
-            {userEmail}{policyNumber ? ` · Policy ${policyNumber}` : ''}
+            {userEmail}
           </Text>
 
           {/* Role Badge - Single Role */}

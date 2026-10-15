@@ -30,7 +30,6 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
     userName,
     userEmail,
     userId,
-    policyNumber,
     phone,
     dob,
     gender,
@@ -38,7 +37,7 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
 
   const { claims, loadClaims, claimPreviews, fetchClaimPreview } = useClaimsStore();
 
-  const [activeTab, setActiveTab] = useState<'claims' | 'docs' | 'flags'>('claims');
+  const [activeTab, setActiveTab] = useState<'claims' | 'docs'>('claims');
   const [refreshing, setRefreshing] = useState(false);
 
   // If opened from a specific claim, find that claim
@@ -86,7 +85,6 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
   // Resolve patient details
   const displayPatientName = focusedClaim?.who || userName || 'Patient';
   const displayGender = focusedClaim?.gender || gender || 'Male';
-  const displayPolicyNo = focusedClaim?.policyNo || policyNumber || '—';
   const displayUserId = routePatientId || focusedClaim?.patientId || userId || '—';
 
   const isSampleUser = userEmail === 'sample@gmail.com' || (userName && userName.toLowerCase() === 'jhon doe');
@@ -155,14 +153,6 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
     return Math.round((sum / count) * 100);
   }, [claims, claimPreviews]);
 
-  // Dynamic policy coverage year
-  const policyYear = useMemo(() => {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const startYear = now.getMonth() >= 3 ? currentYear : currentYear - 1;
-    return `Apr ${startYear} – Mar ${startYear + 1}`;
-  }, []);
-
   // Aggregated real documents from claims and previews
   const docGroups = useMemo(() => {
     const map = new Map<string, {
@@ -222,100 +212,6 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
     }
 
     return Array.from(map.values());
-  }, [claims, claimPreviews]);
-
-  // Real cross-claim signals
-  const crossClaimSignals = useMemo(() => {
-    const signals: Array<{
-      type: string;
-      message: string;
-      level: 'green' | 'amber' | 'red';
-    }> = [];
-
-    if (claims.length === 0) {
-      signals.push({
-        type: 'profile',
-        message: 'No claims recorded yet for cross-claim anomaly analysis',
-        level: 'green',
-      });
-      return signals;
-    }
-
-    // 1. Duplicate check: verify identical hospital and amount across distinct claims
-    const claimSignatures = new Map<string, string[]>();
-    for (const c of claims) {
-      const sig = `${c.hospital || 'hospital'}-${c.amt}-${c.admissionDate || 'date'}`;
-      if (!claimSignatures.has(sig)) {
-        claimSignatures.set(sig, []);
-      }
-      claimSignatures.get(sig)!.push(c.id);
-    }
-    const duplicateClusters = Array.from(claimSignatures.values()).filter(list => list.length > 1);
-
-    if (duplicateClusters.length > 0) {
-      signals.push({
-        type: 'duplicate',
-        message: `Potential duplicate claim billing pattern detected across ${duplicateClusters[0].length} claims`,
-        level: 'amber',
-      });
-    } else {
-      signals.push({
-        type: 'duplicate',
-        message: `none across ${claims.length} recorded claim${claims.length === 1 ? '' : 's'}`,
-        level: 'green',
-      });
-    }
-
-    // 2. Velocity check
-    signals.push({
-      type: 'velocity',
-      message: `${claims.length} claim${claims.length === 1 ? '' : 's'} active in ClaimsGuru system`,
-      level: claims.length > 5 ? 'amber' : 'green',
-    });
-
-    // 3. Provider check
-    const distinctProviders = Array.from(new Set(claims.map(c => c.hospital).filter(Boolean)));
-    const providerCount = distinctProviders.length || 1;
-    signals.push({
-      type: 'provider',
-      message: `${providerCount} distinct empanelled provider${providerCount === 1 ? '' : 's'}${distinctProviders.length > 0 ? ` (${distinctProviders.slice(0, 2).join(', ')})` : ''}`,
-      level: 'green',
-    });
-
-    // 4. Validation, risk & fraud signals
-    let foundRisk = false;
-    for (const c of claims) {
-      const prev = claimPreviews[c.id];
-      const signalsList = prev?.fraud_analysis?.signals || [];
-
-      if (signalsList.length > 0) {
-        for (const s of signalsList) {
-          signals.push({
-            type: 'fraud',
-            message: `${s.name || 'Signal'}: ${s.description || 'Elevated risk pattern detected'} (Claim #${c.id.slice(0, 8)})`,
-            level: s.severity === 'HIGH' ? 'red' : 'amber',
-          });
-          foundRisk = true;
-        }
-      } else if (c.status === 'FAILED') {
-        signals.push({
-          type: 'validation',
-          message: `Claim #${c.id.slice(0, 8)} requires document correction or re-submission`,
-          level: 'red',
-        });
-        foundRisk = true;
-      }
-    }
-
-    if (!foundRisk) {
-      signals.push({
-        type: 'identity',
-        message: 'KYC, policy, and demographic integrity verified',
-        level: 'green',
-      });
-    }
-
-    return signals;
   }, [claims, claimPreviews]);
 
   return (
@@ -379,7 +275,7 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
             </View>
           </View>
           <Text style={[styles.maskNote, { color: colors.muted }]}>
-            PHI revealed · DOB, policy, phone, email, UID
+            PHI revealed · DOB, phone, email, UID
           </Text>
         </View>
 
@@ -399,19 +295,9 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
           </View>
         </View>
 
-        {/* Policy Details Card */}
+        {/* Profile Details Card */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <Text style={[styles.sectionTitle, { color: colors.ink, marginBottom: 8 }]}>Policy</Text>
-          <View style={styles.kvRow}>
-            <Text style={[styles.kvKey, { color: colors.muted }]}>Policy number</Text>
-            <Text style={[styles.kvVal, styles.mono, { color: colors.ink }]}>
-              {maskVal('policy', displayPolicyNo)}
-            </Text>
-          </View>
-          <View style={styles.kvRow}>
-            <Text style={[styles.kvKey, { color: colors.muted }]}>Policy year</Text>
-            <Text style={[styles.kvVal, { color: colors.ink }]}>{policyYear}</Text>
-          </View>
+          <Text style={[styles.sectionTitle, { color: colors.ink, marginBottom: 8 }]}>Profile details</Text>
           <View style={styles.kvRow}>
             <Text style={[styles.kvKey, { color: colors.muted }]}>Phone</Text>
             <Text style={[styles.kvVal, { color: colors.ink }]}>
@@ -432,7 +318,7 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
           </View>
         </View>
 
-        {/* Tabs: Claims / Documents / Flags */}
+        {/* Tabs: Claims / Documents */}
         <View style={[styles.tabBar, { backgroundColor: colors.surface2 }]}>
           <TouchableOpacity
             style={[styles.tabBtn, activeTab === 'claims' && [styles.tabBtnOn, { backgroundColor: colors.surface }]]}
@@ -448,14 +334,6 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
           >
             <Text style={[styles.tabBtnText, { color: activeTab === 'docs' ? colors.brandDark : colors.muted }]}>
               Documents ({docGroups.length})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tabBtn, activeTab === 'flags' && [styles.tabBtnOn, { backgroundColor: colors.surface }]]}
-            onPress={() => setActiveTab('flags')}
-          >
-            <Text style={[styles.tabBtnText, { color: activeTab === 'flags' ? colors.brandDark : colors.muted }]}>
-              Flags ({crossClaimSignals.length})
             </Text>
           </TouchableOpacity>
         </View>
@@ -559,29 +437,6 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
           </View>
         )}
 
-        {/* Tab 3: Real Cross-Claim Signals & Flags */}
-        {activeTab === 'flags' && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-            <Text style={[styles.sectionTitle, { color: colors.ink, marginBottom: 8 }]}>Cross-claim signals</Text>
-            {crossClaimSignals.map((s, idx) => {
-              const dotColor = s.level === 'green' ? colors.green : (s.level === 'amber' ? colors.amber : colors.red);
-              return (
-                <View
-                  key={idx}
-                  style={[
-                    styles.flagRow,
-                    idx === crossClaimSignals.length - 1 && { borderBottomWidth: 0 },
-                  ]}
-                >
-                  <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
-                  <Text style={[styles.flagText, { color: colors.ink }]}>
-                    <Text style={styles.mono}>{s.type}</Text> — {s.message}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        )}
       </ScrollView>
 
       {/* Bottom Sticky Action Bar */}
@@ -696,16 +551,6 @@ const styles = StyleSheet.create({
   docItemSub: { fontSize: 11, marginTop: 2 },
   countBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
   countBadgeText: { fontSize: 10.5, fontWeight: '700' },
-  flagRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 9,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eef2f6',
-  },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  flagText: { flex: 1, fontSize: 12 },
   emptyContainer: {
     padding: 24,
     alignItems: 'center',
