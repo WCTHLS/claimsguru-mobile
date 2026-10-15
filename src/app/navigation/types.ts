@@ -18,7 +18,7 @@ export type RootStackParamList = {
   [Routes.PreviewDocuments]: { claimId: string; docKey?: string };
   [Routes.PatientProfile]: { claimId?: string; patientId?: string };
   [Routes.PatientActivity]?: { patientId?: string; claimId?: string };
-  [Routes.Submission]: { claimId: string };
+  [Routes.Submission]: { claimId: string; preview?: any; openPdf?: boolean; initialStyle?: 'modern' | 'blank' | 'tpa' };
   [Routes.ProfileSettings]: undefined;
   [Routes.OpsConsole]: undefined;
 };

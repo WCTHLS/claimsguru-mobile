@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -201,7 +201,7 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
   const [ocrSuccessBanner, setOcrSuccessBanner] = useState<string | null>(null);
   const [isSubmittingToPayer, setIsSubmittingToPayer] = useState(false);
 
-  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [showPdfModal, setShowPdfModal] = useState(Boolean(route?.params?.openPdf));
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [submissionReceiptId, setSubmissionReceiptId] = useState('');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -280,6 +280,12 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
       setPdfLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (route?.params?.openPdf) {
+      loadIrdaPdf();
+    }
+  }, [route?.params?.openPdf]);
 
   const handlePreviewPdf = () => {
     setShowPdfModal(true);
@@ -1648,7 +1654,15 @@ export const SubmissionScreen = ({ route, navigation }: any) => {
               },
             ]}
           >
-            <TouchableOpacity onPress={() => setShowPdfModal(false)} style={styles.pdfCloseBtn}>
+            <TouchableOpacity
+              onPress={() => {
+                setShowPdfModal(false);
+                if (route?.params?.openPdf) {
+                  navigation.goBack();
+                }
+              }}
+              style={styles.pdfCloseBtn}
+            >
               <XIcon size={20} color={colors.ink} />
             </TouchableOpacity>
             <View style={{ flex: 1, alignItems: 'center', marginHorizontal: 6 }}>
