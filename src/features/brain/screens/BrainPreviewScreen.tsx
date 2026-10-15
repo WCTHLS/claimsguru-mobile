@@ -710,7 +710,7 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safeArea, { backgroundColor: colors.surface }]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
 
       {/* App Bar matching prototype: <  AI Brain Preview     [Chat] [All] */}

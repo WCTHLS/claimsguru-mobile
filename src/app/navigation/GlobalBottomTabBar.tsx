@@ -48,8 +48,9 @@ export const GlobalBottomTabBar = ({ navigation, activeTab = 'claims' }: GlobalB
         {
           backgroundColor: colors.surface,
           borderTopColor: colors.line,
-          height: 52 + Math.max(insets.bottom, 6),
+          height: 56 + Math.max(insets.bottom, 6),
           paddingBottom: Math.max(insets.bottom, 6),
+          paddingTop: 6,
         },
       ]}
     >
@@ -65,13 +66,13 @@ export const GlobalBottomTabBar = ({ navigation, activeTab = 'claims' }: GlobalB
             onPress={tab.onPress}
             activeOpacity={0.7}
           >
-            <IconComponent size={20} color={iconColor} strokeWidth={isActive ? 2.4 : 1.8} />
+            <IconComponent size={24} color={iconColor} strokeWidth={2} />
             <Text
               style={[
                 styles.tabLabel,
                 {
                   color: iconColor,
-                  fontWeight: isActive ? '700' : '500',
+                  fontWeight: '600',
                 },
               ]}
             >
@@ -89,19 +90,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    height: 56,
     borderTopWidth: 1,
-    paddingTop: 6,
-    paddingBottom: 6,
   },
   tabBtn: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
+    gap: 3,
   },
   tabLabel: {
-    fontSize: 10.5,
+    fontSize: 11,
     letterSpacing: -0.1,
   },
 });

@@ -212,7 +212,7 @@ export const WorkflowPipelineScreen = ({ navigation }: any) => {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safeArea, { backgroundColor: colors.surface }]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
 
       {/* Top App Bar */}
