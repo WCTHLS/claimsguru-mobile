@@ -649,19 +649,23 @@ export const PatientActivityScreen = ({ route, navigation }: any) => {
                       >
                         {/* Header: Action name, optional Claim tag in 'All' view, and actor */}
                         <View style={styles.eventHeaderRow}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+                          <View style={styles.eventHeaderLeft}>
                             <Text style={[styles.evCode, { color: colors.brandDark }]} numberOfLines={1}>
                               {item.ev}
                             </Text>
                             {selectedClaimFilter === 'all' && (
-                              <View style={[styles.claimBadge, { backgroundColor: colors.surface2 }]}>
+                              <View style={[styles.claimBadge, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
                                 <Text style={[styles.claimBadgeText, { color: colors.muted }]}>
-                                  {item.shortClaimId}
+                                  #{item.shortClaimId}
                                 </Text>
                               </View>
                             )}
                           </View>
-                          <Text style={[styles.whoText, { color: colors.muted }]}>{item.who}</Text>
+                          {item.who ? (
+                            <Text style={[styles.whoText, { color: colors.muted }]} numberOfLines={1} ellipsizeMode="tail">
+                              {item.who}
+                            </Text>
+                          ) : null}
                         </View>
 
                         {/* Description */}
@@ -669,7 +673,7 @@ export const PatientActivityScreen = ({ route, navigation }: any) => {
 
                         {/* Footer: Time and Action / Nav Prompt */}
                         <View style={styles.eventFooterRow}>
-                          <Text style={[styles.timeText, { color: colors.muted }]}>
+                          <Text style={[styles.timeText, { color: colors.muted }]} numberOfLines={1}>
                             {item.t}
                             {item.diff ? ' · tap for before / after' : ''}
                           </Text>
@@ -856,7 +860,16 @@ const styles = StyleSheet.create({
   eventHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  eventHeaderLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
   },
   evCode: {
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
@@ -867,25 +880,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 4,
+    borderWidth: 1,
   },
   claimBadgeText: {
     fontSize: 9.5,
     fontWeight: '700',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
-  whoText: { fontSize: 10.5 },
+  whoText: {
+    fontSize: 10.5,
+    flexShrink: 0,
+    maxWidth: '45%',
+    textAlign: 'right',
+    marginTop: 1,
+  },
   descText: { fontSize: 12, marginTop: 4, lineHeight: 16 },
   eventFooterRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 6,
+    gap: 8,
   },
-  timeText: { fontSize: 10.5 },
+  timeText: { fontSize: 10.5, flex: 1, marginRight: 6 },
   viewDetailsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
+    flexShrink: 0,
   },
   viewDetailsText: { fontSize: 11, fontWeight: '600' },
   diffBox: {

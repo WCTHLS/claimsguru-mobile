@@ -57,6 +57,16 @@ export interface BrainExpenseItem {
   amount: number;
 }
 
+const cleanTpaName = (name?: string): string => {
+  if (!name) return 'Insurer';
+  let clean = name.trim();
+  clean = clean
+    .replace(/\s+(and\s+Allied\s+Insurance|Health\s+Insurance|General\s+Insurance|Insurance\s+Company|Insurance|TPA\s+Adjudication|TPA).*$/i, '')
+    .replace(/\s+(Co\s+Ltd|Company\s+Limited|Company|Limited|Ltd)\.?$/i, '')
+    .trim();
+  return clean || name.trim() || 'Insurer';
+};
+
 const DEFAULT_EXPENSES_LIST: BrainExpenseItem[] = [
   { id: 'exp-1', category: 'Room & Nursing Charges', amount: 3200 },
   { id: 'exp-2', category: 'Consultation & Doctor Visits', amount: 1500 },
@@ -148,6 +158,31 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
     ).trim();
     setPolicyNumber(pol);
   }, [preview, claimId, isDetailsDirty]);
+
+  const storeClaims = useClaimsStore(s => s.claims);
+  const claim = (claimId ? storeClaims.find(cl => cl.id === claimId || cl.id.startsWith(claimId)) : null) || storeClaims[0];
+
+  const rawStatusUpper = (claim?.rawStatus || '').toUpperCase();
+  const isAlreadySubmitted = Boolean(
+    claim?.status === 'submitted' ||
+    claim?.status === 'approved' ||
+    claim?.status === 'settled' ||
+    rawStatusUpper === 'SUBMITTED' ||
+    rawStatusUpper === 'APPROVED' ||
+    rawStatusUpper === 'SETTLED' ||
+    preview?.status === 'SUBMITTED' ||
+    Boolean((preview as any)?.is_submitted)
+  );
+
+  const effectivePayer =
+    claim?.insuranceCompany ||
+    (claim as any)?.payer ||
+    (claim as any)?.tpa ||
+    (preview as any)?.insurance_company ||
+    (preview as any)?.payer ||
+    (preview as any)?.summary?.insurance_company ||
+    (preview as any)?.summary?.insurer ||
+    'Star Health';
 
   const isPolicyMissing =
     !policyNumber ||
@@ -702,11 +737,11 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   };
 
   const handleGenerateIrdai = () => {
-    if (isPolicyMissing) {
+    if (isPolicyMissing && !isAlreadySubmitted) {
       setShowPolicyRequiredModal(true);
       return;
     }
-    navigation.navigate(Routes.Submission, { claimId, preview });
+    navigation.navigate(Routes.Submission, { claimId, preview, openPdf: true });
   };
 
   return (
@@ -775,8 +810,23 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
             </TouchableOpacity>
           </View>
 
+          {/* Claim Already Submitted Status Banner */}
+          {isAlreadySubmitted && (
+            <View style={[styles.submittedBanner, { backgroundColor: colors.greenSoft, borderColor: colors.green + '40' }]}>
+              <CheckCircle2 size={18} color={colors.green} style={{ marginRight: 8, marginTop: 2 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.submittedBannerTitle, { color: colors.green }]}>
+                  Claim Submitted to {cleanTpaName(effectivePayer)}
+                </Text>
+                <Text style={[styles.submittedBannerDesc, { color: colors.ink }]}>
+                  This claim has been submitted to {cleanTpaName(effectivePayer)} TPA adjudication. You can view the generated IRDAI claim form below.
+                </Text>
+              </View>
+            </View>
+          )}
+
           {/* Policy Document / Health Card Missing Notice Card (Web Feature on Mobile) */}
-          {isPolicyMissing && (
+          {isPolicyMissing && !isAlreadySubmitted && (
             <View style={[styles.policyNoticeCard, { backgroundColor: colors.amberSoft, borderColor: colors.amber + '40' }]}>
               <View style={styles.policyNoticeHeader}>
                 <View style={[styles.policyNoticeIconWrap, { backgroundColor: colors.amber + '25' }]}>
@@ -1800,7 +1850,7 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
             style={[
               styles.primaryBtn,
               {
-                backgroundColor: isPolicyMissing ? colors.amber : colors.brand,
+                backgroundColor: isAlreadySubmitted ? colors.brand : isPolicyMissing ? colors.amber : colors.brand,
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1810,8 +1860,11 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
             onPress={handleGenerateIrdai}
             activeOpacity={0.85}
           >
-            {isPolicyMissing && <Lock size={14} color="#ffffff" style={{ marginRight: 6 }} />}
-            <Text style={styles.primaryBtnText}>Generate IRDAI form</Text>
+            {isPolicyMissing && !isAlreadySubmitted && <Lock size={14} color="#ffffff" style={{ marginRight: 6 }} />}
+            {isAlreadySubmitted && <FileText size={15} color="#ffffff" style={{ marginRight: 6 }} />}
+            <Text style={styles.primaryBtnText}>
+              {isAlreadySubmitted ? 'View IRDAI Form' : 'Generate IRDAI form'}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -2759,5 +2812,23 @@ const styles = StyleSheet.create({
   policyReqDismissBtnText: {
     fontSize: 12,
     fontWeight: '500',
+  },
+  submittedBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  submittedBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  submittedBannerDesc: {
+    fontSize: 11.5,
+    lineHeight: 16,
   },
 });

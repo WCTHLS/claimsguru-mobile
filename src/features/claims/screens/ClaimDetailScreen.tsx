@@ -87,6 +87,9 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
         if (!isMounted) return;
 
         if (backendData && backendData.id) {
+          if (previewData) {
+            useClaimsStore.getState().setClaimPreview(claimId, previewData);
+          }
           const transformed = transformBackendClaim(backendData, previewData);
           addOrUpdateClaim(transformed);
 
@@ -374,7 +377,7 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
             <View style={[styles.kvRow, { borderBottomColor: colors.line }]}>
               <Text style={[styles.kvKey, { color: colors.muted }]}>Insurer / TPA</Text>
               <Text style={[styles.kvVal, { color: colors.ink }]}>
-                {claim.hospital?.includes('Government') ? 'PMJAY / State TPA' : 'ClaimsGuru Health TPA'}
+                {claim.insuranceCompany || claim.tpa || (claim.hospital?.includes('Government') ? 'PMJAY / State TPA' : 'ClaimsGuru Health TPA')}
               </Text>
             </View>
 
@@ -438,7 +441,13 @@ export const ClaimDetailScreen = ({ route, navigation }: any) => {
         <View style={[styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: colors.brand }]}
-            onPress={() => navigation.navigate(Routes.BrainPreview, { claimId: claim.id })}
+            onPress={() => {
+              const cached = useClaimsStore.getState().claimPreviews[claim.id];
+              navigation.navigate(Routes.BrainPreview, {
+                claimId: claim.id,
+                preview: cached || undefined,
+              });
+            }}
             activeOpacity={0.85}
           >
             <Text style={styles.primaryBtnText}>AI Brain Preview</Text>

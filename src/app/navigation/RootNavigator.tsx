@@ -188,26 +188,32 @@ export const RootNavigator = () => {
           <Stack.Screen
             name={Routes.ClaimDetail}
             component={ClaimDetailScreen}
+            options={{ animation: 'fade' }}
           />
           <Stack.Screen
             name={Routes.BrainPreview}
             component={BrainPreviewScreen}
+            options={{ animation: 'fade' }}
           />
           <Stack.Screen
             name={Routes.RiskDetail}
             component={RiskDetailScreen}
+            options={{ animation: 'fade' }}
           />
           <Stack.Screen
             name={Routes.FraudDetail}
             component={FraudDetailScreen}
+            options={{ animation: 'fade' }}
           />
           <Stack.Screen
             name={Routes.ValidationRules}
             component={ValidationRulesScreen}
+            options={{ animation: 'fade' }}
           />
           <Stack.Screen
             name={Routes.MedicalCoding}
             component={MedicalCodingScreen}
+            options={{ animation: 'fade' }}
           />
           <Stack.Screen
             name={Routes.DocumentGrid}
@@ -228,6 +234,7 @@ export const RootNavigator = () => {
           <Stack.Screen
             name={Routes.Submission}
             component={SubmissionScreen}
+            options={{ animation: 'fade' }}
           />
           <Stack.Screen
             name={Routes.ProfileSettings}

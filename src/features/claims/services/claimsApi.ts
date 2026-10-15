@@ -361,7 +361,17 @@ export function transformBackendClaim(raw: BackendClaim, preview?: BackendClaimP
     hasActionRequest: isActionRequest,
     tpaMessage: raw.tpa_message || preview?.tpa_message || undefined,
     tpaRequestedDocs: raw.tpa_requested_docs || preview?.tpa_requested_docs || [],
-    insuranceCompany: raw.insurance_company || preview?.insurance_company || undefined,
+    insuranceCompany:
+      raw.insurance_company ||
+      (raw as any).payer ||
+      (raw as any).tpa ||
+      (raw as any).tpa_name ||
+      (raw as any).submitted_payer ||
+      preview?.insurance_company ||
+      (preview as any)?.payer ||
+      (preview as any)?.summary?.insurance_company ||
+      (preview as any)?.summary?.insurer ||
+      undefined,
   };
 }
 

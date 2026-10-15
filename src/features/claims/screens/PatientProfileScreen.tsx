@@ -37,7 +37,6 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
 
   const { claims, loadClaims, claimPreviews, fetchClaimPreview } = useClaimsStore();
 
-  const [activeTab, setActiveTab] = useState<'claims' | 'docs'>('claims');
   const [refreshing, setRefreshing] = useState(false);
 
   // If opened from a specific claim, find that claim
@@ -243,7 +242,7 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
         }
       >
         {/* Patient Identity Card */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line, alignItems: 'center' }]}>
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line, alignItems: 'center', paddingVertical: 18 }]}>
           <UserAvatar
             size={68}
             name={displayPatientName}
@@ -251,31 +250,8 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
             style={{ marginBottom: 10 }}
           />
           <Text style={[styles.patientName, { color: colors.ink }]}>{displayPatientName}</Text>
-          <Text style={[styles.patientSub, { color: colors.muted }]}>
+          <Text style={[styles.patientSub, { color: colors.muted, marginBottom: 0 }]}>
             {displayGender}{displayDob && displayDob !== '-' ? ` · ${maskVal('dob', displayDob)}` : ''}
-          </Text>
-
-          <View style={styles.pillsRow}>
-            <View style={[styles.tagPill, { backgroundColor: colors.brandSoft }]}>
-              <Text style={[styles.tagPillText, { color: colors.brandDark }]}>Self</Text>
-            </View>
-            <View style={[styles.tagPill, { backgroundColor: colors.greenSoft }]}>
-              <Text style={[styles.tagPillText, { color: colors.green }]}>KYC verified</Text>
-            </View>
-            <View style={[
-              styles.tagPill,
-              { backgroundColor: avgRiskPercent > 50 ? colors.redSoft : (avgRiskPercent > 30 ? colors.amberSoft : colors.greenSoft) }
-            ]}>
-              <Text style={[
-                styles.tagPillText,
-                { color: avgRiskPercent > 50 ? colors.red : (avgRiskPercent > 30 ? colors.amber : colors.green) }
-              ]}>
-                Risk {avgRiskPercent > 50 ? 'HIGH' : (avgRiskPercent > 30 ? 'MEDIUM' : 'LOW')}
-              </Text>
-            </View>
-          </View>
-          <Text style={[styles.maskNote, { color: colors.muted }]}>
-            PHI revealed · DOB, phone, email, UID
           </Text>
         </View>
 
@@ -318,137 +294,82 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
           </View>
         </View>
 
-        {/* Tabs: Claims / Documents */}
-        <View style={[styles.tabBar, { backgroundColor: colors.surface2 }]}>
-          <TouchableOpacity
-            style={[styles.tabBtn, activeTab === 'claims' && [styles.tabBtnOn, { backgroundColor: colors.surface }]]}
-            onPress={() => setActiveTab('claims')}
-          >
-            <Text style={[styles.tabBtnText, { color: activeTab === 'claims' ? colors.brandDark : colors.muted }]}>
-              Claims ({claims.length})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tabBtn, activeTab === 'docs' && [styles.tabBtnOn, { backgroundColor: colors.surface }]]}
-            onPress={() => setActiveTab('docs')}
-          >
-            <Text style={[styles.tabBtnText, { color: activeTab === 'docs' ? colors.brandDark : colors.muted }]}>
-              Documents ({docGroups.length})
-            </Text>
-          </TouchableOpacity>
+        {/* Section Header: Claims */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={[styles.sectionHeaderTitle, { color: colors.ink }]}>Claims ({claims.length})</Text>
         </View>
 
-        {/* Tab 1: Real Claims List */}
-        {activeTab === 'claims' && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line, padding: 0 }]}>
-            {claims.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <FileText size={32} color={colors.muted} style={{ marginBottom: 8 }} />
-                <Text style={[styles.emptyTitle, { color: colors.ink }]}>No claims found</Text>
-                <Text style={[styles.emptySub, { color: colors.muted }]}>
-                  No insurance claims have been submitted under this profile.
-                </Text>
+        {/* Real Claims List */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line, padding: 0 }]}>
+          {claims.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <FileText size={32} color={colors.muted} style={{ marginBottom: 8 }} />
+              <Text style={[styles.emptyTitle, { color: colors.ink }]}>No claims found</Text>
+              <Text style={[styles.emptySub, { color: colors.muted }]}>
+                No insurance claims have been submitted under this profile.
+              </Text>
+              <TouchableOpacity
+                style={[styles.emptyBtn, { backgroundColor: colors.brand }]}
+                onPress={() => navigation.navigate(Routes.UploadPanel)}
+              >
+                <Text style={styles.emptyBtnText}>Upload new claim</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            claims.map((c, i) => {
+              const badge = getClaimStatusBadge(c.status, (c as any).rawStatus, colors);
+              const stColor = badge.text;
+              const stBg = badge.bg;
+              const displayLabel = badge.label;
+
+              const claimPatientName = c.who || (c as any).patient_name || (c as any).patientName || displayPatientName || 'Patient';
+              const claimTitle = claimPatientName;
+              const claimSub = `${c.id.slice(0, 8)} · ${c.amt ? formatINR(c.amt) : 'amount pending'}${c.admissionDate ? ' · admitted ' + c.admissionDate : (c.hospital ? ' · ' + c.hospital : '')}`;
+
+              return (
                 <TouchableOpacity
-                  style={[styles.emptyBtn, { backgroundColor: colors.brand }]}
-                  onPress={() => navigation.navigate(Routes.UploadPanel)}
-                >
-                  <Text style={styles.emptyBtnText}>Upload new claim</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              claims.map((c, i) => {
-                const badge = getClaimStatusBadge(c.status, (c as any).rawStatus, colors);
-                const stColor = badge.text;
-                const stBg = badge.bg;
-                const displayLabel = badge.label;
-
-                const claimPatientName = c.who || (c as any).patient_name || (c as any).patientName || displayPatientName || 'Patient';
-                const claimTitle = claimPatientName;
-                const claimSub = `${c.id.slice(0, 8)} · ${c.amt ? formatINR(c.amt) : 'amount pending'}${c.admissionDate ? ' · admitted ' + c.admissionDate : (c.hospital ? ' · ' + c.hospital : '')}`;
-
-                return (
-                  <TouchableOpacity
-                    key={c.id || i}
-                    style={[
-                      styles.claimItemRow,
-                      i < claims.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.line2 },
-                      focusedClaim?.id === c.id && { backgroundColor: colors.surface2 },
-                    ]}
-                    onPress={() => navigation.navigate(Routes.ClaimDetail, { claimId: c.id })}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.claimIcon, { backgroundColor: colors.surface2 }]}>
-                      <FileText size={16} color={colors.brandDark} />
-                    </View>
-                    <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
-                      <Text style={[styles.claimItemTitle, { color: colors.ink }]} numberOfLines={1}>
-                        {claimTitle}
-                      </Text>
-                      <Text style={[styles.claimItemSub, { color: colors.muted }]} numberOfLines={1}>
-                        {claimSub}
-                      </Text>
-                    </View>
-                    <View style={[styles.statusBadge, { backgroundColor: stBg }]}>
-                      <Text style={[styles.statusBadgeText, { color: stColor }]}>{displayLabel}</Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })
-            )}
-          </View>
-        )}
-
-        {/* Tab 2: Real Documents */}
-        {activeTab === 'docs' && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line, padding: 0 }]}>
-            {docGroups.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <FileText size={32} color={colors.muted} style={{ marginBottom: 8 }} />
-                <Text style={[styles.emptyTitle, { color: colors.ink }]}>No documents attached</Text>
-                <Text style={[styles.emptySub, { color: colors.muted }]}>
-                  Upload medical bills, summaries, or reports to attach them here.
-                </Text>
-              </View>
-            ) : (
-              docGroups.map((d, i) => (
-                <TouchableOpacity
-                  key={`${d.claimId}-${d.name}-${i}`}
+                  key={c.id || i}
                   style={[
-                    styles.docItemRow,
-                    i < docGroups.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.line2 },
+                    styles.claimItemRow,
+                    i < claims.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.line2 },
+                    focusedClaim?.id === c.id && { backgroundColor: colors.surface2 },
                   ]}
-                  onPress={() => navigation.navigate(Routes.DocumentGrid, { claimId: d.claimId })}
+                  onPress={() => navigation.navigate(Routes.ClaimDetail, { claimId: c.id })}
                   activeOpacity={0.7}
                 >
-                  <View style={{ flex: 1, paddingRight: 8 }}>
-                    <Text style={[styles.docItemName, styles.mono, { color: colors.ink }]} numberOfLines={1}>
-                      {d.displayName}
+                  <View style={[styles.claimIcon, { backgroundColor: colors.surface2 }]}>
+                    <FileText size={16} color={colors.brandDark} />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+                    <Text style={[styles.claimItemTitle, { color: colors.ink }]} numberOfLines={1}>
+                      {claimTitle}
                     </Text>
-                    <Text style={[styles.docItemSub, { color: colors.muted }]} numberOfLines={1}>
-                      {d.sub}
+                    <Text style={[styles.claimItemSub, { color: colors.muted }]} numberOfLines={1}>
+                      {claimSub}
                     </Text>
                   </View>
-                  <View style={[styles.countBadge, { backgroundColor: colors.surface2 }]}>
-                    <Text style={[styles.countBadgeText, { color: colors.muted }]}>{d.count}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: stBg }]}>
+                    <Text style={[styles.statusBadgeText, { color: stColor }]}>{displayLabel}</Text>
                   </View>
                 </TouchableOpacity>
-              ))
-            )}
-          </View>
-        )}
+              );
+            })
+          )}
+        </View>
 
       </ScrollView>
 
       {/* Bottom Sticky Action Bar */}
-      <View style={[styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
-        <TouchableOpacity
-          style={[styles.bottomOutlineBtn, { borderColor: colors.line }]}
-          onPress={() => navigation.navigate(Routes.ChatTab)}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.bottomOutlineText, { color: colors.brandDark }]}>Ask ClaimsGuru</Text>
-        </TouchableOpacity>
-
+      <View
+        style={[
+          styles.bottomBar,
+          {
+            backgroundColor: colors.surface,
+            borderTopColor: colors.line,
+            paddingBottom: Math.max(insets.bottom, 12),
+          },
+        ]}
+      >
         <TouchableOpacity
           style={[styles.bottomSolidBtn, { backgroundColor: colors.brand }]}
           onPress={() =>
@@ -498,6 +419,18 @@ const styles = StyleSheet.create({
   kpiVal: { fontSize: 16, fontWeight: '700' },
   kpiLabel: { fontSize: 10.5, marginTop: 2 },
   sectionTitle: { fontSize: 13, fontWeight: '700' },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    marginTop: 2,
+    paddingHorizontal: 2,
+  },
+  sectionHeaderTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
   kvRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -594,7 +527,7 @@ const styles = StyleSheet.create({
   },
   bottomOutlineText: { fontSize: 13, fontWeight: '600' },
   bottomSolidBtn: {
-    flex: 0.58,
+    flex: 1,
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',

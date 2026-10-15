@@ -218,10 +218,14 @@ export const useClaimsStore = create<ClaimsState>((set, get) => ({
 
   addOrUpdateClaim: updated =>
     set(state => {
-      const exists = state.claims.some(c => c.id === updated.id);
+      const isMatch = (cId: string, uId: string) =>
+        cId === uId ||
+        (cId && uId && cId.length >= 8 && uId.length >= 8 && (cId.startsWith(uId.slice(0, 8)) || uId.startsWith(cId.slice(0, 8))));
+
+      const exists = state.claims.some(c => isMatch(c.id, updated.id));
       if (exists) {
         return {
-          claims: state.claims.map(c => (c.id === updated.id ? { ...c, ...updated } : c)),
+          claims: state.claims.map(c => (isMatch(c.id, updated.id) ? { ...c, ...updated } : c)),
           selectedClaimId: updated.id,
         };
       }
