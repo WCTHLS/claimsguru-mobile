@@ -5,6 +5,8 @@ export interface CodeItem {
   confidence?: number;
   code_includes?: string;
   other_matches?: any[];
+  is_low_match?: boolean;
+  review_warning?: string | null;
 }
 
 export const ICD_CODES: CodeItem[] = [

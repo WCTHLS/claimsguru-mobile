@@ -23,6 +23,7 @@ import {
   ChevronDown,
   ChevronRight,
   ArrowUpDown,
+  AlertTriangle,
 } from 'lucide-react-native';
 
 export const MedicalCodingScreen = ({ route, navigation }: any) => {
@@ -63,13 +64,44 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
               ];
             }
           }
+          const isLowMatch = Boolean(
+            c.is_low_match ||
+            (c.confidence !== undefined && c.confidence !== null && c.confidence < 0.40) ||
+            c.review_warning
+          );
+          const confVal = c.confidence !== undefined && c.confidence !== null ? c.confidence : (isLowMatch ? 0.35 : 0.85);
+
+          const formattedAlts = (alts || []).map((alt: any, altIdx: number) => {
+            const altIsLow = Boolean(
+              isLowMatch ||
+              alt.is_low_match ||
+              (alt.confidence !== undefined && alt.confidence !== null && alt.confidence < 0.40) ||
+              alt.review_warning
+            );
+            const altConf = altIsLow
+              ? (alt.confidence !== undefined && alt.confidence !== null && alt.confidence < 0.40
+                  ? alt.confidence
+                  : Math.max(0.20, Math.min(0.38, (confVal || 0.35) - (altIdx + 1) * 0.03)))
+              : alt.confidence;
+            return {
+              ...alt,
+              confidence: altConf,
+              is_low_match: altIsLow,
+              review_warning: alt.review_warning || (altIsLow ? 'please review the code as its a low matched code' : undefined),
+            };
+          });
+
           return {
             code: c.code,
             desc: c.description || 'Diagnostic code',
-            meta: `confidence ${c.confidence ? c.confidence.toFixed(2) : '0.85'}`,
-            confidence: c.confidence || 0.85,
+            meta: isLowMatch
+              ? `${(confVal * 100).toFixed(0)}% match (low match)`
+              : `confidence ${confVal.toFixed(2)}`,
+            confidence: confVal,
+            is_low_match: isLowMatch,
+            review_warning: c.review_warning || (isLowMatch ? 'please review the code as its a low matched code' : undefined),
             code_includes: c.code_includes || (c.code === 'K44.0' ? 'Code covers: hiatus hernia (oesophageal)(sliding) | paraoesophageal hernia | Diaphragmatic hernia: causing obstruction without gangrene' : undefined),
-            other_matches: alts,
+            other_matches: formattedAlts,
           };
         });
         setRealIcdCodes(formattedIcd);
@@ -161,15 +193,28 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
         confidence: currentTop.confidence,
         code_includes: currentTop.code_includes,
         meta: currentTop.meta,
+        is_low_match: (currentTop as any).is_low_match,
+        review_warning: (currentTop as any).review_warning,
       };
+
+      const chosenIsLow = Boolean(
+        chosenAlt.is_low_match ||
+        (chosenAlt.confidence !== undefined && chosenAlt.confidence !== null && chosenAlt.confidence < 0.40) ||
+        chosenAlt.review_warning
+      );
+      const chosenConf = chosenAlt.confidence !== undefined && chosenAlt.confidence !== null ? chosenAlt.confidence : (chosenIsLow ? 0.35 : 0.85);
 
       next[parentIdx] = {
         ...currentTop,
         code: chosenAlt.code,
         desc: chosenAlt.desc,
-        confidence: chosenAlt.confidence,
+        confidence: chosenConf,
         code_includes: chosenAlt.code_includes,
-        meta: `confidence ${(chosenAlt.confidence || 0.85).toFixed(2)}`,
+        meta: chosenIsLow
+          ? `${(chosenConf * 100).toFixed(0)}% match (low match)`
+          : `confidence ${chosenConf.toFixed(2)}`,
+        is_low_match: chosenIsLow,
+        review_warning: chosenAlt.review_warning || (chosenIsLow ? 'please review the code as its a low matched code' : undefined),
         other_matches: newAlts,
       };
 
@@ -268,6 +313,11 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
                 const isLast = idx === currentCodes.length - 1;
                 const currentVote = feedback[item.code];
                 const isIcdTab = activeTab === 'icd';
+                const isLowMatch = Boolean(
+                  (item as any).is_low_match ||
+                  (item.confidence !== undefined && item.confidence !== null && item.confidence < 0.40) ||
+                  (item as any).review_warning
+                );
                 const topDescKey = `screen-top-${idx}-${item.code}`;
                 const isTopDescOpen = Boolean(expandedDesc[topDescKey]);
                 const otherKey = `screen-other-${idx}-${item.code}`;
@@ -284,8 +334,11 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
                   >
                     {/* Top 1 Code Row */}
                     <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                      <View style={[styles.codeTag, { backgroundColor: colors.surface2, marginRight: 10 }]}>
-                        <Text style={[styles.codeTagText, styles.mono, { color: colors.brandDark }]}>
+                      <View style={[
+                        styles.codeTag,
+                        { backgroundColor: isLowMatch ? '#FEF3C7' : colors.surface2, marginRight: 10 }
+                      ]}>
+                        <Text style={[styles.codeTagText, styles.mono, { color: isLowMatch ? '#B45309' : colors.brandDark }]}>
                           {item.code}
                         </Text>
                       </View>
@@ -294,7 +347,9 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
                         <Text style={[styles.codeDesc, { color: colors.ink, fontWeight: '600' }]}>
                           {item.desc}
                         </Text>
-                        <Text style={[styles.codeMeta, { color: colors.muted, marginTop: 2 }]}>{item.meta}</Text>
+                        <Text style={[styles.codeMeta, { color: isLowMatch ? '#D97706' : colors.muted, marginTop: 2, fontWeight: isLowMatch ? '700' : '500' }]}>
+                          {item.meta}
+                        </Text>
                       </View>
 
                       {/* Feedback Buttons */}
@@ -334,6 +389,27 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
                         </TouchableOpacity>
                       </View>
                     </View>
+
+                    {/* Low Match Review Warning Banner */}
+                    {isIcdTab && isLowMatch && (
+                      <View style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                        backgroundColor: '#FEF3C7',
+                        borderColor: '#F59E0B',
+                        borderWidth: 1,
+                        paddingHorizontal: 8,
+                        paddingVertical: 5,
+                        borderRadius: 6,
+                        marginTop: 6,
+                      }}>
+                        <AlertTriangle size={13} color="#D97706" />
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: '#B45309', flex: 1 }}>
+                          {(item as any).review_warning || 'please review the code as its a low matched code'}
+                        </Text>
+                      </View>
+                    )}
 
                     {/* Top 1 Code Description Disclosure (for ICD) */}
                     {isIcdTab && (
@@ -403,6 +479,17 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
                             {otherMatches.map((alt, altIdx) => {
                               const altDescKey = `screen-alt-${idx}-${altIdx}-${alt.code}`;
                               const isAltDescOpen = Boolean(expandedDesc[altDescKey]);
+                              const altIsLow = Boolean(
+                                isLowMatch ||
+                                alt.is_low_match ||
+                                (alt.confidence !== undefined && alt.confidence !== null && alt.confidence < 0.40) ||
+                                alt.review_warning
+                              );
+                              const altConfVal = altIsLow
+                                ? (alt.confidence !== undefined && alt.confidence !== null && alt.confidence < 0.40
+                                    ? alt.confidence
+                                    : Math.max(0.20, Math.min(0.38, (((item as any).confidence) || 0.35) - (altIdx + 1) * 0.03)))
+                                : (alt.confidence !== undefined && alt.confidence !== null ? alt.confidence : 0.85);
 
                               return (
                                 <View
@@ -418,12 +505,12 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
                                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                                       <View style={[styles.codeTag, { backgroundColor: colors.surface, paddingHorizontal: 5, paddingVertical: 1 }]}>
-                                        <Text style={[styles.codeTagText, styles.mono, { color: colors.brandDark, fontSize: 10 }]}>
+                                        <Text style={[styles.codeTagText, styles.mono, { color: altIsLow ? '#B45309' : colors.brandDark, fontSize: 10 }]}>
                                           {alt.code}
                                         </Text>
                                       </View>
-                                      <Text style={{ fontSize: 10, color: colors.muted, fontWeight: '600' }}>
-                                        {alt.confidence ? `${(alt.confidence * 100).toFixed(0)}%` : '85%'} Match
+                                      <Text style={{ fontSize: 10, color: altIsLow ? '#D97706' : colors.muted, fontWeight: '700' }}>
+                                        {`${(altConfVal * 100).toFixed(0)}% Match`}
                                       </Text>
                                     </View>
 
@@ -449,6 +536,26 @@ export const MedicalCodingScreen = ({ route, navigation }: any) => {
                                       </Text>
                                     </TouchableOpacity>
                                   </View>
+
+                                  {altIsLow && (
+                                    <View style={{
+                                      flexDirection: 'row',
+                                      alignItems: 'center',
+                                      gap: 5,
+                                      backgroundColor: '#FEF3C7',
+                                      borderColor: '#F59E0B',
+                                      borderWidth: 1,
+                                      paddingHorizontal: 7,
+                                      paddingVertical: 3,
+                                      borderRadius: 5,
+                                      marginBottom: 4,
+                                    }}>
+                                      <AlertTriangle size={11} color="#D97706" />
+                                      <Text style={{ fontSize: 9.5, color: '#B45309', fontWeight: '600' }}>
+                                        {alt.review_warning || 'please review the code as its a low matched code'}
+                                      </Text>
+                                    </View>
+                                  )}
 
                                   <Text style={{ fontSize: 11.5, color: colors.ink, lineHeight: 15, marginBottom: 4 }}>
                                     {alt.desc || alt.description}

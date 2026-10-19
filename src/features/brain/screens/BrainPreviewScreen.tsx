@@ -334,10 +334,43 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
           : undefined
       );
 
+      const isExplicit = Boolean(
+        item.is_explicit ||
+        (item.is_explicit !== false && (item.confidence || 0) >= 1.0)
+      );
+      const isLowMatch = Boolean(
+        item.is_low_match ||
+        (!isExplicit && item.confidence !== undefined && item.confidence !== null && item.confidence < 0.40) ||
+        item.review_warning
+      );
+
+      const formattedAlts = (alts || []).map((alt: any, altIdx: number) => {
+        const altIsLow = Boolean(
+          isLowMatch ||
+          alt.is_low_match ||
+          (alt.confidence !== undefined && alt.confidence !== null && alt.confidence < 0.40) ||
+          alt.review_warning
+        );
+        const altConf = altIsLow
+          ? (alt.confidence !== undefined && alt.confidence !== null && alt.confidence < 0.40
+              ? alt.confidence
+              : Math.max(0.20, Math.min(0.38, (item.confidence || 0.35) - (altIdx + 1) * 0.03)))
+          : alt.confidence;
+        return {
+          ...alt,
+          confidence: altConf,
+          is_low_match: altIsLow,
+          review_warning: alt.review_warning || (altIsLow ? 'please review the code as its a low matched code' : undefined),
+        };
+      });
+
       return {
         ...item,
+        is_explicit: isExplicit,
+        is_low_match: isLowMatch,
+        review_warning: item.review_warning || (isLowMatch ? 'please review the code as its a low matched code' : undefined),
         code_includes: covers,
-        other_matches: alts,
+        other_matches: formattedAlts,
       };
     });
     setEditableIcdList(enriched);
@@ -369,6 +402,8 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
         description: currentTop.description,
         confidence: currentTop.confidence,
         code_includes: currentTop.code_includes,
+        is_low_match: currentTop.is_low_match,
+        review_warning: currentTop.review_warning,
       };
 
       next[parentIdx] = {
@@ -377,6 +412,8 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
         description: chosenAlt.description,
         confidence: chosenAlt.confidence,
         code_includes: chosenAlt.code_includes,
+        is_low_match: chosenAlt.is_low_match,
+        review_warning: chosenAlt.review_warning,
         other_matches: newAlts,
       };
 
@@ -1206,6 +1243,17 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
                     const isOtherOpen = Boolean(mobileExpandedOther[otherKey]);
                     const otherMatches: any[] = c.other_matches || [];
 
+                    const isExplicit = Boolean(
+                      c.is_explicit ||
+                      (c.is_explicit !== false && (c.confidence || 0) >= 1.0)
+                    );
+                    const isLowMatch = Boolean(
+                      c.is_low_match ||
+                      (!isExplicit && c.confidence !== undefined && c.confidence !== null && c.confidence < 0.40) ||
+                      c.review_warning
+                    );
+                    const confVal = c.confidence !== undefined && c.confidence !== null ? c.confidence : (isLowMatch ? 0.35 : 0.91);
+
                     return (
                       <View
                         key={`icd-${parentIdx}-${c.code}`}
@@ -1213,7 +1261,7 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
                           backgroundColor: colors.surface,
                           borderRadius: 10,
                           borderWidth: 1,
-                          borderColor: colors.line2,
+                          borderColor: isLowMatch ? '#F59E0B' : colors.line2,
                           padding: 10,
                           marginBottom: 8,
                         }}
@@ -1221,21 +1269,43 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
                         {/* Top 1 Active Matched Code */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <View style={[styles.ruleCodeBadge, { backgroundColor: colors.brandSoft }]}>
-                              <Text style={[styles.ruleCodeText, styles.mono, { color: colors.brandDark }]}>
+                            <View style={[styles.ruleCodeBadge, { backgroundColor: isLowMatch ? '#FEF3C7' : colors.brandSoft }]}>
+                              <Text style={[styles.ruleCodeText, styles.mono, { color: isLowMatch ? '#B45309' : colors.brandDark }]}>
                                 {c.code}
                               </Text>
                             </View>
-                            <View style={{ backgroundColor: colors.surface2, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
-                              <Text style={{ fontSize: 9.5, fontWeight: '600', color: colors.brandDark }}>
-                                Matched Code
+                            <View style={{ backgroundColor: isLowMatch ? '#FEF3C7' : colors.surface2, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                              {isLowMatch && <AlertTriangle size={10} color="#D97706" />}
+                              <Text style={{ fontSize: 9.5, fontWeight: '700', color: isLowMatch ? '#B45309' : colors.brandDark }}>
+                                {isExplicit ? 'Explicit Code' : isLowMatch ? 'Low Matched Code' : 'Matched Code'}
                               </Text>
                             </View>
                           </View>
-                          <Text style={[styles.factorVal, { color: colors.green, fontWeight: '700' }]}>
-                            {c.confidence ? `${(c.confidence * 100).toFixed(0)}%` : ((c as any).conf || '91%')} Match
+                          <Text style={[styles.factorVal, { color: isLowMatch ? '#D97706' : colors.green, fontWeight: '700' }]}>
+                            {`${(confVal * 100).toFixed(0)}% Match`}
                           </Text>
                         </View>
+
+                        {/* Low Match Review Warning Banner */}
+                        {isLowMatch && (
+                          <View style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 6,
+                            backgroundColor: '#FEF3C7',
+                            borderColor: '#F59E0B',
+                            borderWidth: 1,
+                            paddingHorizontal: 8,
+                            paddingVertical: 5,
+                            borderRadius: 6,
+                            marginBottom: 6,
+                          }}>
+                            <AlertTriangle size={13} color="#D97706" />
+                            <Text style={{ fontSize: 11, fontWeight: '600', color: '#B45309', flex: 1 }}>
+                              {c.review_warning || 'please review the code as its a low matched code'}
+                            </Text>
+                          </View>
+                        )}
 
                         <Text style={{ fontSize: 12.5, fontWeight: '600', color: colors.ink, lineHeight: 17, marginBottom: 6 }}>
                           {c.description || (c as any).desc || 'Diagnosis code'}
@@ -1306,55 +1376,87 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
                                   const altDescKey = `alt-${parentIdx}-${altIdx}-${alt.code}`;
                                   const isAltDescOpen = Boolean(mobileExpandedDesc[altDescKey]);
 
-                                  return (
-                                    <View
-                                      key={`alt-${alt.code}-${altIdx}`}
-                                      style={{
-                                        backgroundColor: colors.surface2,
-                                        borderRadius: 8,
-                                        borderWidth: 1,
-                                        borderColor: colors.line2,
-                                        padding: 8,
-                                      }}
-                                    >
-                                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                                          <View style={[styles.ruleCodeBadge, { backgroundColor: colors.surface }]}>
-                                            <Text style={[styles.ruleCodeText, styles.mono, { color: colors.brandDark, fontSize: 10 }]}>
-                                              {alt.code}
-                                            </Text>
-                                          </View>
-                                          <Text style={{ fontSize: 10, color: colors.muted, fontWeight: '600' }}>
-                                            {alt.confidence ? `${(alt.confidence * 100).toFixed(0)}%` : '85%'} Match
-                                          </Text>
-                                        </View>
+                                      const altIsLow = Boolean(
+                                        isLowMatch ||
+                                        alt.is_low_match ||
+                                        (alt.confidence !== undefined && alt.confidence !== null && alt.confidence < 0.40) ||
+                                        alt.review_warning
+                                      );
+                                      const altConfVal = altIsLow
+                                        ? (alt.confidence !== undefined && alt.confidence !== null && alt.confidence < 0.40
+                                            ? alt.confidence
+                                            : Math.max(0.20, Math.min(0.38, (confVal || 0.35) - (altIdx + 1) * 0.03)))
+                                        : (alt.confidence !== undefined && alt.confidence !== null ? alt.confidence : 0.85);
 
-                                        {/* Swap Button */}
-                                        <TouchableOpacity
+                                      return (
+                                        <View
+                                          key={`alt-${alt.code}-${altIdx}`}
                                           style={{
-                                            flexDirection: 'row',
-                                            alignItems: 'center',
-                                            gap: 3,
-                                            backgroundColor: colors.surface,
-                                            borderColor: colors.brandDark,
+                                            backgroundColor: colors.surface2,
+                                            borderRadius: 8,
                                             borderWidth: 1,
-                                            paddingHorizontal: 7,
-                                            paddingVertical: 2,
-                                            borderRadius: 5,
+                                            borderColor: colors.line2,
+                                            padding: 8,
                                           }}
-                                          onPress={() => swapMobileCandidate(parentIdx, altIdx)}
-                                          activeOpacity={0.7}
                                         >
-                                          <ArrowUpDown size={11} color={colors.brandDark} />
-                                          <Text style={{ fontSize: 10, fontWeight: '700', color: colors.brandDark }}>
-                                            Swap into Top 1
-                                          </Text>
-                                        </TouchableOpacity>
-                                      </View>
+                                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                                              <View style={[styles.ruleCodeBadge, { backgroundColor: colors.surface }]}>
+                                                <Text style={[styles.ruleCodeText, styles.mono, { color: altIsLow ? '#B45309' : colors.brandDark, fontSize: 10 }]}>
+                                                  {alt.code}
+                                                </Text>
+                                              </View>
+                                              <Text style={{ fontSize: 10, color: altIsLow ? '#D97706' : colors.muted, fontWeight: '700' }}>
+                                                {`${(altConfVal * 100).toFixed(0)}% Match`}
+                                              </Text>
+                                            </View>
 
-                                      <Text style={{ fontSize: 11.5, color: colors.ink, lineHeight: 15, marginBottom: 4 }}>
-                                        {alt.description}
-                                      </Text>
+                                            {/* Swap Button */}
+                                            <TouchableOpacity
+                                              style={{
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                gap: 3,
+                                                backgroundColor: colors.surface,
+                                                borderColor: colors.brandDark,
+                                                borderWidth: 1,
+                                                paddingHorizontal: 7,
+                                                paddingVertical: 2,
+                                                borderRadius: 5,
+                                              }}
+                                              onPress={() => swapMobileCandidate(parentIdx, altIdx)}
+                                              activeOpacity={0.7}
+                                            >
+                                              <ArrowUpDown size={11} color={colors.brandDark} />
+                                              <Text style={{ fontSize: 10, fontWeight: '700', color: colors.brandDark }}>
+                                                Swap into Top 1
+                                              </Text>
+                                            </TouchableOpacity>
+                                          </View>
+
+                                          {altIsLow && (
+                                            <View style={{
+                                              flexDirection: 'row',
+                                              alignItems: 'center',
+                                              gap: 5,
+                                              backgroundColor: '#FEF3C7',
+                                              borderColor: '#F59E0B',
+                                              borderWidth: 1,
+                                              paddingHorizontal: 7,
+                                              paddingVertical: 3,
+                                              borderRadius: 5,
+                                              marginBottom: 4,
+                                            }}>
+                                              <AlertTriangle size={11} color="#D97706" />
+                                              <Text style={{ fontSize: 9.5, color: '#B45309', fontWeight: '600' }}>
+                                                {alt.review_warning || 'please review the code as its a low matched code'}
+                                              </Text>
+                                            </View>
+                                          )}
+
+                                          <Text style={{ fontSize: 11.5, color: colors.ink, lineHeight: 15, marginBottom: 4 }}>
+                                            {alt.description}
+                                          </Text>
 
                                       {/* Candidate Code Description Disclosure */}
                                       <TouchableOpacity
