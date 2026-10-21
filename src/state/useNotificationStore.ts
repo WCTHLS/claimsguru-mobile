@@ -30,6 +30,8 @@ interface NotificationState {
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   clearAll: () => void;
+  deleteNotificationsForClaim: (claimId: string) => void;
+  pruneOrphanedClaimNotifications: (activeClaimIds: string[]) => void;
 }
 
 const STORAGE_KEY = 'cg_notifications_store';
@@ -108,28 +110,38 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 
       let merged = Array.from(existingMap.values());
 
-      // If completely empty on first launch, seed welcome & recent claim notifications
-      if (merged.length === 0) {
-        merged = [
-          {
-            id: 'notif-welcome',
-            title: 'Welcome to ClaimsGuru 🏥',
-            message: 'Your automated AI health claims portal is ready. Track submissions and live updates here.',
-            createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-            type: 'info',
-            read: false,
-          },
-          {
-            id: 'notif-val-ready',
-            title: 'AI Verification Ready ✅',
-            message: 'Claim #504FD1AD passed 10/11 IRDAI compliance validation rules.',
-            createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-            claimId: '504fd1ad-255b-421a-a7fa-9f55e0fdf081',
-            type: 'validation',
-            read: false,
-          },
-        ];
-      }
+      // 4. Cleanse legacy dummy seeds & orphaned notifications
+      merged = merged.filter(n => {
+        if (n.id === 'notif-val-ready' || n.id === 'notif-welcome') return false;
+        const text = ((n.title || '') + ' ' + (n.message || '')).toLowerCase();
+        if (text.includes('504fd1ad')) return false;
+        return true;
+      });
+
+      // 5. Cross-check against active claims if claims are loaded
+      try {
+        const { useClaimsStore } = require('./useClaimsStore');
+        const claimsState = useClaimsStore.getState();
+        if (claimsState.backendConnected || (claimsState.claims && claimsState.claims.length > 0)) {
+          const validPrefixes = new Set(
+            (claimsState.claims || []).map((c: any) =>
+              (c.id || '').trim().toLowerCase().replace(/^#/, '').replace(/-/g, '').slice(0, 8)
+            ).filter(Boolean)
+          );
+
+          merged = merged.filter(n => {
+            if (n.claimId) {
+              const prefix = n.claimId.trim().toLowerCase().replace(/^#/, '').replace(/-/g, '').slice(0, 8);
+              return validPrefixes.has(prefix);
+            }
+            const match = (n.title + ' ' + n.message).match(/#([a-fA-F0-9]{6,8})/);
+            if (match && match[1]) {
+              return validPrefixes.has(match[1].toLowerCase().slice(0, 8));
+            }
+            return true;
+          });
+        }
+      } catch {}
 
       // Sort newest first
       merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -191,5 +203,71 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   clearAll: () => {
     set({ notifications: [], unreadCount: 0 });
     appStorage.removeItem(STORAGE_KEY).catch(() => {});
+  },
+
+  deleteNotificationsForClaim: (claimId: string) => {
+    if (!claimId) return;
+    const cleanId = claimId.trim().toLowerCase().replace(/^#/, '');
+    const prefix8 = cleanId.replace(/-/g, '').slice(0, 8);
+
+    const isMatch = (n: AppNotification) => {
+      // 1. Direct claimId match
+      if (n.claimId) {
+        const nId = n.claimId.trim().toLowerCase().replace(/^#/, '');
+        if (nId === cleanId || (prefix8.length >= 6 && (nId.startsWith(prefix8) || cleanId.startsWith(nId.replace(/-/g, '').slice(0, 8))))) {
+          return true;
+        }
+      }
+      // 2. Mention in title or message (e.g. #504FD1AD or 504FD1AD)
+      if (prefix8.length >= 6) {
+        const titleLower = (n.title || '').toLowerCase();
+        const msgLower = (n.message || '').toLowerCase();
+        if (titleLower.includes(prefix8) || msgLower.includes(prefix8)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const remaining = get().notifications.filter(n => !isMatch(n));
+    const unreadCount = remaining.filter(n => !n.read).length;
+
+    set({ notifications: remaining, unreadCount });
+    appStorage.setItem(STORAGE_KEY, JSON.stringify(remaining)).catch(() => {});
+  },
+
+  pruneOrphanedClaimNotifications: (activeClaimIds: string[]) => {
+    const validPrefixes = new Set(
+      activeClaimIds
+        .map(id => (id || '').trim().toLowerCase().replace(/^#/, '').replace(/-/g, '').slice(0, 8))
+        .filter(Boolean)
+    );
+
+    const isOrphan = (n: AppNotification) => {
+      // Always remove legacy fake seeds
+      if (n.id === 'notif-val-ready' || n.id === 'notif-welcome') return true;
+      const text = ((n.title || '') + ' ' + (n.message || '')).toLowerCase();
+      if (text.includes('504fd1ad')) return true;
+
+      // If notification is tied to a specific claimId
+      if (n.claimId) {
+        const notifPrefix = n.claimId.trim().toLowerCase().replace(/^#/, '').replace(/-/g, '').slice(0, 8);
+        return !validPrefixes.has(notifPrefix);
+      }
+
+      // If notification title or message explicitly mentions a claim ID (#XXXXXXXX)
+      const match = (n.title + ' ' + n.message).match(/#([a-fA-F0-9]{6,8})/);
+      if (match && match[1]) {
+        return !validPrefixes.has(match[1].toLowerCase().slice(0, 8));
+      }
+
+      return false;
+    };
+
+    const remaining = get().notifications.filter(n => !isOrphan(n));
+    const unreadCount = remaining.filter(n => !n.read).length;
+
+    set({ notifications: remaining, unreadCount });
+    appStorage.setItem(STORAGE_KEY, JSON.stringify(remaining)).catch(() => {});
   },
 }));

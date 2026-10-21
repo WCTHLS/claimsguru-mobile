@@ -137,6 +137,12 @@ export const useClaimsStore = create<ClaimsState>((set, get) => ({
         loading: false,
         refreshing: false,
       });
+
+      // Synchronize notifications to remove alerts for deleted/orphaned claims
+      try {
+        const { useNotificationStore } = require('./useNotificationStore');
+        useNotificationStore.getState().pruneOrphanedClaimNotifications(finalClaims.map(c => c.id));
+      } catch {}
     } catch (err: any) {
       console.warn('[useClaimsStore] Could not fetch claims from backend:', err?.message || err);
       set({
@@ -168,6 +174,12 @@ export const useClaimsStore = create<ClaimsState>((set, get) => ({
         selectedClaimId: remaining.length > 0 ? remaining[0].id : '',
       };
     });
+
+    // Remove any notifications linked to this deleted claim immediately
+    try {
+      const { useNotificationStore } = require('./useNotificationStore');
+      useNotificationStore.getState().deleteNotificationsForClaim(id);
+    } catch {}
 
     try {
       await claimsApi.deleteClaim(id);
@@ -210,6 +222,11 @@ export const useClaimsStore = create<ClaimsState>((set, get) => ({
     });
 
     if (oldClaimId) {
+      try {
+        const { useNotificationStore } = require('./useNotificationStore');
+        useNotificationStore.getState().deleteNotificationsForClaim(oldClaimId);
+      } catch {}
+
       claimsApi.deleteClaim(oldClaimId).catch(err => {
         console.warn(`[useClaimsStore] removeDuplicateClaims backend delete error:`, err);
       });

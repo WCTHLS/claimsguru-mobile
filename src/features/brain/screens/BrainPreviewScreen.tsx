@@ -23,6 +23,7 @@ import { usePipelineStore } from '../../../state/usePipelineStore';
 import { claimsApi, BackendClaimPreview, BackendClaimValidationRule } from '../../claims/services/claimsApi';
 import { formatINR } from '../../../core/utils/currency';
 import { GlobalBottomTabBar } from '../../../app/navigation/GlobalBottomTabBar';
+import { UploadRequestedDocsModal } from '../../claims/components/UploadRequestedDocsModal';
 import {
   ChevronLeft,
   LayoutGrid,
@@ -76,8 +77,8 @@ const DEFAULT_EXPENSES_LIST: BrainExpenseItem[] = [
   { id: 'exp-6', category: 'Medical Consumables', amount: 7095 },
 ];
 
-export const BrainPreviewScreen = ({ route, navigation }: any) => {
-  const { colors } = useTheme();
+export const BrainPreviewScreen = ({ route, navigation, screenTitle, isClaimDetail }: any) => {
+  const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const pipelineClaimId = usePipelineStore(s => s.claimId);
   const claimId = route?.params?.claimId || pipelineClaimId || 'a4f1c9e2';
@@ -160,9 +161,63 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   }, [preview, claimId, isDetailsDirty]);
 
   const storeClaims = useClaimsStore(s => s.claims);
-  const claim = (claimId ? storeClaims.find(cl => cl.id === claimId || cl.id.startsWith(claimId)) : null) || storeClaims[0];
+  const existingClaim = claimId ? storeClaims.find(cl => cl.id === claimId || cl.id.startsWith(claimId)) : null;
+  const fallbackClaim: any = {
+    id: claimId || '',
+    who: 'Loading claim…',
+    dept: 'Medical Claim',
+    amt: 0,
+    status: 'running',
+    step: 'ocr',
+    indexed: false,
+    policyNo: '',
+    hospital: '',
+    doctor: '',
+    diagnosis: '',
+    age: 43,
+    gender: 'Female',
+    admissionDate: '',
+    dischargeDate: '',
+    days: 3,
+    claimType: 'Reimbursement',
+    fieldsParsed: '0 fields',
+  };
 
-  const rawStatusUpper = (claim?.rawStatus || '').toUpperCase();
+  const claim = existingClaim
+    ? {
+        ...fallbackClaim,
+        ...existingClaim,
+        who: existingClaim.who || fallbackClaim.who,
+        hospital: existingClaim.hospital || fallbackClaim.hospital,
+        doctor: existingClaim.doctor || fallbackClaim.doctor,
+        diagnosis: existingClaim.diagnosis || fallbackClaim.diagnosis,
+        amt: existingClaim.amt ?? fallbackClaim.amt,
+        policyNo: existingClaim.policyNo || fallbackClaim.policyNo,
+      }
+    : (storeClaims[0] || fallbackClaim);
+
+  const effectiveClaimId = claim?.id || claimId || 'a4f1c9e2';
+
+  const [showDeleteClaimModal, setShowDeleteClaimModal] = useState(false);
+  const [isDeletingClaim, setIsDeletingClaim] = useState(false);
+  const [showUploadDocsModal, setShowUploadDocsModal] = useState(false);
+
+  const handleConfirmDeleteClaim = async () => {
+    try {
+      setIsDeletingClaim(true);
+      await useClaimsStore.getState().deleteClaim(effectiveClaimId);
+      setIsDeletingClaim(false);
+      setShowDeleteClaimModal(false);
+      navigation.navigate('MainTabs', { screen: Routes.ClaimsTab });
+    } catch (err) {
+      console.warn('[BrainPreviewScreen] Delete error:', err);
+      setIsDeletingClaim(false);
+      setShowDeleteClaimModal(false);
+      navigation.navigate('MainTabs', { screen: Routes.ClaimsTab });
+    }
+  };
+
+  const rawStatusUpper = ((claim as any)?.rawStatus || (preview as any)?.status || '').toUpperCase();
   const isAlreadySubmitted = Boolean(
     claim?.status === 'submitted' ||
     claim?.status === 'approved' ||
@@ -173,6 +228,55 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
     preview?.status === 'SUBMITTED' ||
     Boolean((preview as any)?.is_submitted)
   );
+
+  const st = (claim?.status || preview?.status || '').toLowerCase();
+  const rawSt = rawStatusUpper;
+  const hasDocsRequested = Boolean(
+    claim?.hasActionRequest ||
+    rawSt === 'DOCUMENTS_REQUESTED' ||
+    rawSt === 'MODIFICATION_REQUESTED' ||
+    st === 'docs_requested' ||
+    st === 'documents_requested'
+  );
+  const isFailed = st === 'failed' || st === 'FAILED' || rawSt.includes('FAIL');
+  const isApproved = st === 'approved' || st === 'settled' || rawSt === 'APPROVED' || rawSt === 'SETTLED';
+  const isRejected = st === 'rejected' || rawSt === 'REJECTED';
+  const isSubmitted = isAlreadySubmitted;
+  const isRunning = st === 'running' || rawSt === 'RUNNING' || rawSt === 'PROCESSING' || rawSt === 'UPLOADED';
+
+  let statusBg = colors.greenSoft;
+  let statusColor = colors.green;
+  let statusLabel = 'COMPLETE';
+
+  if (hasDocsRequested) {
+    statusBg = colors.amberSoft;
+    statusColor = colors.amber;
+    statusLabel = 'DOCS REQUESTED';
+  } else if (isApproved) {
+    statusBg = colors.greenSoft;
+    statusColor = colors.green;
+    statusLabel = st === 'settled' || rawSt === 'SETTLED' ? 'SETTLED' : 'APPROVED';
+  } else if (isRejected) {
+    statusBg = colors.redSoft;
+    statusColor = colors.red;
+    statusLabel = 'REJECTED';
+  } else if (isSubmitted) {
+    statusBg = colors.brandSoft;
+    statusColor = colors.brandDark;
+    statusLabel = 'SUBMITTED';
+  } else if (isFailed) {
+    statusBg = colors.redSoft;
+    statusColor = colors.red;
+    statusLabel = 'FAILED';
+  } else if (isRunning) {
+    statusBg = colors.amberSoft;
+    statusColor = colors.amber;
+    statusLabel = 'PROCESSING';
+  } else {
+    statusBg = colors.greenSoft;
+    statusColor = colors.green;
+    statusLabel = 'COMPLETE';
+  }
 
   const effectivePayer =
     claim?.insuranceCompany ||
@@ -242,6 +346,27 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
   // Summary and fields from preview
   const summary = preview?.summary;
   const parsed = preview?.parsed_fields || {};
+
+  const displayPatientName =
+    patientName ||
+    claim?.who ||
+    summary?.patient_name ||
+    parsed?.patient_name ||
+    'Sarita Tiwari';
+  const displayAge = claim?.age || 43;
+  const displayGender = claim?.gender || 'Female';
+  const displayHospital =
+    hospitalName ||
+    claim?.hospital ||
+    summary?.hospital ||
+    (summary as any)?.hospital_name ||
+    'Government Health City';
+  const displayAdmissionDate =
+    admissionDate ||
+    claim?.admissionDate ||
+    summary?.admission_date ||
+    '15/06/2023';
+  const displayDays = claim?.days || 3;
 
   // 1. Risk calculations
   const rawRisk = preview?.predictions?.[0]?.rejection_score ?? summary?.risk_score;
@@ -785,7 +910,7 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
     <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safeArea, { backgroundColor: colors.surface }]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
 
-      {/* App Bar matching prototype: <  AI Brain Preview     [Chat] [All] */}
+      {/* App Bar matching prototype: < Claim detail [Trash2] [LayoutGrid] */}
       <View style={[styles.appBar, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
         <TouchableOpacity
           style={styles.backBtn}
@@ -793,19 +918,28 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
           activeOpacity={0.7}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <ChevronLeft size={24} color={colors.ink} strokeWidth={2.4} />
+          <ChevronLeft size={22} color={colors.ink} strokeWidth={2.4} />
         </TouchableOpacity>
 
-        <Text style={[styles.title, { color: colors.ink }]}>AI Brain Preview</Text>
+        <Text style={[styles.title, { color: colors.ink }]}>{screenTitle || 'Claim detail'}</Text>
 
         <View style={styles.appBarRightActions}>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => setShowDeleteClaimModal(true)}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Trash2 size={19} color={colors.ink} strokeWidth={1.9} />
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.iconBtn}
             onPress={() => navigation.navigate('MainTabs', { screen: Routes.AllFeaturesTab })}
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <LayoutGrid size={20} color={colors.ink} strokeWidth={1.9} />
+            <LayoutGrid size={19} color={colors.ink} strokeWidth={1.9} />
           </TouchableOpacity>
         </View>
       </View>
@@ -823,6 +957,143 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
+          {/* Main Claim Header Card with 5-Step Horizontal Tracker */}
+          <View style={[styles.claimHeaderCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            {/* Status Pills */}
+            <View style={styles.pillsRow}>
+              <View style={[styles.statusPill, { backgroundColor: statusBg }]}>
+                <Text style={[styles.statusPillText, { color: statusColor }]}>
+                  {statusLabel} · step {claim?.step || (isRunning ? 'ocr' : 'validate')}
+                </Text>
+              </View>
+
+              {claim?.indexed ? (
+                <View style={[styles.statusPill, { backgroundColor: colors.greenSoft }]}>
+                  <Text style={[styles.statusPillText, { color: colors.green }]}>
+                    Indexed · searchable
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            {/* Patient Header */}
+            <TouchableOpacity
+              style={styles.patientRow}
+              onPress={() => navigation.navigate(Routes.PatientProfile, { claimId: effectiveClaimId })}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.patientName, { color: colors.ink }]}>
+                {displayPatientName} · {displayAge} · {displayGender}
+              </Text>
+              <View style={[styles.patientBadge, { backgroundColor: colors.brandSoft }]}>
+                <Text style={[styles.patientBadgeText, { color: colors.brandDark }]}>
+                  Patient ›
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <Text style={[styles.subMeta, { color: colors.muted }]}>
+              {displayHospital} · admitted {displayAdmissionDate} · {displayDays} days
+            </Text>
+
+            <Text style={[styles.claimIdText, styles.mono, { color: colors.muted }]}>
+              {effectiveClaimId}
+            </Text>
+
+            {/* 5-Step Horizontal Tracker */}
+            <View style={styles.horizontalTrack}>
+              {['OCR', 'Parse', 'Code', 'Predict', 'Validate'].map((step, idx) => {
+                const isLast = idx === 4;
+                const stepIndices: Record<string, number> = { ocr: 0, parse: 1, code: 2, predict: 3, validate: 4 };
+                const curIdx = isRunning ? (stepIndices[claim?.step?.toLowerCase() || 'ocr'] ?? 0) : 4;
+                const isDone = !isRunning || idx < curIdx;
+                const isCurrent = isRunning && idx === curIdx;
+                return (
+                  <React.Fragment key={step}>
+                    <View
+                      style={[
+                        styles.hStep,
+                        {
+                          backgroundColor: isDone ? colors.brand : isCurrent ? colors.brandSoft : colors.surface2,
+                          borderColor: (isDone || isCurrent) ? colors.brand : colors.line,
+                        },
+                      ]}
+                    >
+                      {isDone ? (
+                        <Check size={11} color="#ffffff" strokeWidth={3.2} />
+                      ) : isCurrent ? (
+                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.brand }} />
+                      ) : null}
+                    </View>
+                    {!isLast && (
+                      <View
+                        style={[
+                          styles.hBar,
+                          { backgroundColor: isDone ? colors.brand : colors.line },
+                        ]}
+                      />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </View>
+
+            <View style={styles.hLabels}>
+              {['OCR', 'Parse', 'Code', 'Predict', 'Validate'].map(s => (
+                <Text key={s} style={[styles.hLabelText, { color: colors.muted }]}>
+                  {s}
+                </Text>
+              ))}
+            </View>
+          </View>
+
+          {/* Insurer Document Request Card */}
+          {hasDocsRequested && (
+            <View style={[styles.docsReqCard, { backgroundColor: isDark ? '#2D2012' : '#FFFBEB', borderColor: colors.amber }]}>
+              <View style={styles.docsReqHeader}>
+                <AlertTriangle size={18} color={colors.amber} style={{ marginRight: 8 }} />
+                <Text style={[styles.docsReqTitle, { color: isDark ? '#FDE68A' : '#78350F' }]}>
+                  INSURER DOCUMENT REQUEST
+                </Text>
+              </View>
+
+              <View style={[styles.docsReqCallout, { backgroundColor: isDark ? '#3D2D1A' : '#FEF3C7', borderColor: colors.amberSoft }]}>
+                <Text style={[styles.docsReqCalloutLabel, { color: isDark ? '#FCD34D' : '#92400E' }]}>
+                  MESSAGE FROM {cleanTpaName(effectivePayer).toUpperCase()} CLAIMS REVIEWER:
+                </Text>
+                <Text style={[styles.docsReqCalloutText, { color: isDark ? '#FFFFFF' : '#1E293B' }]}>
+                  "{claim?.tpaMessage || 'Please upload the requested missing supporting documents.'}"
+                </Text>
+              </View>
+
+              {claim?.tpaRequestedDocs && claim.tpaRequestedDocs.length > 0 && (
+                <View style={styles.docsReqList}>
+                  <Text style={[styles.docsReqListTitle, { color: isDark ? '#FCD34D' : '#92400E' }]}>
+                    Requested Items:
+                  </Text>
+                  <View style={styles.docsReqChips}>
+                    {claim.tpaRequestedDocs.map((item: string, idx: number) => (
+                      <View key={idx} style={[styles.docChip, { backgroundColor: isDark ? '#451A03' : '#FDE68A' }]}>
+                        <Text style={[styles.docChipText, { color: isDark ? '#FDE68A' : '#78350F' }]}>
+                          • {item}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.docsReqUploadBtn, { backgroundColor: colors.brand }]}
+                onPress={() => setShowUploadDocsModal(true)}
+                activeOpacity={0.85}
+              >
+                <UploadCloud size={16} color="#ffffff" style={{ marginRight: 8 }} />
+                <Text style={styles.docsReqUploadBtnText}>Upload Requested Documents</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* 3 Top KPI Cards Row */}
           <View style={styles.kpiRow}>
             <TouchableOpacity
@@ -2169,6 +2440,70 @@ export const BrainPreviewScreen = ({ route, navigation }: any) => {
           </View>
         </View>
       </Modal>
+      {/* Delete Claim Confirmation Modal */}
+      <Modal
+        visible={showDeleteClaimModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isDeletingClaim) setShowDeleteClaimModal(false);
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <View style={[styles.modalIconBox, { backgroundColor: colors.redSoft }]}>
+              <Trash2 size={24} color={colors.red} />
+            </View>
+
+            <Text style={[styles.modalTitle, { color: colors.ink }]}>Delete claim?</Text>
+
+            <Text style={[styles.modalMessage, { color: colors.muted }]}>
+              Are you sure you want to delete this claim?
+            </Text>
+
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { borderColor: colors.line, backgroundColor: colors.surface2 }]}
+                onPress={() => setShowDeleteClaimModal(false)}
+                disabled={isDeletingClaim}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.modalCancelBtnText, { color: colors.ink }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalDeleteBtn, isDeletingClaim && { opacity: 0.7 }]}
+                onPress={handleConfirmDeleteClaim}
+                disabled={isDeletingClaim}
+                activeOpacity={0.8}
+              >
+                {isDeletingClaim ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <>
+                    <Trash2 size={16} color="#ffffff" style={{ marginRight: 6 }} />
+                    <Text style={styles.modalDeleteBtnText}>Delete</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Upload Requested Docs Modal */}
+      {showUploadDocsModal && (
+        <UploadRequestedDocsModal
+          visible={showUploadDocsModal}
+          claim={claim}
+          navigation={navigation}
+          onClose={() => setShowUploadDocsModal(false)}
+          onSuccess={() => {
+            setShowUploadDocsModal(false);
+            navigation.navigate(Routes.WorkflowPipeline);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -2932,5 +3267,151 @@ const styles = StyleSheet.create({
   submittedBannerDesc: {
     fontSize: 11.5,
     lineHeight: 16,
+  },
+  claimHeaderCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 11,
+  },
+  pillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+    flexWrap: 'wrap',
+  },
+  statusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 99,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  patientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  patientName: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    flex: 1,
+  },
+  patientBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 99,
+  },
+  patientBadgeText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  subMeta: {
+    fontSize: 11.5,
+    marginTop: 3,
+  },
+  claimIdText: {
+    fontSize: 11,
+    marginTop: 4,
+  },
+  horizontalTrack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 13,
+  },
+  hStep: {
+    width: 21,
+    height: 21,
+    borderRadius: 11,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  hBar: {
+    flex: 1,
+    height: 2,
+  },
+  hLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    paddingHorizontal: 2,
+  },
+  hLabelText: {
+    fontSize: 9.5,
+    fontWeight: '600',
+  },
+  docsReqCard: {
+    borderRadius: 14,
+    borderWidth: 1.5,
+    padding: 14,
+    marginBottom: 11,
+  },
+  docsReqHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  docsReqTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  docsReqCallout: {
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 10,
+    marginBottom: 10,
+  },
+  docsReqCalloutLabel: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    marginBottom: 3,
+  },
+  docsReqCalloutText: {
+    fontSize: 12.5,
+    lineHeight: 17,
+    fontStyle: 'italic',
+  },
+  docsReqList: {
+    marginBottom: 10,
+  },
+  docsReqListTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  docsReqChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  docChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  docChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  docsReqUploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  docsReqUploadBtnText: {
+    color: '#ffffff',
+    fontSize: 12.5,
+    fontWeight: '700',
   },
 });

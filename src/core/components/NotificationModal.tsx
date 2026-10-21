@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -92,15 +92,37 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     markAsRead,
     markAllAsRead,
     clearAll,
+    loadNotifications,
   } = useNotificationStore();
+
+  useEffect(() => {
+    if (visible) {
+      loadNotifications();
+    }
+  }, [visible]);
 
   const handleNotificationPress = (item: AppNotification) => {
     markAsRead(item.id);
     if (item.claimId) {
-      onClose();
-      setTimeout(() => {
-        navigation.navigate(Routes.ClaimDetail, { claimId: item.claimId });
-      }, 200);
+      try {
+        const { useClaimsStore } = require('../../state/useClaimsStore');
+        const claimExists = useClaimsStore.getState().claims.some(
+          (c: any) =>
+            c.id === item.claimId ||
+            (c.id && item.claimId && (c.id.startsWith(item.claimId.slice(0, 8)) || item.claimId.startsWith(c.id.slice(0, 8))))
+        );
+        if (claimExists) {
+          onClose();
+          setTimeout(() => {
+            navigation.navigate(Routes.ClaimDetail, { claimId: item.claimId });
+          }, 200);
+        }
+      } catch {
+        onClose();
+        setTimeout(() => {
+          navigation.navigate(Routes.ClaimDetail, { claimId: item.claimId });
+        }, 200);
+      }
     }
   };
 
@@ -263,9 +285,9 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                 <View style={[styles.emptyIconCircle, { backgroundColor: colors.surface2 }]}>
                   <Bell size={34} color={colors.muted} strokeWidth={1.7} />
                 </View>
-                <Text style={[styles.emptyTitle, { color: colors.ink }]}>No notifications yet</Text>
+                <Text style={[styles.emptyTitle, { color: colors.ink }]}>No new notifications</Text>
                 <Text style={[styles.emptySub, { color: colors.muted }]}>
-                  You're all caught up! Push updates for reviewer decisions, documents requested, and approvals will appear here.
+                  No claims are currently being processed. Live updates, validations, and reviewer decisions will appear here as claims progress.
                 </Text>
               </View>
             ) : (

@@ -19,7 +19,6 @@ import {
   MessageSquare,
   FileText,
   Search,
-  Clock,
   Moon,
   LogOut,
   Trash2,
@@ -223,26 +222,6 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
           </View>
         </View>
 
-        {/* Links Card: Conversation history */}
-        <View style={[styles.settingsCard, { backgroundColor: colors.surface, borderColor: colors.line, marginTop: 12 }]}>
-          <TouchableOpacity
-            style={styles.linkRow}
-            onPress={() => navigation.navigate('MainTabs', { screen: Routes.SessionsTab })}
-            activeOpacity={0.7}
-          >
-            <View style={styles.iconContainer}>
-              <Clock size={18} color={colors.ink} />
-            </View>
-            <View style={styles.settingInfo}>
-              <Text style={[styles.settingTitle, { color: colors.ink }]}>Conversation history</Text>
-              <Text style={[styles.codeSubtitle, { color: colors.muted }]}>
-                /chat/{'{session_id}'}/history
-              </Text>
-            </View>
-            <ChevronRight size={16} color={colors.muted} />
-          </TouchableOpacity>
-        </View>
-
         {/* Prototype Disclaimer */}
         <Text style={[styles.prototypeNote, { color: colors.muted }]}>
           ClaimsGuru prototype · sample data only
@@ -406,11 +385,6 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     lineHeight: 16,
   },
-  codeSubtitle: {
-    fontSize: 10.5,
-    fontFamily: 'monospace',
-    marginTop: 2,
-  },
   badgeAlwaysOn: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -428,12 +402,6 @@ const styles = StyleSheet.create({
   dpiBadgeText: {
     fontSize: 12,
     fontWeight: '700',
-  },
-  linkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
   },
   roleBadgeSmall: {
     paddingHorizontal: 6,

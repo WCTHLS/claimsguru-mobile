@@ -10,7 +10,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Info, Clock, ShieldCheck, ChevronRight, RefreshCw, AlertCircle } from 'lucide-react-native';
+import { ChevronLeft, Clock, ShieldCheck, ChevronRight, RefreshCw, AlertCircle } from 'lucide-react-native';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useAuthStore } from '../../../state/useAuthStore';
 import { useClaimsStore } from '../../../state/useClaimsStore';
@@ -702,13 +702,6 @@ export const PatientActivityScreen = ({ route, navigation }: any) => {
             );
           })}
 
-        {/* Footer Info Banner */}
-        <View style={[styles.footerBanner, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <Info size={16} color={colors.muted} style={{ marginTop: 2 }} />
-          <Text style={[styles.footerBannerText, { color: colors.muted }]}>
-            Activity logs are pulled live from the audit service (/submission/claims/id/audit) ensuring strict HIPAA compliance and tamper-proof tracking.
-          </Text>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -931,13 +924,4 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '600',
   },
-  footerBanner: {
-    flexDirection: 'row',
-    gap: 10,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginTop: 14,
-  },
-  footerBannerText: { flex: 1, fontSize: 11.5, lineHeight: 16 },
 });
