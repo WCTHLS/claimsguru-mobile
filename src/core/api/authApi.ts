@@ -623,6 +623,115 @@ export async function ensureValidAuthToken(): Promise<string> {
   return useAuthStore.getState().token || '';
 }
 
+export interface UpdateUserProfileParams {
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string | null;
+  dob?: string | null;
+  gender?: string | null;
+}
+
+/**
+ * Updates user profile details locally and synchronizes changes to backend.
+ */
+export async function updateUserProfile(
+  params: UpdateUserProfileParams
+): Promise<{ success: boolean; message?: string }> {
+  const current = useAuthStore.getState();
+  const email = current.userEmail;
+  const userId = current.userId;
+
+  let firstName = params.firstName;
+  let lastName = params.lastName;
+  let fullName = params.name;
+
+  if (fullName && (!firstName || !lastName)) {
+    const parts = fullName.trim().split(/\s+/);
+    firstName = parts[0] || '';
+    lastName = parts.slice(1).join(' ') || '';
+  } else if (!fullName && (firstName || lastName)) {
+    fullName = `${firstName || ''} ${lastName || ''}`.trim();
+  }
+
+  // 1. Immediately update local Zustand store and persistent storage for instant responsiveness
+  useAuthStore.getState().setUserDetails({
+    userName: fullName || current.userName,
+    firstName: firstName !== undefined ? firstName : current.firstName,
+    lastName: lastName !== undefined ? lastName : current.lastName,
+    phone: params.phone !== undefined ? params.phone : current.phone,
+    dob: params.dob !== undefined ? params.dob : current.dob,
+    gender: params.gender !== undefined ? params.gender : current.gender,
+  });
+
+  // 2. Dispatch profile synchronization to backend database endpoints
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const payload: Record<string, unknown> = {
+    user_id: userId,
+    email: cleanEmail,
+    external_subject_id: userId || cleanEmail,
+    requested_role: current.role || 'patient',
+    name: fullName,
+    first_name: firstName,
+    last_name: lastName,
+    phone: params.phone,
+    dob: params.dob,
+    gender: params.gender,
+    policy: current.policyNumber,
+    sum_insured: current.sumInsured,
+  };
+
+  let backendSynced = false;
+
+  // Try candidate profile update endpoints
+  try {
+    const response = await postToCandidateEndpoints(
+      [
+        '/ingress/auth/profile/update',
+        '/auth/profile/update',
+        '/ingress/auth/update-profile',
+        '/auth/update-profile',
+      ],
+      payload
+    );
+    if (response.ok) {
+      backendSynced = true;
+    }
+  } catch (err) {
+    console.warn('[authApi] Profile update candidate endpoint notice:', err);
+  }
+
+  // Also synchronize directly through verified user sync endpoint (MSSQL DB table upsert)
+  if (cleanEmail) {
+    try {
+      const syncRes = await syncEntraUser({
+        email: cleanEmail,
+        name: fullName,
+        firstName,
+        lastName,
+        subjectId: userId || cleanEmail,
+        phone: params.phone !== undefined ? (params.phone || undefined) : (current.phone || undefined),
+        dob: params.dob !== undefined ? (params.dob || undefined) : (current.dob || undefined),
+        gender: params.gender !== undefined ? (params.gender || undefined) : (current.gender || undefined),
+        policy: current.policyNumber || undefined,
+        sumInsured: current.sumInsured != null ? current.sumInsured : undefined,
+      });
+      if (syncRes.success) {
+        backendSynced = true;
+      }
+    } catch (syncErr) {
+      console.warn('[authApi] syncEntraUser notice during profile update:', syncErr);
+    }
+  }
+
+  return {
+    success: true,
+    message: backendSynced
+      ? 'Profile updated in database successfully.'
+      : 'Profile updated locally.',
+  };
+}
+
 /**
  * Permanently delete user record, profile, claims, and Microsoft Entra identity.
  */

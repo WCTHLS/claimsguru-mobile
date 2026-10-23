@@ -9,7 +9,8 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Settings, FileText, AlertCircle, ShieldCheck } from 'lucide-react-native';
+import { ChevronLeft, Settings, FileText, AlertCircle, ShieldCheck, Pencil } from 'lucide-react-native';
+import { EditProfileModal } from '../../profile/components/EditProfileModal';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useAuthStore } from '../../../state/useAuthStore';
 import { useClaimsStore } from '../../../state/useClaimsStore';
@@ -38,6 +39,7 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
   const { claims, loadClaims, claimPreviews, fetchClaimPreview } = useClaimsStore();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // If opened from a specific claim, find that claim
   const focusedClaim = useMemo(() => {
@@ -82,14 +84,24 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
   }, [userEmail, userId, routePatientId, claimId]);
 
   // Resolve patient details
-  const displayPatientName = focusedClaim?.who || userName || 'Patient';
-  const displayGender = focusedClaim?.gender || gender || 'Male';
+  const displayPatientName = userName || focusedClaim?.who || 'Patient';
+  const displayGender = gender || focusedClaim?.gender || 'Male';
   const displayUserId = routePatientId || focusedClaim?.patientId || userId || '—';
 
   const isSampleUser = userEmail === 'sample@gmail.com' || (userName && userName.toLowerCase() === 'jhon doe');
 
   const displayDob = useMemo(() => {
     if (dob) {
+      const parts = dob.trim().split('/');
+      if (parts.length === 3 && parts[2]?.length === 4) {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
+      }
       try {
         const d = new Date(dob);
         if (!isNaN(d.getTime())) {
@@ -224,14 +236,24 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
           <ChevronLeft size={22} color={colors.ink} />
         </TouchableOpacity>
         <Text style={[styles.appBarTitle, { color: colors.ink }]}>Patient profile</Text>
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => navigation.navigate(Routes.ProfileSettings)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          accessibilityLabel="Profile & settings"
-        >
-          <Settings size={20} color={colors.ink} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <TouchableOpacity
+            style={styles.editHeaderBtn}
+            onPress={() => setShowEditModal(true)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="Edit profile"
+          >
+            <Pencil size={19} color={colors.ink} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.settingsBtn}
+            onPress={() => navigation.navigate(Routes.ProfileSettings)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="Profile & settings"
+          >
+            <Settings size={20} color={colors.ink} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -273,7 +295,18 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
 
         {/* Profile Details Card */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <Text style={[styles.sectionTitle, { color: colors.ink, marginBottom: 8 }]}>Profile details</Text>
+          <View style={styles.cardHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: colors.ink, marginBottom: 0 }]}>Profile details</Text>
+            <TouchableOpacity
+              style={[styles.editPillBtn, { backgroundColor: colors.surface2, borderColor: colors.line }]}
+              onPress={() => setShowEditModal(true)}
+              activeOpacity={0.7}
+              accessibilityLabel="Edit profile details"
+            >
+              <Pencil size={12} color={colors.brandDark} style={{ marginRight: 5 }} />
+              <Text style={[styles.editPillText, { color: colors.brandDark }]}>Edit</Text>
+            </TouchableOpacity>
+          </View>
           <View style={styles.kvRow}>
             <Text style={[styles.kvKey, { color: colors.muted }]}>Phone</Text>
             <Text style={[styles.kvVal, { color: colors.ink }]}>
@@ -383,6 +416,12 @@ export const PatientProfileScreen = ({ route, navigation }: any) => {
           <Text style={styles.bottomSolidText}>Activity timeline</Text>
         </TouchableOpacity>
       </View>
+    
+      {/* Edit Profile Modal */}
+      <EditProfileModal
+        visible={showEditModal}
+        onClose={() => setShowEditModal(false)}
+      />
     </SafeAreaView>
   );
 };
@@ -534,4 +573,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bottomSolidText: { color: '#ffffff', fontSize: 13.5, fontWeight: '700' },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  editHeaderBtn: {
+    padding: 6,
+  },
+  editPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  editPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
 });
+

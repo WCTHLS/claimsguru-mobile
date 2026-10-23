@@ -129,6 +129,17 @@ export const SignUpScreen = ({ route, navigation }: any) => {
       return;
     }
 
+    const cleanPhone = phone.trim().replace(/\D/g, '');
+    if (!cleanPhone) {
+      setErrorMessage('Mobile phone number is required.');
+      return;
+    }
+
+    if (cleanPhone.length < 10) {
+      setErrorMessage('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
     if (!agree) {
       setErrorMessage('Please accept the Terms of Service to continue.');
       return;
@@ -747,7 +758,7 @@ export const SignUpScreen = ({ route, navigation }: any) => {
 
               <View style={styles.rowTwoCols}>
                 <View style={[styles.inputGroup, { flex: 1 }]}>
-                  <Text style={[styles.label, { color: colors.ink }]}>Mobile Phone</Text>
+                  <Text style={[styles.label, { color: colors.ink }]}>Mobile Phone *</Text>
                   <View
                     style={[
                       styles.inputWrapper,

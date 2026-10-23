@@ -22,7 +22,9 @@ import {
   Moon,
   LogOut,
   Trash2,
+  Pencil,
 } from 'lucide-react-native';
+import { EditProfileModal } from '../components/EditProfileModal';
 import { useTheme } from '../../../core/theme/ThemeContext';
 import { useAuthStore } from '../../../state/useAuthStore';
 import { deleteUserAccount } from '../../../core/api/authApi';
@@ -41,6 +43,7 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
   const [biometric, setBiometric] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // Active single role (default submitter)
   const currentRole = role || 'submitter';
@@ -135,6 +138,17 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
               </Text>
             </View>
           </View>
+
+          {/* Edit Profile Button */}
+          <TouchableOpacity
+            style={[styles.editProfileBtn, { backgroundColor: colors.surface2, borderColor: colors.line }]}
+            onPress={() => setShowEditModal(true)}
+            activeOpacity={0.8}
+            accessibilityLabel="Edit profile"
+          >
+            <Pencil size={14} color={colors.brandDark} style={{ marginRight: 6 }} />
+            <Text style={[styles.editProfileBtnText, { color: colors.brandDark }]}>Edit profile</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Section: Privacy */}
@@ -263,6 +277,12 @@ export const ProfileSettingsScreen = ({ navigation }: any) => {
 
       {/* Global Bottom Tab Bar matching app standard */}
       <GlobalBottomTabBar navigation={navigation} activeTab="all" />
+
+      {/* Edit Profile Modal */}
+      <EditProfileModal
+        visible={showEditModal}
+        onClose={() => setShowEditModal(false)}
+      />
     </View>
   );
 };
@@ -444,4 +464,18 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     fontWeight: '700' as any,
   },
+  editProfileBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginTop: 12,
+  },
+  editProfileBtnText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
 });
+
