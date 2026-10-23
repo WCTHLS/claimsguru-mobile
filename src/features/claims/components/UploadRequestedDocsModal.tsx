@@ -114,10 +114,12 @@ export const UploadRequestedDocsModal: React.FC<UploadRequestedDocsModalProps> =
   const handlePickPhoto = async () => {
     setErrorMessage(null);
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission Denied', 'Please allow photo gallery access to upload documents.');
-        return;
+      if (Platform.OS === 'ios') {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Permission Denied', 'Please allow photo gallery access to upload documents.');
+          return;
+        }
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({

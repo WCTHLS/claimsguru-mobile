@@ -337,10 +337,12 @@ export const ChatHomeScreen = ({ navigation }: any) => {
       return;
     }
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        showToast('Media library permission required');
-        return;
+      if (Platform.OS === 'ios') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          showToast('Media library permission required');
+          return;
+        }
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
