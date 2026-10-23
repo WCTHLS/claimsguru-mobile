@@ -96,7 +96,7 @@ export const useAuthStore = create<AuthState>()(
           const dobVal = extra?.dob !== undefined ? extra.dob : (isSampleUser ? '2000-06-08' : (isSameUser ? state.dob : null));
           const genderVal = extra?.gender !== undefined ? extra.gender : (isSampleUser ? 'Male' : (isSameUser ? state.gender : null));
           const sumVal = extra?.sumInsured !== undefined ? extra.sumInsured : (isSampleUser ? 500000 : (isSameUser ? state.sumInsured : null));
-          const phoneVal = extra?.phone !== undefined ? extra.phone : (isSampleUser ? null : (isSameUser ? state.phone : null));
+          const phoneVal = (extra?.phone && String(extra.phone).trim() && extra.phone !== 'null') ? extra.phone : (isSampleUser ? null : (isSameUser ? state.phone : null));
 
           return {
             isAuthenticated: true,

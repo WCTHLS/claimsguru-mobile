@@ -2,6 +2,7 @@ import { hashPasswordForTransport, decodeJwtPayload } from '../utils/crypto';
 import { getBackendCandidateUrls, getEntraMobileConfig, getEntraEndpoints } from '../config/authConfig';
 import { setApiBaseUrl } from './config';
 import { useAuthStore } from '../../state/useAuthStore';
+import { appStorage } from '../storage/appStorage';
 
 export interface LoginParams {
   username: string;
@@ -437,16 +438,48 @@ export async function fetchUserProfile(userIdOrEmail?: string): Promise<Record<s
         data.email?.split('@')[0] ||
         '';
 
+      const emailKey = (data.email || currentAuth.userEmail || '').toLowerCase();
+      let backupPhone: string | null = null;
+      let backupDob: string | null = null;
+      let backupGender: string | null = null;
+
+      if (emailKey) {
+        try {
+          const rawBackup = await appStorage.getItem(`cg_profile_backup_${emailKey}`);
+          if (rawBackup) {
+            const parsed = JSON.parse(rawBackup);
+            backupPhone = parsed.phone || null;
+            backupDob = parsed.dob || null;
+            backupGender = parsed.gender || null;
+          }
+        } catch {}
+      }
+
+      const resolvedPhone =
+        (data.phone && String(data.phone).trim() && data.phone !== 'null')
+          ? String(data.phone).trim()
+          : (currentAuth.phone || backupPhone);
+
+      const resolvedDob =
+        (data.dob && String(data.dob).trim() && data.dob !== 'null')
+          ? String(data.dob).trim()
+          : (currentAuth.dob || backupDob);
+
+      const resolvedGender =
+        (data.gender && String(data.gender).trim() && data.gender !== 'null')
+          ? String(data.gender).trim()
+          : (currentAuth.gender || backupGender);
+
       useAuthStore.getState().setUserDetails({
         userId: data.user_id || currentAuth.userId,
         userEmail: data.email || currentAuth.userEmail,
-        userName: fullName,
-        firstName: firstName || undefined,
-        lastName: lastName || undefined,
-        phone: data.phone !== undefined ? data.phone : currentAuth.phone,
-        dob: data.dob !== undefined ? data.dob : currentAuth.dob,
-        gender: data.gender !== undefined ? data.gender : currentAuth.gender,
-        policyNumber: data.policy_number !== undefined ? data.policy_number : currentAuth.policyNumber,
+        userName: fullName || currentAuth.userName,
+        firstName: firstName || currentAuth.firstName,
+        lastName: lastName || currentAuth.lastName,
+        phone: resolvedPhone,
+        dob: resolvedDob,
+        gender: resolvedGender,
+        policyNumber: (data.policy_number && data.policy_number !== 'null') ? data.policy_number : currentAuth.policyNumber,
         sumInsured: data.sum_insured != null ? Number(data.sum_insured) : currentAuth.sumInsured,
         organization: data.organization || currentAuth.organization,
         role: (data.role as any) || currentAuth.role,
@@ -655,17 +688,32 @@ export async function updateUserProfile(
   }
 
   // 1. Immediately update local Zustand store and persistent storage for instant responsiveness
+  const savedPhone = params.phone !== undefined ? params.phone : current.phone;
+  const savedDob = params.dob !== undefined ? params.dob : current.dob;
+  const savedGender = params.gender !== undefined ? params.gender : current.gender;
+
   useAuthStore.getState().setUserDetails({
     userName: fullName || current.userName,
     firstName: firstName !== undefined ? firstName : current.firstName,
     lastName: lastName !== undefined ? lastName : current.lastName,
-    phone: params.phone !== undefined ? params.phone : current.phone,
-    dob: params.dob !== undefined ? params.dob : current.dob,
-    gender: params.gender !== undefined ? params.gender : current.gender,
+    phone: savedPhone,
+    dob: savedDob,
+    gender: savedGender,
   });
 
-  // 2. Dispatch profile synchronization to backend database endpoints
   const cleanEmail = (email || '').trim().toLowerCase();
+  if (cleanEmail) {
+    try {
+      await appStorage.setItem(`cg_profile_backup_${cleanEmail}`, JSON.stringify({
+        phone: savedPhone,
+        dob: savedDob,
+        gender: savedGender,
+        userName: fullName || current.userName,
+      }));
+    } catch {}
+  }
+
+  // 2. Dispatch profile synchronization to backend database endpoints
   const payload: Record<string, unknown> = {
     user_id: userId,
     email: cleanEmail,
